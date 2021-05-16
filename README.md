@@ -83,3 +83,35 @@ To point the API server to `k8s-dqlite` use the following arguments:
 #--etcd-certfile=/var/snap/k8s-dqlite/current/var/data/cluster.crt
 #--etcd-keyfile=/var/snap/k8s-dqlite/current/var/data/cluster.key
 ```
+## Highly Available Dqlite
+
+The following steps allows one to setup a highly available dqlite backend.
+
+In the example below, we will setup a 3 node HA dqlite.
+
+Steps:
+
+1. On the main node, make sure that this node is listening to the default network interface.
+2. On the joining node and after installing k8s-dqlite, you need to backup the dqlite data directory for example (`/var/data`).
+3. Delete the dqlite data directory.
+4. Copy the `cluster.crt` and `cluster.key` from the main node and place it into the joining node's `/var/data`.
+5. Create the `init.yaml` file with the following content
+  
+  ```yaml
+  Cluster: 
+  - <the ip of the main node>:29001
+  Address: <ip of the joining node>:29001
+  ```
+6. Start `k8s-dqlite` process
+
+  ```shell
+  k8s-dqlite --storage-dir=/var/data/
+  ```
+
+7. Go to the main node and verify that the joining node is visible from the dqlite cluster.
+
+  ```shell
+  dqlite -s file:///var/data/cluster.yaml -c /var/data/cluster.crt -k /var/data/cluster.key -f json k8s .cluster
+  ```
+
+8. Repeat from step #2 to join another node.
