@@ -31,7 +31,7 @@ github.com/golang/protobuf/ptypes/duration
 github.com/golang/protobuf/ptypes/timestamp
 # github.com/inconshreveable/mousetrap v1.0.0
 github.com/inconshreveable/mousetrap
-# github.com/k3s-io/kine v0.6.0 => /home/jackal/go/src/github.com/k3s-io/kine
+# github.com/k3s-io/kine v0.6.0 => github.com/canonical/kine v0.4.1-0.20210514110539-195ffcf66b2f
 github.com/k3s-io/kine/pkg/broadcaster
 github.com/k3s-io/kine/pkg/drivers/dqlite
 github.com/k3s-io/kine/pkg/drivers/generic
@@ -185,4 +185,4 @@ k8s.io/component-base/logs
 # k8s.io/klog v1.0.0
 k8s.io/klog
 # github.com/canonical/go-dqlite => github.com/canonical/go-dqlite v1.8.0
-# github.com/k3s-io/kine => /home/jackal/go/src/github.com/k3s-io/kine
+# github.com/k3s-io/kine => github.com/canonical/kine v0.4.1-0.20210514110539-195ffcf66b2f
