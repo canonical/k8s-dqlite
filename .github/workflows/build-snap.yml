@@ -1,0 +1,52 @@
+name: Build snap on PR and push to master
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  build:
+    name: Create snap package
+    runs-on: ubuntu-20.04
+
+    steps:
+      - name: Checking out repo
+        uses: actions/checkout@v2
+      - name: Install lxd
+        run: |
+          sudo lxd init --auto
+          sudo usermod --append --groups lxd $USER
+          sg lxd -c 'lxc version'
+      - name: Install snapcraft
+        run: sudo snap install snapcraft --classic
+      - name: Build snap
+        run: |
+          sg lxd -c 'snapcraft --use-lxd'
+          sudo mv k8s-dqlite*.snap k8s-dqlite.snap
+      - name: Uploading snap
+        uses: actions/upload-artifact@v1
+        with:
+          name: .snap
+          path: k8s-dqlite.snap
+      # TEMPORARY WHILE GITHUB FIXES THIS https://github.com/actions/virtual-environments/issues/3185
+      - name: Add the current IP address, long hostname and short hostname record to /etc/hosts file
+        run: |
+          echo -e "$(ip addr show eth0 | grep "inet\b" | awk '{print $2}' | cut -d/ -f1)\t$(hostname -f) $(hostname -s)" | sudo tee -a /etc/hosts
+      # DO NOT FORGET TO REMOVE CODE ABOVE WHEN ISSUE IS ADDRESSED!
+      - name: Running test
+        run: |
+          set -x
+          sudo snap install k8s-dqlite.snap --classic --dangerous
+          sudo snap install go --channel 1.16/stable --classic
+          sudo apt install git
+          git clone https://github.com/etcd-io/etcd.git
+          cd etcd
+          git checkout release-3.5
+          cd tools/benchmark
+          go build .
+          ./benchmark --endpoints http://127.0.0.1:12379 range asd
+          sudo snap remove k8s-dqlite --purge
