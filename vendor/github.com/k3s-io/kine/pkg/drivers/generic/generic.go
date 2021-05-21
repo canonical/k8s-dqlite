@@ -234,7 +234,7 @@ func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig
 }
 
 func (d *Generic) query(ctx context.Context, sql string, args ...interface{}) (rows *sql.Rows, err error) {
-	wait := strategy.Backoff(backoff.Linear(50 * time.Millisecond))
+	wait := strategy.Backoff(backoff.Linear(6 * time.Millisecond))
 	for i := uint(0); i < 20; i++ {
 		logrus.Tracef("QUERY %v : %s", args, Stripped(sql))
 		rows, err = d.DB.QueryContext(ctx, sql, args...)
@@ -249,7 +249,7 @@ func (d *Generic) query(ctx context.Context, sql string, args ...interface{}) (r
 }
 
 func (d *Generic) queryInt64(ctx context.Context, query string, args ...interface{}) (res int64, err error) {
-	wait := strategy.Backoff(backoff.Linear(50 * time.Millisecond))
+	wait := strategy.Backoff(backoff.Linear(6 * time.Millisecond))
 	for i := uint(0); i < 20; i++ {
 		logrus.Tracef("QUERY ROW %v : %s", args, Stripped(query))
 		row := d.DB.QueryRowContext(ctx, query, args...)
@@ -273,7 +273,7 @@ func (d *Generic) execute(ctx context.Context, sql string, args ...interface{}) 
 		defer d.Unlock()
 	}
 
-	wait := strategy.Backoff(backoff.Linear(50 * time.Millisecond))
+	wait := strategy.Backoff(backoff.Linear(6 * time.Millisecond))
 	for i := uint(0); i < 20; i++ {
 		logrus.Tracef("EXEC (try: %d) %v : %s", i, args, Stripped(sql))
 		result, err = d.DB.ExecContext(ctx, sql, args...)
@@ -351,7 +351,7 @@ func (d *Generic) Count(ctx context.Context, prefix string) (int64, int64, error
 		err error
 	)
 
-	wait := strategy.Backoff(backoff.Linear(50 * time.Millisecond))
+	wait := strategy.Backoff(backoff.Linear(6 * time.Millisecond))
 	for i := uint(0); i < 20; i++ {
 		logrus.Tracef("COUNT (try: %d) : %s", i, prefix)
 		row := d.DB.QueryRowContext(ctx, d.CountSQL, prefix, false)
