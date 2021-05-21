@@ -20,9 +20,9 @@ import (
 	"fmt"
 	"github.com/canonical/k8s-dqlite/app/options"
 	"github.com/canonical/kvsql-dqlite/server"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"golang.org/x/sys/unix"
-	"log"
 	"os"
 	"os/signal"
 	"time"
@@ -39,7 +39,9 @@ var dqliteCmd = &cobra.Command{
 	// has an action associated with it:
 	Run: func(cmd *cobra.Command, args []string) {
 		log.Println("Starting dqlite")
-
+		if opts.Debug == true {
+			log.SetLevel(log.TraceLevel)
+		}
 		server, err := server.New(
 			opts.StorageDir,
 			opts.ListenEp,
@@ -81,4 +83,5 @@ func init() {
 	dqliteCmd.Flags().StringVar(&opts.StorageDir, "storage-dir", opts.StorageDir, "directory with the dqlite datastore")
 	dqliteCmd.Flags().StringVar(&opts.ListenEp, "listen", opts.ListenEp, "endpoint where dqlite should listen to")
 	dqliteCmd.Flags().BoolVar(&opts.EnableTls, "enable-tls", opts.EnableTls, "enable TlS")
+	dqliteCmd.Flags().BoolVar(&opts.Debug, "debug", opts.Debug, "debug logs")
 }
