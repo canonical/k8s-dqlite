@@ -36,6 +36,6 @@ require (
 
 replace (
 	github.com/canonical/go-dqlite => github.com/canonical/go-dqlite v1.8.0
-	github.com/k3s-io/kine => github.com/canonical/kine v0.4.1-0.20210514110539-195ffcf66b2f
+	github.com/k3s-io/kine => github.com/canonical/kine v0.4.1-0.20210521130757-0b3ec91dccd6
 //github.com/k3s-io/kine => /home/jackal/go/src/github.com/k3s-io/kine
 )
