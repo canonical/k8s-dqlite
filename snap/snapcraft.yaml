@@ -80,13 +80,13 @@ parts:
     source: https://github.com/canonical/go-dqlite
     source-type: git
     plugin: go
-    go-channel: 1.15/stable
+    go-channel: 1.16/stable
     build-packages:
       - libsqlite3-dev
     go-importpath: github.com/canonical/go-dqlite
     override-build: |
       set -eux
-      snap refresh go --channel=1.15/stable || true
+      snap refresh go --channel=1.16/stable || true
       go version
       export GOPATH=${SNAPCRAFT_STAGE}
       CGO_CFLAGS="-I${SNAPCRAFT_STAGE}/usr/include/" CGO_LDFLAGS="-L${SNAPCRAFT_STAGE}/lib" go get -tags libsqlite3 github.com/canonical/go-dqlite/cmd/dqlite
