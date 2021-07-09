@@ -31,13 +31,15 @@ var (
 	defaultKineEp = "tcp://127.0.0.1:12379"
 )
 
-func New(dir string, listen string, enableTls bool) (*Server, error) {
+func New(dir string, listen string, enableTls bool, compact int64, eventPoll int64) (*Server, error) {
 	// Check if we're initializing a new node (i.e. there's an init.yaml).
 	// dir: the directory where data will be stored as well as where the init.yaml
 	//       and certificates should be found
 	// listen: kine listen endpoint could be a socket ("unix://<path>")
 	//         or network ep ("tcp://127.0.0.1:12345")
 	// enableTls: true if we should enable tls communication
+	// compact: compaction interval in seconds
+	// eventPoll: event poll interval in seconds
 	cfg, err := config.Load(dir)
 	if err != nil {
 		return nil, err
@@ -141,7 +143,7 @@ func New(dir string, listen string, enableTls bool) (*Server, error) {
 	}
 	config := endpoint.Config{
 		Listener:             ep,
-		Endpoint:             fmt.Sprintf("dqlite://k8s?peer-file=%s&driver-name=%s", peers, app.Driver()),
+		Endpoint:             fmt.Sprintf("dqlite://k8s?peer-file=%s&driver-name=%s&compact-interval=%d&event-poll-interval=%d", peers, app.Driver(), compact, eventPoll),
 		ConnectionPoolConfig: pool,
 	}
 

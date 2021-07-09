@@ -46,6 +46,8 @@ var dqliteCmd = &cobra.Command{
 			opts.StorageDir,
 			opts.ListenEp,
 			opts.EnableTls,
+			opts.CompactInterval,
+			opts.EventPollInterval,
 			)
 		if err != nil {
 			log.Fatalf("Failed to start server: %s\n", err)
@@ -83,5 +85,7 @@ func init() {
 	dqliteCmd.Flags().StringVar(&opts.StorageDir, "storage-dir", opts.StorageDir, "directory with the dqlite datastore")
 	dqliteCmd.Flags().StringVar(&opts.ListenEp, "listen", opts.ListenEp, "endpoint where dqlite should listen to")
 	dqliteCmd.Flags().BoolVar(&opts.EnableTls, "enable-tls", opts.EnableTls, "enable TlS")
+	dqliteCmd.Flags().Int64Var(&opts.CompactInterval, "compact-interval", opts.CompactInterval, "compaction interval in seconds")
+	dqliteCmd.Flags().Int64Var(&opts.EventPollInterval, "event-poll-interval", opts.EventPollInterval, "event poll interval in seconds")
 	dqliteCmd.Flags().BoolVar(&opts.Debug, "debug", opts.Debug, "debug logs")
 }

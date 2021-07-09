@@ -28,6 +28,8 @@ type Options struct {
 	StorageDir         string
 	ListenEp           string
 	EnableTls          bool
+	CompactInterval    int64
+	EventPollInterval  int64
 	Debug              bool
 }
 
@@ -36,6 +38,8 @@ func NewOptions() (*Options){
 		"/var/tmp/k8s-dqlite",
 		"tcp://127.0.0.1:12379",
 		true,
+		300,
+		1,
 		false,
 	}
 	return &o

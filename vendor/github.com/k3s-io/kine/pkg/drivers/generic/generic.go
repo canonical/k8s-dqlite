@@ -113,18 +113,22 @@ func q(sql, param string, numbered bool) string {
 }
 
 func (d *Generic) Migrate(ctx context.Context) {
-	count, err := d.queryInt64(ctx, "SELECT COUNT(*) FROM key_value")
-	if err != nil || count == 0 {
+	var (
+		count     = 0
+		countKV   = d.queryRow(ctx, "SELECT COUNT(*) FROM key_value")
+		countKine = d.queryRow(ctx, "SELECT COUNT(*) FROM kine")
+	)
+
+	if err := countKV.Scan(&count); err != nil || count == 0 {
 		return
 	}
 
-	count, err = d.queryInt64(ctx, "SELECT COUNT(*) FROM kine")
-	if err != nil || count != 0 {
+	if err := countKine.Scan(&count); err != nil || count != 0 {
 		return
 	}
 
 	logrus.Infof("Migrating content from old table")
-	_, err = d.execute(ctx,
+	_, err := d.execute(ctx,
 		`INSERT INTO kine(deleted, create_revision, prev_revision, name, value, created, lease)
 					SELECT 0, 0, 0, kv.name, kv.value, 1, CASE WHEN kv.ttl > 0 THEN 15 ELSE 0 END
 					FROM key_value kv
@@ -233,38 +237,14 @@ func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig
 	}, err
 }
 
-func (d *Generic) query(ctx context.Context, sql string, args ...interface{}) (rows *sql.Rows, err error) {
-	wait := strategy.Backoff(backoff.Linear(6 * time.Millisecond))
-	for i := uint(0); i < 20; i++ {
-		logrus.Tracef("QUERY %v : %s", args, Stripped(sql))
-		rows, err = d.DB.QueryContext(ctx, sql, args...)
-		if err != nil && d.Retry != nil && d.Retry(err) {
-			wait(i)
-			continue
-		}
-		return rows, err
-	}
-
-	return nil, err
+func (d *Generic) query(ctx context.Context, sql string, args ...interface{}) (*sql.Rows, error) {
+	logrus.Tracef("QUERY %v : %s", args, Stripped(sql))
+	return d.DB.QueryContext(ctx, sql, args...)
 }
 
-func (d *Generic) queryInt64(ctx context.Context, query string, args ...interface{}) (res int64, err error) {
-	wait := strategy.Backoff(backoff.Linear(6 * time.Millisecond))
-	for i := uint(0); i < 20; i++ {
-		logrus.Tracef("QUERY ROW %v : %s", args, Stripped(query))
-		row := d.DB.QueryRowContext(ctx, query, args...)
-		err = row.Scan(&res)
-		if err == sql.ErrNoRows {
-			return 0, err
-		}
-		if err != nil && d.Retry != nil && d.Retry(err) {
-			wait(i)
-			continue
-		}
-		return res, err
-	}
-
-	return 0, err
+func (d *Generic) queryRow(ctx context.Context, sql string, args ...interface{}) *sql.Row {
+	logrus.Tracef("QUERY ROW %v : %s", args, Stripped(sql))
+	return d.DB.QueryRowContext(ctx, sql, args...)
 }
 
 func (d *Generic) execute(ctx context.Context, sql string, args ...interface{}) (result sql.Result, err error) {
@@ -273,7 +253,7 @@ func (d *Generic) execute(ctx context.Context, sql string, args ...interface{}) 
 		defer d.Unlock()
 	}
 
-	wait := strategy.Backoff(backoff.Linear(6 * time.Millisecond))
+	wait := strategy.Backoff(backoff.Linear(100 + time.Millisecond))
 	for i := uint(0); i < 20; i++ {
 		logrus.Tracef("EXEC (try: %d) %v : %s", i, args, Stripped(sql))
 		result, err = d.DB.ExecContext(ctx, sql, args...)
@@ -287,7 +267,9 @@ func (d *Generic) execute(ctx context.Context, sql string, args ...interface{}) 
 }
 
 func (d *Generic) GetCompactRevision(ctx context.Context) (int64, error) {
-	id, err := d.queryInt64(ctx, compactRevSQL)
+	var id int64
+	row := d.queryRow(ctx, compactRevSQL)
+	err := row.Scan(&id)
 	if err == sql.ErrNoRows {
 		return 0, nil
 	}
@@ -340,7 +322,6 @@ func (d *Generic) List(ctx context.Context, prefix, startKey string, limit, revi
 	if limit > 0 {
 		sql = fmt.Sprintf("%s LIMIT %d", sql, limit)
 	}
-	logrus.Tracef("In List sql -> %s , prefix -> %s, revision -> %d, startKey -> %s, revision -> %d", sql, prefix, revision, startKey, revision)
 	return d.query(ctx, sql, prefix, revision, startKey, revision, includeDeleted)
 }
 
@@ -348,25 +329,17 @@ func (d *Generic) Count(ctx context.Context, prefix string) (int64, int64, error
 	var (
 		rev sql.NullInt64
 		id  int64
-		err error
 	)
 
-	wait := strategy.Backoff(backoff.Linear(6 * time.Millisecond))
-	for i := uint(0); i < 20; i++ {
-		logrus.Tracef("COUNT (try: %d) : %s", i, prefix)
-		row := d.DB.QueryRowContext(ctx, d.CountSQL, prefix, false)
-		err = row.Scan(&rev, &id)
-		if err != nil && d.Retry != nil && d.Retry(err) {
-			wait(i)
-			continue
-		}
-		break
-	}
+	row := d.queryRow(ctx, d.CountSQL, prefix, false)
+	err := row.Scan(&rev, &id)
 	return rev.Int64, id, err
 }
 
 func (d *Generic) CurrentRevision(ctx context.Context) (int64, error) {
-	id, err := d.queryInt64(ctx, revSQL)
+	var id int64
+	row := d.queryRow(ctx, revSQL)
+	err := row.Scan(&id)
 	if err == sql.ErrNoRows {
 		return 0, nil
 	}
@@ -416,5 +389,7 @@ func (d *Generic) Insert(ctx context.Context, key string, create, delete bool, c
 		return row.LastInsertId()
 	}
 
-	return d.queryInt64(ctx, d.InsertSQL, key, cVal, dVal, createRevision, previousRevision, ttl, value, prevValue)
+	row := d.queryRow(ctx, d.InsertSQL, key, cVal, dVal, createRevision, previousRevision, ttl, value, prevValue)
+	err = row.Scan(&id)
+	return id, err
 }
