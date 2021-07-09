@@ -4,24 +4,19 @@ package dqlite
 
 import (
 	"context"
-	crypto_tls "crypto/tls"
-	"crypto/x509"
 	"database/sql"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"strconv"
 	"strings"
 
 	"github.com/canonical/go-dqlite"
-	"github.com/canonical/go-dqlite/app"
 	"github.com/canonical/go-dqlite/client"
 	"github.com/canonical/go-dqlite/driver"
 	"github.com/k3s-io/kine/pkg/drivers/generic"
 	"github.com/k3s-io/kine/pkg/drivers/sqlite"
 	"github.com/k3s-io/kine/pkg/server"
-	"github.com/k3s-io/kine/pkg/tls"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -39,10 +34,9 @@ func init() {
 }
 
 type opts struct {
-	peers      []client.NodeInfo
-	peerFile   string
-	dsn        string
-	driverName string // If not empty, use a pre-registered dqlite driver
+	peers    []client.NodeInfo
+	peerFile string
+	dsn      string
 }
 
 func AddPeers(ctx context.Context, nodeStore client.NodeStore, additionalPeers ...client.NodeInfo) error {
@@ -73,7 +67,7 @@ outer:
 	return nil
 }
 
-func New(ctx context.Context, datasourceName string, tlsInfo tls.Config, connPoolConfig generic.ConnectionPoolConfig) (server.Backend, error) {
+func New(ctx context.Context, datasourceName string, connPoolConfig generic.ConnectionPoolConfig) (server.Backend, error) {
 	opts, err := parseOpts(datasourceName)
 	if err != nil {
 		return nil, err
@@ -93,23 +87,16 @@ func New(ctx context.Context, datasourceName string, tlsInfo tls.Config, connPoo
 		return nil, errors.Wrap(err, "add peers")
 	}
 
-	if opts.driverName == "" {
-		opts.driverName = "dqlite"
-		dial, err := getDialer(tlsInfo)
-		if err != nil {
-			return nil, err
-		}
-		d, err := driver.New(nodeStore,
-			driver.WithLogFunc(Logger),
-			driver.WithContext(ctx),
-			dial)
-		if err != nil {
-			return nil, errors.Wrap(err, "new dqlite driver")
-		}
-		sql.Register(opts.driverName, d)
+	d, err := driver.New(nodeStore,
+		driver.WithLogFunc(Logger),
+		driver.WithContext(ctx),
+		driver.WithDialFunc(Dialer))
+	if err != nil {
+		return nil, errors.Wrap(err, "new dqlite driver")
 	}
 
-	backend, generic, err := sqlite.NewVariant(ctx, opts.driverName, opts.dsn, connPoolConfig)
+	sql.Register("dqlite", d)
+	backend, generic, err := sqlite.NewVariant(ctx, "dqlite", opts.dsn, connPoolConfig)
 	if err != nil {
 		return nil, errors.Wrap(err, "sqlite client")
 	}
@@ -132,33 +119,6 @@ func New(ctx context.Context, datasourceName string, tlsInfo tls.Config, connPoo
 	}
 
 	return backend, nil
-}
-
-func getDialer(tlsInfo tls.Config) (driver.Option, error) {
-	dial := client.DefaultDialFunc
-	if (tlsInfo.CertFile != "" && tlsInfo.KeyFile == "") || (tlsInfo.KeyFile != "" && tlsInfo.CertFile == "") {
-		return nil, errors.New("both TLS certificate and key must be given")
-	}
-	if tlsInfo.CertFile != "" {
-		cert, err := crypto_tls.LoadX509KeyPair(tlsInfo.CertFile, tlsInfo.KeyFile)
-		if err != nil {
-			return nil, errors.New("bad certificate pair")
-		}
-
-		data, err := ioutil.ReadFile(tlsInfo.CertFile)
-		if err != nil {
-			return nil, errors.New("could not read certificate")
-		}
-
-		pool := x509.NewCertPool()
-		if !pool.AppendCertsFromPEM(data) {
-			return nil, errors.New("bad certificate")
-		}
-
-		config := app.SimpleDialTLSConfig(cert, pool)
-		dial = client.DialFuncWithTLS(dial, config)
-	}
-	return driver.WithDialFunc(dial), nil
 }
 
 func migrate(ctx context.Context, newDB *sql.DB) (exitErr error) {

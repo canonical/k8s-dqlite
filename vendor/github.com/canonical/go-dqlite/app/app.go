@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 
@@ -166,6 +167,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 		dqlite.WithDialFunc(nodeDial),
 		dqlite.WithFailureDomain(o.FailureDomain),
 		dqlite.WithNetworkLatency(o.NetworkLatency),
+		dqlite.WithSnapshotParams(o.SnapshotParams),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create node: %w", err)
@@ -198,6 +200,11 @@ func New(dir string, options ...Option) (app *App, err error) {
 	}
 
 	ctx, stop := context.WithCancel(context.Background())
+
+	if runtime.GOOS != "linux" && nodeBindAddress[0] == '@' {
+		// Do not use abstract socket on other platforms and left trim "@"
+		nodeBindAddress = nodeBindAddress[1:]
+	}
 
 	app = &App{
 		id:              info.ID,
@@ -247,8 +254,8 @@ func New(dir string, options ...Option) (app *App, err error) {
 // gracefully shutdown a node.
 func (a *App) Handover(ctx context.Context) error {
 	// Set a hard limit of one minute, in case the user-provided context
-	// has no expiration. That avoids the call to hang forever in case a
-	// majority of the cluster is down and no leader is available.
+	// has no expiration. That avoids the call to stop responding forever
+	// in case a majority of the cluster is down and no leader is available.
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithTimeout(ctx, time.Minute)
 	defer cancel()
@@ -479,6 +486,11 @@ func (a *App) run(ctx context.Context, frequency time.Duration, join bool) {
 			// Refresh our node store.
 			servers, err := cli.Cluster(ctx)
 			if err != nil {
+				cli.Close()
+				continue
+			}
+			if len(servers) == 0 {
+				a.warn("server list empty")
 				cli.Close()
 				continue
 			}

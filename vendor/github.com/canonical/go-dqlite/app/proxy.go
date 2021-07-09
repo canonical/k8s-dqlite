@@ -79,6 +79,7 @@ func proxy(ctx context.Context, remote net.Conn, local net.Conn, config *tls.Con
 		if err := <-remoteToLocal; err != nil {
 			errs[1] = fmt.Errorf("remote -> local: %v", err)
 		}
+		remote.Close()
 		local.Close()
 
 	}
@@ -107,12 +108,12 @@ func setKeepalive(conn *net.TCPConn) error {
 		func(ptr uintptr) {
 			fd := int(ptr)
 			// Number of probes.
-			err = syscall.SetsockoptInt(fd, syscall.IPPROTO_TCP, syscall.TCP_KEEPCNT, 3)
+			err = syscall.SetsockoptInt(fd, syscall.IPPROTO_TCP, _TCP_KEEPCNT, 3)
 			if err != nil {
 				return
 			}
 			// Wait time after an unsuccessful probe.
-			err = syscall.SetsockoptInt(fd, syscall.IPPROTO_TCP, syscall.TCP_KEEPINTVL, 3)
+			err = syscall.SetsockoptInt(fd, syscall.IPPROTO_TCP, _TCP_KEEPINTVL, 3)
 			if err != nil {
 				return
 			}
