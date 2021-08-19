@@ -5,7 +5,7 @@ go 1.16
 require (
 	github.com/PuerkitoBio/goquery v1.5.1 // indirect
 	github.com/Rican7/retry v0.1.0 // indirect
-	github.com/canonical/go-dqlite v1.7.0
+	github.com/canonical/go-dqlite v1.8.1-0.20210812152211-7289bce1c8aa
 	github.com/coreos/etcd v3.3.22+incompatible // indirect
 	github.com/emicklei/go-restful v2.13.0+incompatible // indirect
 	github.com/ghodss/yaml v1.0.0
