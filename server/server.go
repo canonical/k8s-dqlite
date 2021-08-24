@@ -4,19 +4,18 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
-
-	"github.com/k3s-io/kine/pkg/drivers/generic"
 
 	"github.com/canonical/go-dqlite"
 	"github.com/canonical/go-dqlite/app"
 	"github.com/canonical/go-dqlite/client"
 	"github.com/canonical/k8s-dqlite/server/config"
 	"github.com/ghodss/yaml"
-	"github.com/k3s-io/kine/pkg/endpoint"
-	"github.com/k3s-io/kine/pkg/tls"
+	"github.com/rancher/kine/pkg/endpoint"
+	"github.com/rancher/kine/pkg/tls"
 	"github.com/pkg/errors"
 )
 
@@ -81,7 +80,9 @@ func New(dir string, listen string, enableTls bool) (*Server, error) {
 	options := []app.Option{
 		app.WithFailureDomain(cfg.FailureDomain),
 	}
+	log.Printf("Failure domain set to %d", cfg.FailureDomain)
 	if enableTls {
+		log.Printf("TLS enabled")
 		options = append(options, app.WithTLS(app.SimpleTLSConfig(cfg.KeyPair, cfg.Pool)))
 	}
 
@@ -135,15 +136,9 @@ func New(dir string, listen string, enableTls bool) (*Server, error) {
 		ep = listen
 	}
 
-	pool := generic.ConnectionPoolConfig{
-		MaxIdle:     5,
-		MaxOpen:     5,
-		MaxLifetime: 60 * time.Second,
-	}
 	config := endpoint.Config{
 		Listener:             ep,
 		Endpoint:             fmt.Sprintf("dqlite://k8s?peer-file=%s&driver-name=%s", peers, app.Driver()),
-		ConnectionPoolConfig: pool,
 	}
 
 	if enableTls {
