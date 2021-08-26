@@ -62,8 +62,8 @@ github.com/blang/semver v3.5.0+incompatible/go.mod h1:kRBLl5iJ+tD4TcOOxsy/0fnweb
 github.com/canonical/go-dqlite v1.8.0/go.mod h1:MVgCUhFflG7GDAwb6q2CDp5kmdHyIX+XXkATDsiaDzw=
 github.com/canonical/go-dqlite v1.8.1-0.20210812152211-7289bce1c8aa h1:oGxchenGtgvaU1E23W8wtsqHnoV/xvtaETy4TnZvujU=
 github.com/canonical/go-dqlite v1.8.1-0.20210812152211-7289bce1c8aa/go.mod h1:VHMPxu2nlV7YXau0CnVuhF4cOCO92obAtDXEuMg/8A0=
-github.com/canonical/kine v0.4.1-k8s-dqlite.0.20210826110820-3229992ef2bb h1:Is4sSYxvG195jzwn3TFBOqGTitMibn8fsqBNn7vjffA=
-github.com/canonical/kine v0.4.1-k8s-dqlite.0.20210826110820-3229992ef2bb/go.mod h1:66/47mugWu0nirzI5n4TDYzSfvp6OQgdwVXZpBZvVwg=
+github.com/canonical/kine v0.4.1-k8s-dqlite.0.20210826121639-3214d08575d5 h1:DUDTaF0xuSCBaifhWyW2vf2xluOgwJkcuz5WiCmUUfo=
+github.com/canonical/kine v0.4.1-k8s-dqlite.0.20210826121639-3214d08575d5/go.mod h1:cLSTFbvpmjXdj0Dd9Bsm5PIvwfliTobnY9JcTIftmKQ=
 github.com/census-instrumentation/opencensus-proto v0.2.1/go.mod h1:f6KPmirojxKA12rnyqOA5BBL4O983OfeGPqjHWSTneU=
 github.com/certifi/gocertifi v0.0.0-20191021191039-0944d244cd40/go.mod h1:sGbDF6GwGcLpkNXPUTkMRoywsNa/ol15pxFe6ERfguA=
 github.com/certifi/gocertifi v0.0.0-20200922220541-2c3bb06c6054 h1:uH66TXeswKn5PW5zdZ39xEwfS9an067BirqA+P4QaLI=
