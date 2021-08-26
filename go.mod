@@ -14,4 +14,4 @@ require (
 	k8s.io/component-base v0.18.0
 )
 
-replace github.com/rancher/kine => github.com/canonical/kine v0.4.1-k8s-dqlite.0.20210826121639-3214d08575d5
+replace github.com/rancher/kine => github.com/canonical/kine v0.4.1-k8s-dqlite.1
