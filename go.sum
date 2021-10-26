@@ -60,8 +60,8 @@ github.com/bgentry/speakeasy v0.1.0/go.mod h1:+zsyZBPWlz7T6j88CTgSN5bM796AkVf0kB
 github.com/bketelsen/crypt v0.0.3-0.20200106085610-5cbc8cc4026c/go.mod h1:MKsuJmJgSg28kpZDP6UIiPt0e0Oz0kqKNGyRaWEPv84=
 github.com/blang/semver v3.5.0+incompatible/go.mod h1:kRBLl5iJ+tD4TcOOxsy/0fnwebNt5EWlYSAyrTnjyyk=
 github.com/canonical/go-dqlite v1.8.0/go.mod h1:MVgCUhFflG7GDAwb6q2CDp5kmdHyIX+XXkATDsiaDzw=
-github.com/canonical/go-dqlite v1.8.1-0.20210812152211-7289bce1c8aa h1:oGxchenGtgvaU1E23W8wtsqHnoV/xvtaETy4TnZvujU=
-github.com/canonical/go-dqlite v1.8.1-0.20210812152211-7289bce1c8aa/go.mod h1:VHMPxu2nlV7YXau0CnVuhF4cOCO92obAtDXEuMg/8A0=
+github.com/canonical/go-dqlite v1.10.1-0.20211018012438-4123028456df h1:ePZa6Im11Y1fanhEWmubZrUUJTvcmx/mVDL4PWjvAXI=
+github.com/canonical/go-dqlite v1.10.1-0.20211018012438-4123028456df/go.mod h1:UuL9v+AE91/eXGgx/6XaO4Xrw10WRsflT03cnUIxTPc=
 github.com/canonical/kine v0.4.1-k8s-dqlite.1 h1:JgycDaytenrB511+mnzcXuFzz/pKktiDu7YB4SeVrcc=
 github.com/canonical/kine v0.4.1-k8s-dqlite.1/go.mod h1:cLSTFbvpmjXdj0Dd9Bsm5PIvwfliTobnY9JcTIftmKQ=
 github.com/census-instrumentation/opencensus-proto v0.2.1/go.mod h1:f6KPmirojxKA12rnyqOA5BBL4O983OfeGPqjHWSTneU=
@@ -728,9 +728,9 @@ golang.org/x/sys v0.0.0-20210124154548-22da62e12c0c/go.mod h1:h1NjWce9XRLGQEsW7w
 golang.org/x/sys v0.0.0-20210330210617-4fbd30eecc44/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/sys v0.0.0-20210403161142-5e06dd20ab57/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/sys v0.0.0-20210510120138-977fb7262007/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
-golang.org/x/sys v0.0.0-20210525143221-35b2ab0089ea/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
-golang.org/x/sys v0.0.0-20210603081109-ebe580a85c40 h1:JWgyZ1qgdTaF3N3oxC+MdTV7qvEEgHo3otj+HB5CM7Q=
 golang.org/x/sys v0.0.0-20210603081109-ebe580a85c40/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+golang.org/x/sys v0.0.0-20210616094352-59db8d763f22 h1:RqytpXGR1iVNX7psjB3ff8y7sNFinVFvkx1c8SjBkio=
+golang.org/x/sys v0.0.0-20210616094352-59db8d763f22/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1/go.mod h1:bj7SfCRtBDWHUb9snDiAeCFNEtKQo2Wmx5Cou7ajbmo=
 golang.org/x/text v0.0.0-20160726164857-2910a502d2bf/go.mod h1:NqM8EUOU14njkJ3fqMW+pc6Ldnwhi/IjpwHt7yyuwOQ=
 golang.org/x/text v0.3.0/go.mod h1:NqM8EUOU14njkJ3fqMW+pc6Ldnwhi/IjpwHt7yyuwOQ=
