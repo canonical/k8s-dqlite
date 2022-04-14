@@ -29,7 +29,12 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-var opts = options.NewOptions()
+var opts = options.Options{
+	StorageDir:      "/var/tmp/k8s-dqlite",
+	ListenEp:        "tcp://127.0.0.1:12379",
+	EnableTLS:       true,
+	Debug:           false,
+}
 
 // liteCmd represents the base command when called without any subcommands
 var dqliteCmd = &cobra.Command{
@@ -46,7 +51,7 @@ var dqliteCmd = &cobra.Command{
 		server, err := server.New(
 			opts.StorageDir,
 			opts.ListenEp,
-			opts.EnableTls,
+			opts.EnableTLS,
 		)
 		if err != nil {
 			log.Fatalf("Failed to start server: %s\n", err)
@@ -83,6 +88,6 @@ func init() {
 
 	dqliteCmd.Flags().StringVar(&opts.StorageDir, "storage-dir", opts.StorageDir, "directory with the dqlite datastore")
 	dqliteCmd.Flags().StringVar(&opts.ListenEp, "listen", opts.ListenEp, "endpoint where dqlite should listen to")
-	dqliteCmd.Flags().BoolVar(&opts.EnableTls, "enable-tls", opts.EnableTls, "enable TlS")
+	dqliteCmd.Flags().BoolVar(&opts.EnableTLS, "enable-tls", opts.EnableTLS, "enable TlS")
 	dqliteCmd.Flags().BoolVar(&opts.Debug, "debug", opts.Debug, "debug logs")
 }
