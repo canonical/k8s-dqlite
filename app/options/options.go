@@ -22,4 +22,6 @@ type Options struct {
 	ListenEp        string
 	EnableTLS       bool
 	Debug           bool
+	EnableProfiling bool
+	ProfilingListen string
 }
