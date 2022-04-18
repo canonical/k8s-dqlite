@@ -14,9 +14,9 @@ import (
 	"github.com/canonical/go-dqlite/client"
 	"github.com/canonical/k8s-dqlite/server/config"
 	"github.com/ghodss/yaml"
+	"github.com/pkg/errors"
 	"github.com/rancher/kine/pkg/endpoint"
 	"github.com/rancher/kine/pkg/tls"
-	"github.com/pkg/errors"
 )
 
 // Server sets up a single dqlite node and serves the cluster management API.
@@ -31,13 +31,13 @@ var (
 	defaultKineEp = "tcp://127.0.0.1:12379"
 )
 
-func New(dir string, listen string, enableTls bool) (*Server, error) {
+func New(dir string, listen string, enableTLS bool) (*Server, error) {
 	// Check if we're initializing a new node (i.e. there's an init.yaml).
 	// dir: the directory where data will be stored as well as where the init.yaml
 	//       and certificates should be found
 	// listen: kine listen endpoint could be a socket ("unix://<path>")
 	//         or network ep ("tcp://127.0.0.1:12345")
-	// enableTls: true if we should enable tls communication
+	// enableTLS: true if we should enable tls communication
 	cfg, err := config.Load(dir)
 	if err != nil {
 		return nil, err
@@ -81,7 +81,7 @@ func New(dir string, listen string, enableTls bool) (*Server, error) {
 		app.WithFailureDomain(cfg.FailureDomain),
 	}
 	log.Printf("Failure domain set to %d", cfg.FailureDomain)
-	if enableTls {
+	if enableTLS {
 		log.Printf("TLS enabled")
 		options = append(options, app.WithTLS(app.SimpleTLSConfig(cfg.KeyPair, cfg.Pool)))
 	}
@@ -137,11 +137,11 @@ func New(dir string, listen string, enableTls bool) (*Server, error) {
 	}
 
 	config := endpoint.Config{
-		Listener:             ep,
-		Endpoint:             fmt.Sprintf("dqlite://k8s?peer-file=%s&driver-name=%s", peers, app.Driver()),
+		Listener: ep,
+		Endpoint: fmt.Sprintf("dqlite://k8s?peer-file=%s&driver-name=%s", peers, app.Driver()),
 	}
 
-	if enableTls {
+	if enableTLS {
 		crt := filepath.Join(dir, "cluster.crt")
 		key := filepath.Join(dir, "cluster.key")
 		kineTls := tls.Config{

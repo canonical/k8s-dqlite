@@ -18,6 +18,8 @@ package app
 import (
 	"context"
 	"fmt"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"time"
@@ -29,7 +31,14 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-var opts = options.NewOptions()
+var opts = options.Options{
+	StorageDir:      "/var/tmp/k8s-dqlite",
+	ListenEp:        "tcp://127.0.0.1:12379",
+	EnableTLS:       true,
+	Debug:           false,
+	EnableProfiling: false,
+	ProfilingListen: "127.0.0.1:40000",
+}
 
 // liteCmd represents the base command when called without any subcommands
 var dqliteCmd = &cobra.Command{
@@ -43,10 +52,17 @@ var dqliteCmd = &cobra.Command{
 		if opts.Debug == true {
 			log.SetLevel(log.TraceLevel)
 		}
+
+		if opts.EnableProfiling {
+			go func() {
+				http.ListenAndServe(opts.ProfilingListen, nil)
+			}()
+		}
+
 		server, err := server.New(
 			opts.StorageDir,
 			opts.ListenEp,
-			opts.EnableTls,
+			opts.EnableTLS,
 		)
 		if err != nil {
 			log.Fatalf("Failed to start server: %s\n", err)
@@ -83,6 +99,8 @@ func init() {
 
 	dqliteCmd.Flags().StringVar(&opts.StorageDir, "storage-dir", opts.StorageDir, "directory with the dqlite datastore")
 	dqliteCmd.Flags().StringVar(&opts.ListenEp, "listen", opts.ListenEp, "endpoint where dqlite should listen to")
-	dqliteCmd.Flags().BoolVar(&opts.EnableTls, "enable-tls", opts.EnableTls, "enable TlS")
+	dqliteCmd.Flags().BoolVar(&opts.EnableTLS, "enable-tls", opts.EnableTLS, "enable TlS")
 	dqliteCmd.Flags().BoolVar(&opts.Debug, "debug", opts.Debug, "debug logs")
+	dqliteCmd.Flags().BoolVar(&opts.EnableProfiling, "profiling", opts.EnableProfiling, "enable debug pprof endpoint")
+	dqliteCmd.Flags().StringVar(&opts.ProfilingListen, "profiling-listen", opts.ProfilingListen, "listen address for pprof endpoint")
 }
