@@ -36,7 +36,7 @@ var opts = options.Options{
 	ListenEp:        "tcp://127.0.0.1:12379",
 	EnableTLS:       true,
 	Debug:           false,
-	EnableProfiling: true,
+	EnableProfiling: false,
 	ProfilingListen: "127.0.0.1:40000",
 }
 
