@@ -1,7 +1,7 @@
 # Dqlite for Kubernetes
 
 This project is a drop in replacement for etcd on Kubernetes.
- 
+
 If you are looking for an in-memory database to replace etcd in your
 K8s cluster dqlite might be just right for you. Here is what you are getting:
 
@@ -17,8 +17,9 @@ To build the project you need to build:
  - sqlite: libsqlite-dev should be enough or you could build sqlite from https://github.com/sqlite/sqlite
  - dqlite: follow the instructions at https://github.com/canonical/dqlite
 
-Finally, you can build this project with: 
+Finally, you can build this project with:
 ```
+export CGO_LDFLAGS_ALLOW="-Wl,-z,now"
 go build -o k8s-dqlite -tags libsqlite3,dqlite k8s-dqlite.go
 ```
 
@@ -35,7 +36,7 @@ Prepare a directory containing:
 
   - `init.yaml` with `Address: <host_IP>:<port_used_by_dqlite>`
   - `cluster.crt` and `cluster.key` pair.
-  
+
 Here is a script to build you can use:
 ```
 mkdir -p /var/data/
@@ -59,14 +60,14 @@ You are now ready to start `k8s-dqlite` with:
 k8s-dqlite --storage-dir=/var/data/
 ```
 
-The `--listen` option allows you to set the endpoint where dqlite should listen to for connections from kubernetes API server.  
-By default `k8s-dqlite` will be listening for connections at `tcp://127.0.0.1:12379`. 
+The `--listen` option allows you to set the endpoint where dqlite should listen to for connections from kubernetes API server.
+By default `k8s-dqlite` will be listening for connections at `tcp://127.0.0.1:12379`.
 
 The snap package takes care of this installation step so you may want to use the snap you build above:
 ```
 sudo snap install ./k8s-dqlite_latest_amd64.snap --classic --dangerous
 ```
- 
+
 ## Configuring the API server
 
 To point the API server to `k8s-dqlite` use the following arguments:
@@ -96,9 +97,9 @@ Steps:
 3. Delete the dqlite data directory.
 4. Copy the `cluster.crt` and `cluster.key` from the main node and place it into the joining node's `/var/data`.
 5. Create the `init.yaml` file with the following content
-  
+
   ```yaml
-  Cluster: 
+  Cluster:
   - <the ip of the main node>:29001
   Address: <ip of the joining node>:29001
   ```
