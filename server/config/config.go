@@ -21,6 +21,9 @@ type Config struct {
 	Address       string  // Server address
 	Update        *Update // Configuration updates
 	FailureDomain uint64
+
+	// DqliteTuning is tuning parameters for the local dqlite node.
+	DqliteTuning DqliteTuning
 }
 
 // Load current the configuration from disk.
@@ -68,12 +71,19 @@ func Load(dir string) (*Config, error) {
 		return nil, err
 	}
 
+	tuningParameters, err := loadDqliteTuningParameters(dir)
+	if err != nil {
+		return nil, err
+	}
+
 	config := &Config{
 		KeyPair:       keypair,
 		Pool:          pool,
 		Init:          init,
 		Update:        update,
 		FailureDomain: domain,
+
+		DqliteTuning: tuningParameters,
 	}
 
 	return config, nil
