@@ -14,112 +14,80 @@ apps:
     daemon: simple
 
 parts:
-  raft:
-    source: https://github.com/canonical/raft
-    build-attributes: [no-patchelf]
-    source-type: git
-    plugin: autotools
-    stage-packages:
-      - libuv1
+  build-deps:
+    plugin: nil
+    override-build: |
+      snap install go --classic --channel 1.19/stable
     build-packages:
+      - autoconf
+      - automake
+      - autopoint
+      - autotools-dev
+      - bison
+      - btrfs-tools
+      - build-essential
+      - curl
+      - flex
+      - git
+      - libjansson-dev
       - liblz4-dev
-    organize:
-      usr/lib/: lib/
-      include/: usr/include/
-    prime:
-      - lib/libraft*so*
-      - usr/include/
-
-  sqlite:
-    source: https://github.com/sqlite/sqlite
-    source-type: git
-    source-depth: 1
-    source-tag: version-3.33.0
-    build-attributes: [no-patchelf]
-    plugin: autotools
-    build-packages:
-      - tcl
-    override-build: |-
-      set -ex
-      git log -1 --format=format:%ci%n | sed -e 's/ [-+].*$//;s/ /T/;s/^/D /' > manifest
-      git log -1 --format=format:%H > manifest.uuid
-      cp /usr/share/misc/config.guess .
-      cp /usr/share/misc/config.sub .
-      autoreconf -f -i
-      set +ex
-      snapcraftctl build
-    organize:
-      include/: usr/include/
-    prime:
-      - bin/sqlite3
-      - lib/libsqlite3*so*
-      - usr/include/
-
-  dqlite:
-    after:
-      - raft
-      - sqlite
-    source: https://github.com/canonical/dqlite
-    build-attributes: [no-patchelf]
-    source-type: git
-    plugin: autotools
-    stage-packages:
-      - libuv1
-    build-packages:
+      - libnetfilter-conntrack-dev
+      - libnetfilter-conntrack3
+      - libnfnetlink-dev
+      - libseccomp-dev
+      - libtool
       - libuv1-dev
       - pkg-config
-    organize:
-      usr/lib/: lib/
-      include/: usr/include/
-    prime:
-      - lib/libdqlite*so*
-      - lib/*/libuv*
-      - usr/include/
+      - rsync
+      - tcl
+
+  raft:
+    after: [build-deps]
+    source: build-scripts/components/raft
+    build-attributes: [no-patchelf]
+    plugin: nil
+    override-build: $SNAPCRAFT_PROJECT_DIR/build-scripts/build-component.sh raft
+    stage-packages:
+      - libuv1
+    stage:
+      - -usr/share/doc
+      - -usr/share/man
+
+  sqlite:
+    after: [build-deps]
+    source: build-scripts/components/sqlite
+    build-attributes: [no-patchelf]
+    plugin: nil
+    override-build: $SNAPCRAFT_PROJECT_DIR/build-scripts/build-component.sh sqlite
+
+  dqlite:
+    after: [sqlite, raft]
+    source: build-scripts/components/dqlite
+    build-attributes: [no-patchelf]
+    plugin: nil
+    override-build: $SNAPCRAFT_PROJECT_DIR/build-scripts/build-component.sh dqlite
 
   dqlite-client:
-    build-snaps: [go]
-    after: [sqlite, dqlite]
-    source: https://github.com/canonical/go-dqlite
-    source-type: git
-    plugin: go
-    go-channel: 1.16/stable
-    build-packages:
-      - libsqlite3-dev
-    go-importpath: github.com/canonical/go-dqlite
-    override-build: |
-      set -eux
-      snap refresh go --channel=1.16/stable || true
-      go version
-      export GOPATH=${SNAPCRAFT_STAGE}
-      go mod vendor
-      export CGO_CFLAGS="-I${SNAPCRAFT_STAGE}/usr/include/" 
-      export CGO_LDFLAGS="-L${SNAPCRAFT_STAGE}/lib" 
-      export CGO_LDFLAGS_ALLOW="-Wl,-z,now"
-      go get -tags libsqlite3 github.com/canonical/go-dqlite/cmd/dqlite
-      mkdir -p $SNAPCRAFT_PART_INSTALL/bin
-      cp $GOPATH/bin/dqlite $SNAPCRAFT_PART_INSTALL/bin/
+    after: [dqlite]
+    plugin: nil
+    source: build-scripts/components/dqlite-client
+    override-build: $SNAPCRAFT_PROJECT_DIR/build-scripts/build-component.sh dqlite-client
 
   k8s-dqlite:
-    build-snaps: [go]
-    after: [dqlite-client, dqlite]
+    after: [dqlite]
+    source: build-scripts/components/k8s-dqlite
+    plugin: nil
+    override-build: $SNAPCRAFT_PROJECT_DIR/build-scripts/build-component.sh k8s-dqlite
+
+  k8s-dqlite-daemon:
     source: .
-    plugin: dump
+    plugin: nil
     override-build: |
-      set -eux
-      snap refresh go --channel=1.16/stable || true
-      go version
-      export GOPATH=${SNAPCRAFT_STAGE}
-      rm -rf $GOPATH/go.*
-      export GOPATH=${SNAPCRAFT_STAGE}
-      export CGO_CFLAGS="-I${SNAPCRAFT_STAGE}/usr/include/"
-      export CGO_LDFLAGS="-L${SNAPCRAFT_STAGE}/lib"
-      export CGO_LDFLAGS_ALLOW="-Wl,-z,now"
-      go build -o k8s-dqlite -tags libsqlite3,dqlite k8s-dqlite.go
-      mkdir -p $SNAPCRAFT_PART_INSTALL/bin
-      cp ./k8s-dqlite $SNAPCRAFT_PART_INSTALL/bin/
-      snapcraftctl build
-    stage-packages:
-      - openssl
+      set -x
+      mkdir -p $SNAPCRAFT_STAGE/wrappers
+      cp -r $SNAPCRAFT_PROJECT_DIR/wrappers/* $SNAPCRAFT_STAGE/wrappers
+    prime:
+      - wrappers/run-dqlite-with-args
 
   bash-utils:
     source: snap
