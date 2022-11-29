@@ -85,9 +85,13 @@ parts:
     override-build: |
       set -x
       mkdir -p $SNAPCRAFT_STAGE/wrappers
+      mkdir -p $SNAPCRAFT_STAGE/config
       cp -r $SNAPCRAFT_PROJECT_DIR/wrappers/* $SNAPCRAFT_STAGE/wrappers
+      cp -r $SNAPCRAFT_PROJECT_DIR/config/* $SNAPCRAFT_STAGE/config
     prime:
       - wrappers/run-dqlite-with-args
+      - config/csr-dqlite.conf.template
+      - config/default-args
 
   bash-utils:
     source: snap
