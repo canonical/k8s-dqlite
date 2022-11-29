@@ -101,3 +101,4 @@ parts:
       - grep
       - hostname
       - coreutils
+      - openssl
