@@ -91,6 +91,21 @@ func New(dir string, listen string, enableTLS bool) (*Server, error) {
 		options = append(options, app.WithAddress(cfg.Init.Address), app.WithCluster(cfg.Init.Cluster))
 	}
 
+	// Tune raft snapshot parameters
+	if v := cfg.DqliteTuning.Snapshot; v != nil {
+		log.Printf("Raft snapshot parameters set to (threshold=%d, trailing=%d)", v.Threshold, v.Trailing)
+		options = append(options, app.WithSnapshotParams(dqlite.SnapshotParams{
+			Threshold: v.Threshold,
+			Trailing:  v.Trailing,
+		}))
+	}
+
+	// Tune network latency
+	if v := cfg.DqliteTuning.NetworkLatency; v != nil {
+		log.Printf("Network latency set to %v", *v)
+		options = append(options, app.WithNetworkLatency(*v))
+	}
+
 	app, err := app.New(dir, options...)
 	if err != nil {
 		return nil, err
@@ -136,9 +151,22 @@ func New(dir string, listen string, enableTLS bool) (*Server, error) {
 		ep = listen
 	}
 
+	e := fmt.Sprintf("dqlite://k8s?peer-file=%s&driver-name=%s", peers, app.Driver())
+
+	// Tune kine compact interval
+	if v := cfg.DqliteTuning.KineCompactInterval; v != nil {
+		e = fmt.Sprintf("%s&compact-interval=%v", e, *v)
+	}
+	// Tune kine poll interval
+	if v := cfg.DqliteTuning.KinePollInterval; v != nil {
+		e = fmt.Sprintf("%s&poll-interval=%v", e, *v)
+	}
+
+	log.Printf("Connecting to kine endpoint: %s", e)
+
 	config := endpoint.Config{
 		Listener: ep,
-		Endpoint: fmt.Sprintf("dqlite://k8s?peer-file=%s&driver-name=%s", peers, app.Driver()),
+		Endpoint: e,
 	}
 
 	if enableTLS {
