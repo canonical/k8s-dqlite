@@ -3,7 +3,7 @@ module github.com/canonical/k8s-dqlite
 go 1.16
 
 require (
-	github.com/canonical/go-dqlite v1.11.1
+	github.com/canonical/go-dqlite v1.11.6
 	github.com/ghodss/yaml v1.0.0
 	github.com/pkg/errors v0.9.1
 	github.com/rancher/kine v0.4.1

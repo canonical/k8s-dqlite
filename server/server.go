@@ -31,7 +31,7 @@ var (
 	defaultKineEp = "tcp://127.0.0.1:12379"
 )
 
-func New(dir string, listen string, enableTLS bool) (*Server, error) {
+func New(dir string, listen string, enableTLS bool, diskMode bool) (*Server, error) {
 	// Check if we're initializing a new node (i.e. there's an init.yaml).
 	// dir: the directory where data will be stored as well as where the init.yaml
 	//       and certificates should be found
@@ -104,6 +104,15 @@ func New(dir string, listen string, enableTLS bool) (*Server, error) {
 	if v := cfg.DqliteTuning.NetworkLatency; v != nil {
 		log.Printf("Network latency set to %v", *v)
 		options = append(options, app.WithNetworkLatency(*v))
+	}
+
+	// Disk mode
+	if diskMode {
+		log.Printf("Enable dqlite disk mode")
+
+		// TODO: remove after dqlite disk mode is stable
+		log.Printf("WARNING: dqlite disk mode is current at an experimental state and SHOULD NOT be used in production. Expect data loss.")
+		options = append(options, app.WithDiskMode(true))
 	}
 
 	app, err := app.New(dir, options...)

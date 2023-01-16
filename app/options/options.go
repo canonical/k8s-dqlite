@@ -24,4 +24,5 @@ type Options struct {
 	Debug           bool
 	EnableProfiling bool
 	ProfilingListen string
+	DiskMode        bool
 }
