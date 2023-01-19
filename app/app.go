@@ -5,7 +5,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+	http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -38,6 +38,7 @@ var opts = options.Options{
 	Debug:           false,
 	EnableProfiling: false,
 	ProfilingListen: "127.0.0.1:40000",
+	DiskMode:        false,
 }
 
 // liteCmd represents the base command when called without any subcommands
@@ -63,6 +64,7 @@ var dqliteCmd = &cobra.Command{
 			opts.StorageDir,
 			opts.ListenEp,
 			opts.EnableTLS,
+			opts.DiskMode,
 		)
 		if err != nil {
 			log.Fatalf("Failed to start server: %s\n", err)
@@ -99,8 +101,9 @@ func init() {
 
 	dqliteCmd.Flags().StringVar(&opts.StorageDir, "storage-dir", opts.StorageDir, "directory with the dqlite datastore")
 	dqliteCmd.Flags().StringVar(&opts.ListenEp, "listen", opts.ListenEp, "endpoint where dqlite should listen to")
-	dqliteCmd.Flags().BoolVar(&opts.EnableTLS, "enable-tls", opts.EnableTLS, "enable TlS")
+	dqliteCmd.Flags().BoolVar(&opts.EnableTLS, "enable-tls", opts.EnableTLS, "enable TLS")
 	dqliteCmd.Flags().BoolVar(&opts.Debug, "debug", opts.Debug, "debug logs")
 	dqliteCmd.Flags().BoolVar(&opts.EnableProfiling, "profiling", opts.EnableProfiling, "enable debug pprof endpoint")
 	dqliteCmd.Flags().StringVar(&opts.ProfilingListen, "profiling-listen", opts.ProfilingListen, "listen address for pprof endpoint")
+	dqliteCmd.Flags().BoolVar(&opts.DiskMode, "disk-mode", opts.DiskMode, "(experimental) run dqlite store in disk mode")
 }

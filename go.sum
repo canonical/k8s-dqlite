@@ -59,8 +59,9 @@ github.com/PuerkitoBio/purell v1.1.0/go.mod h1:c11w/QuzBsJSee3cPx9rAFu61PvFxuPbt
 github.com/PuerkitoBio/purell v1.1.1/go.mod h1:c11w/QuzBsJSee3cPx9rAFu61PvFxuPbtSwDGJws/X0=
 github.com/PuerkitoBio/urlesc v0.0.0-20160726150825-5bd2802263f2/go.mod h1:uGdkoq3SwY9Y+13GIhn11/XLaGBb4BfwItxLd5jeuXE=
 github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578/go.mod h1:uGdkoq3SwY9Y+13GIhn11/XLaGBb4BfwItxLd5jeuXE=
-github.com/Rican7/retry v0.1.0 h1:FqK94z34ly8Baa6K+G8Mmza9rYWTKOJk+yckIBB5qVk=
 github.com/Rican7/retry v0.1.0/go.mod h1:FgOROf8P5bebcC1DS0PdOQiqGUridaZvikzUmkFW6gg=
+github.com/Rican7/retry v0.3.0 h1:ixNrbGAPoTSjXhcXOKT/X6bj3wexR4DPqWVrdkl+9K0=
+github.com/Rican7/retry v0.3.0/go.mod h1:CxSDrhAyXmTMeEuRAnArMu1FHu48vtfjLREWqVl7Vw0=
 github.com/agnivade/levenshtein v1.0.1/go.mod h1:CURSv5d9Uaml+FovSIICkLbAUZ9S4RqaHDIsdSBg7lM=
 github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
 github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
@@ -87,8 +88,8 @@ github.com/bketelsen/crypt v0.0.3-0.20200106085610-5cbc8cc4026c/go.mod h1:MKsuJm
 github.com/bketelsen/crypt v0.0.4/go.mod h1:aI6NrJ0pMGgvZKL1iVgXLnfIFJtfV+bKCoqOes/6LfM=
 github.com/blang/semver v3.5.0+incompatible/go.mod h1:kRBLl5iJ+tD4TcOOxsy/0fnwebNt5EWlYSAyrTnjyyk=
 github.com/canonical/go-dqlite v1.8.0/go.mod h1:MVgCUhFflG7GDAwb6q2CDp5kmdHyIX+XXkATDsiaDzw=
-github.com/canonical/go-dqlite v1.11.1 h1:bvxtIv+Wm3lFrBBXPOrANsgJQ+5/3DZCnjTBkimtc20=
-github.com/canonical/go-dqlite v1.11.1/go.mod h1:KDFMv4rdNwRzBZhabKjKDN2oOyPjHqQz1Epc6VOgbLs=
+github.com/canonical/go-dqlite v1.11.6 h1:rF0dqLiivIE3M2UUqIjJ4m2yYzK0LIaniqZoHeRRl/k=
+github.com/canonical/go-dqlite v1.11.6/go.mod h1:Dwp/03G1r4dtc+QSB9tV84RAAS7Mc6gy7tEvzCgcuQ8=
 github.com/canonical/kine v0.4.1-k8s-dqlite.5 h1:8X4rgHG3nLC0H8LPDBVqmFhgjFotsOb5RMb4BAv84as=
 github.com/canonical/kine v0.4.1-k8s-dqlite.5/go.mod h1:cLSTFbvpmjXdj0Dd9Bsm5PIvwfliTobnY9JcTIftmKQ=
 github.com/census-instrumentation/opencensus-proto v0.2.1/go.mod h1:f6KPmirojxKA12rnyqOA5BBL4O983OfeGPqjHWSTneU=
