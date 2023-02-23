@@ -116,3 +116,70 @@ Steps:
   ```
 
 8. Repeat from step #2 to join another node.
+
+## Develop k8s-dqlite and kine against an active MicroK8s instance
+
+1.  Install development tools:
+
+    ```bash
+    sudo snap install go --classic
+    sudo apt update
+    sudo apt install build-essential -y
+
+    sudo add-apt-repository -y ppa:dqlite/dev
+    sudo apt-get update
+    sudo apt-get install libdqlite-dev -y
+    ```
+
+2.  Clone k8s-dqlite repository:
+
+    ```bash
+    git clone https://github.com/canonical/k8s-dqlite
+    ```
+
+3.  Clone kine repository:
+
+    ```bash
+    # (FOR EXISTING KINE, works out of the box)
+    git clone https://github.com/canonical/kine
+
+    # (FOR LATEST UPSTREAM KINE, requires adjustments to k8s-dqlite)
+    git clone https://github.com/k3s-io/kine
+    ```
+
+    Edit k8s-dqlite to use the local kine repository when building:
+
+    ```bash
+    cd k8s-dqlite
+    go mod edit -replace github.com/rancher/kine=../kine    # only if developing kine
+    go mod tidy
+    ```
+
+4.  Install MicroK8s on the machine:
+
+    ```bash
+    sudo snap install microk8s --classic
+    ```
+
+5.  Wait for MicroK8s to come up:
+
+    ```bash
+    sudo microk8s status --wait-ready
+    ```
+
+6.  Stop k8s-dqlite included in the snap:
+
+    ```bash
+    sudo snap stop microk8s.daemon-k8s-dqlite --disable
+    ```
+
+7.  Run k8s-dqlite from this repository:
+
+    ```bash
+    cd k8s-dqlite
+    sudo CGO_LDFLAGS_ALLOW="-Wl,-z,now" go run -tags sqlite3,dqlite ./k8s-dqlite.go \
+      --storage-dir /var/snap/microk8s/current/var/kubernetes/backend \
+      --listen unix:///var/snap/microk8s/current/var/kubernetes/backend/kine.sock:12379
+    ```
+
+8.  While developing and making changes to `k8s-dqlite` and `kine`, just restart k8s-dqlite
