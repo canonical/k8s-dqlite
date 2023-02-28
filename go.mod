@@ -15,4 +15,4 @@ require (
 	k8s.io/component-base v0.18.0
 )
 
-replace github.com/rancher/kine => github.com/marco6/kine
+replace github.com/rancher/kine => github.com/marco6/kine v0.0.0-20230228103807-5edb9a2509cd
