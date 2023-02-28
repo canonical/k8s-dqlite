@@ -15,8 +15,8 @@ import (
 	"github.com/canonical/k8s-dqlite/server/config"
 	"github.com/ghodss/yaml"
 	"github.com/pkg/errors"
-	"github.com/rancher/kine/pkg/endpoint"
-	"github.com/rancher/kine/pkg/tls"
+	"github.com/k3s-io/kine/pkg/endpoint"
+	"github.com/k3s-io/kine/pkg/tls"
 )
 
 // Server sets up a single dqlite node and serves the cluster management API.
