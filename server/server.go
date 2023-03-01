@@ -185,7 +185,6 @@ func New(dir string, listen string, enableTLS bool, diskMode bool) (*Server, err
 			CertFile: crt,
 			KeyFile:  key,
 		}
-		config.ServerTLSConfig = kineTls
 		config.BackendTLSConfig = kineTls
 	}
 
