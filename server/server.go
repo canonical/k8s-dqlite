@@ -14,9 +14,9 @@ import (
 	"github.com/canonical/go-dqlite/client"
 	"github.com/canonical/k8s-dqlite/server/config"
 	"github.com/ghodss/yaml"
-	"github.com/pkg/errors"
 	"github.com/k3s-io/kine/pkg/endpoint"
 	"github.com/k3s-io/kine/pkg/tls"
+	"github.com/pkg/errors"
 )
 
 // Server sets up a single dqlite node and serves the cluster management API.
@@ -185,7 +185,8 @@ func New(dir string, listen string, enableTLS bool, diskMode bool) (*Server, err
 			CertFile: crt,
 			KeyFile:  key,
 		}
-		config.Config = kineTls
+		config.ServerTLSConfig = kineTls
+		config.BackendTLSConfig = kineTls
 	}
 
 	kineCtx, cancelKine := context.WithCancel(context.Background())
