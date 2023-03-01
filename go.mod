@@ -16,3 +16,5 @@ require (
 )
 
 replace github.com/k3s-io/kine => github.com/marco6/kine v0.0.0-20230228103807-5edb9a2509cd
+
+replace github.com/mattn/go-sqlite3 => github.com/marco6/go-sqlite3 v0.0.0-20230224142218-3eeab017fc7a
