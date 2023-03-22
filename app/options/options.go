@@ -18,11 +18,12 @@ package options
 
 // Options is the list of options for running k8s-dqlite.
 type Options struct {
-	StorageDir      string
-	ListenEp        string
-	EnableTLS       bool
-	Debug           bool
-	EnableProfiling bool
-	ProfilingListen string
-	DiskMode        bool
+	StorageDir             string
+	ListenEp               string
+	EnableTLS              bool
+	Debug                  bool
+	EnableProfiling        bool
+	ProfilingListen        string
+	DiskMode               bool
+	ClientSessionCacheSize uint
 }

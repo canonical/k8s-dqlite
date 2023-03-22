@@ -32,13 +32,14 @@ import (
 )
 
 var opts = options.Options{
-	StorageDir:      "/var/tmp/k8s-dqlite",
-	ListenEp:        "tcp://127.0.0.1:12379",
-	EnableTLS:       true,
-	Debug:           false,
-	EnableProfiling: false,
-	ProfilingListen: "127.0.0.1:40000",
-	DiskMode:        false,
+	StorageDir:             "/var/tmp/k8s-dqlite",
+	ListenEp:               "tcp://127.0.0.1:12379",
+	EnableTLS:              true,
+	Debug:                  false,
+	EnableProfiling:        false,
+	ProfilingListen:        "127.0.0.1:40000",
+	DiskMode:               false,
+	ClientSessionCacheSize: 0,
 }
 
 // liteCmd represents the base command when called without any subcommands
@@ -65,6 +66,7 @@ var dqliteCmd = &cobra.Command{
 			opts.ListenEp,
 			opts.EnableTLS,
 			opts.DiskMode,
+			opts.ClientSessionCacheSize,
 		)
 		if err != nil {
 			log.Fatalf("Failed to start server: %s\n", err)
@@ -106,4 +108,5 @@ func init() {
 	dqliteCmd.Flags().BoolVar(&opts.EnableProfiling, "profiling", opts.EnableProfiling, "enable debug pprof endpoint")
 	dqliteCmd.Flags().StringVar(&opts.ProfilingListen, "profiling-listen", opts.ProfilingListen, "listen address for pprof endpoint")
 	dqliteCmd.Flags().BoolVar(&opts.DiskMode, "disk-mode", opts.DiskMode, "(experimental) run dqlite store in disk mode")
+	dqliteCmd.Flags().UintVar(&opts.ClientSessionCacheSize, "tls-client-session-cache-size", opts.ClientSessionCacheSize, "ClientCacheSession size for dial TLS config")
 }

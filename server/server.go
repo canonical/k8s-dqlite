@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	gotls "crypto/tls"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -31,7 +32,7 @@ var (
 	defaultKineEp = "tcp://127.0.0.1:12379"
 )
 
-func New(dir string, listen string, enableTLS bool, diskMode bool) (*Server, error) {
+func New(dir string, listen string, enableTLS bool, diskMode bool, clientSessionCacheSize uint) (*Server, error) {
 	// Check if we're initializing a new node (i.e. there's an init.yaml).
 	// dir: the directory where data will be stored as well as where the init.yaml
 	//       and certificates should be found
@@ -83,7 +84,19 @@ func New(dir string, listen string, enableTLS bool, diskMode bool) (*Server, err
 	log.Printf("Failure domain set to %d", cfg.FailureDomain)
 	if enableTLS {
 		log.Printf("TLS enabled")
-		options = append(options, app.WithTLS(app.SimpleTLSConfig(cfg.KeyPair, cfg.Pool)))
+
+		listen, dial := app.SimpleTLSConfig(cfg.KeyPair, cfg.Pool)
+
+		// Using a ClientSessionCache might cause incompatibilities and network resets
+		// between go-dqlite 1.11.7 and 1.11.6 or older.
+		if clientSessionCacheSize > 0 {
+			log.Printf("Use TLS ClientSessionCache with size %d", clientSessionCacheSize)
+			dial.ClientSessionCache = gotls.NewLRUClientSessionCache(int(clientSessionCacheSize))
+		} else {
+			log.Printf("Disable ClientSessionCache")
+			dial.ClientSessionCache = nil
+		}
+		options = append(options, app.WithTLS(listen, dial))
 	}
 
 	// Possibly initialize our ID, address and initial node store content.
