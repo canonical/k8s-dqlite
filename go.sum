@@ -87,12 +87,10 @@ github.com/bgentry/speakeasy v0.1.0/go.mod h1:+zsyZBPWlz7T6j88CTgSN5bM796AkVf0kB
 github.com/bketelsen/crypt v0.0.3-0.20200106085610-5cbc8cc4026c/go.mod h1:MKsuJmJgSg28kpZDP6UIiPt0e0Oz0kqKNGyRaWEPv84=
 github.com/bketelsen/crypt v0.0.4/go.mod h1:aI6NrJ0pMGgvZKL1iVgXLnfIFJtfV+bKCoqOes/6LfM=
 github.com/blang/semver v3.5.0+incompatible/go.mod h1:kRBLl5iJ+tD4TcOOxsy/0fnwebNt5EWlYSAyrTnjyyk=
-github.com/canonical/go-dqlite v1.11.7 h1:eS+jif6HJ4HzKatQePvQggZI6xQukzg94zC9qLiGVgA=
-github.com/canonical/go-dqlite v1.11.7/go.mod h1:Dwp/03G1r4dtc+QSB9tV84RAAS7Mc6gy7tEvzCgcuQ8=
 github.com/canonical/go-dqlite v1.11.8 h1:yRnVotjd7xUXdVvTW2RoVWeUlBM7oF+/ylQfQlu9bQ8=
 github.com/canonical/go-dqlite v1.11.8/go.mod h1:Uvy943N8R4CFUAs59A1NVaziWY9nJ686lScY7ywurfg=
-github.com/canonical/kine v0.4.1-k8s-dqlite.8 h1:JE5vOYL4NeqkinMWPSJsOsrQx6gJ1an5tsqiZh2tqDA=
-github.com/canonical/kine v0.4.1-k8s-dqlite.8/go.mod h1:ZPLbLYHixjMWjYSA3SjSklYxFceZWRxpDobamI+6KIM=
+github.com/canonical/kine v0.4.1-k8s-dqlite.9 h1:9QQY9KEPBl79J4JR3NqFQnLcgPyjDQJnr9+r658Ojkw=
+github.com/canonical/kine v0.4.1-k8s-dqlite.9/go.mod h1:gbtgQhySXeudWU7f0y08AjKpO8133sjJabD2e8zvMNM=
 github.com/census-instrumentation/opencensus-proto v0.2.1/go.mod h1:f6KPmirojxKA12rnyqOA5BBL4O983OfeGPqjHWSTneU=
 github.com/certifi/gocertifi v0.0.0-20191021191039-0944d244cd40/go.mod h1:sGbDF6GwGcLpkNXPUTkMRoywsNa/ol15pxFe6ERfguA=
 github.com/certifi/gocertifi v0.0.0-20200922220541-2c3bb06c6054 h1:uH66TXeswKn5PW5zdZ39xEwfS9an067BirqA+P4QaLI=
