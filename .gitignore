@@ -1,0 +1,15 @@
+/build/
+/parts/
+/prime/
+/stage/
+!/snap/hooks/
+*.snap
+tests/__pycache__
+.idea/
+**/tests/*.pyc
+.venv/
+.vscode/
+.tox_env/
+__pycache__/
+vendor/
+/k8s-dqlite
