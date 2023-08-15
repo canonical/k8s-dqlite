@@ -13,11 +13,11 @@ import (
 	"github.com/canonical/go-dqlite"
 	"github.com/canonical/go-dqlite/app"
 	"github.com/canonical/go-dqlite/client"
-	"github.com/canonical/k8s-dqlite/server/config"
+	"github.com/canonical/k8s-dqlite/pkg/kine/endpoint"
+	"github.com/canonical/k8s-dqlite/pkg/kine/tls"
+	"github.com/canonical/k8s-dqlite/pkg/server/config"
 	"github.com/ghodss/yaml"
 	"github.com/pkg/errors"
-	"github.com/rancher/kine/pkg/endpoint"
-	"github.com/rancher/kine/pkg/tls"
 )
 
 // Server sets up a single dqlite node and serves the cluster management API.
@@ -202,7 +202,8 @@ func New(dir string, listen string, enableTLS bool, diskMode bool, clientSession
 	}
 
 	kineCtx, cancelKine := context.WithCancel(context.Background())
-	if _, err := endpoint.Listen(kineCtx, config); err != nil {
+	defer cancelKine()
+	if _, err = endpoint.Listen(kineCtx, config); err != nil {
 		return nil, errors.Wrap(err, "kine")
 	}
 

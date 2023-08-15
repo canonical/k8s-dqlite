@@ -24,8 +24,8 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/canonical/k8s-dqlite/app/options"
-	"github.com/canonical/k8s-dqlite/server"
+	"github.com/canonical/k8s-dqlite/pkg/app/options"
+	"github.com/canonical/k8s-dqlite/pkg/server"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"golang.org/x/sys/unix"
@@ -51,7 +51,7 @@ var dqliteCmd = &cobra.Command{
 	// has an action associated with it:
 	Run: func(cmd *cobra.Command, args []string) {
 		log.Println("Starting dqlite")
-		if opts.Debug == true {
+		if opts.Debug {
 			log.SetLevel(log.TraceLevel)
 		}
 
@@ -73,7 +73,7 @@ var dqliteCmd = &cobra.Command{
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 
-		ch := make(chan os.Signal)
+		ch := make(chan os.Signal, 1)
 		signal.Notify(ch, unix.SIGPWR)
 		signal.Notify(ch, unix.SIGINT)
 		signal.Notify(ch, unix.SIGQUIT)
