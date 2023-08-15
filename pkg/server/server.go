@@ -204,6 +204,7 @@ func New(dir string, listen string, enableTLS bool, diskMode bool, clientSession
 	kineCtx, cancelKine := context.WithCancel(context.Background())
 	defer cancelKine()
 	if _, err = endpoint.Listen(kineCtx, config); err != nil {
+	if _, err := endpoint.Listen(kineCtx, config); err != nil {
 		return nil, errors.Wrap(err, "kine")
 	}
 
