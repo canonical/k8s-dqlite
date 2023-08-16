@@ -1,6 +1,3 @@
-//go:build cgo
-// +build cgo
-
 package sqlite
 
 import (
@@ -17,9 +14,6 @@ import (
 	"github.com/mattn/go-sqlite3"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-
-	// sqlite db driver
-	_ "github.com/mattn/go-sqlite3"
 )
 
 func New(ctx context.Context, dataSourceName string) (server.Backend, error) {

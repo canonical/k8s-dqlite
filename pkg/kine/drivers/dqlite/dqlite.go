@@ -1,6 +1,3 @@
-//go:build dqlite
-// +build dqlite
-
 package dqlite
 
 import (
