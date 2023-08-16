@@ -9,7 +9,7 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/canonical/k8s-dqlite/pkg/server"
+	"github.com/canonical/k8s-dqlite/pkg/old_server"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"golang.org/x/sys/unix"
@@ -45,7 +45,7 @@ var rootCmd = &cobra.Command{
 			}()
 		}
 
-		server, err := server.New(storageDir, listenAddress, enableTLS, diskMode, clientSessionCacheSize)
+		server, err := old_server.New(storageDir, listenAddress, enableTLS, diskMode, clientSessionCacheSize)
 		if err != nil {
 			log.Fatalf("Failed to start server: %s\n", err)
 		}

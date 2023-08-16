@@ -1,4 +1,4 @@
-package server
+package old_server
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 	"github.com/canonical/go-dqlite/client"
 	"github.com/canonical/k8s-dqlite/pkg/kine/endpoint"
 	"github.com/canonical/k8s-dqlite/pkg/kine/tls"
-	"github.com/canonical/k8s-dqlite/pkg/server/config"
+	"github.com/canonical/k8s-dqlite/pkg/old_server/config"
 	"github.com/ghodss/yaml"
 	"github.com/pkg/errors"
 )
