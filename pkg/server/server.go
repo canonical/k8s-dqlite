@@ -4,7 +4,6 @@ import (
 	"context"
 	gotls "crypto/tls"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -47,7 +46,7 @@ func New(dir string, listen string, enableTLS bool, diskMode bool, clientSession
 	if cfg.Update != nil {
 		info := client.NodeInfo{}
 		path := filepath.Join(dir, "info.yaml")
-		data, err := ioutil.ReadFile(path)
+		data, err := os.ReadFile(path)
 		if err != nil {
 			return nil, err
 		}
@@ -59,7 +58,7 @@ func New(dir string, listen string, enableTLS bool, diskMode bool, clientSession
 		if err != nil {
 			return nil, err
 		}
-		if err := ioutil.WriteFile(path, data, 0600); err != nil {
+		if err := os.WriteFile(path, data, 0600); err != nil {
 			return nil, err
 		}
 		nodes := []dqlite.NodeInfo{info}
@@ -148,7 +147,7 @@ func New(dir string, listen string, enableTLS bool, diskMode bool, clientSession
 	// Connect to a single peer that is the current machine
 	info := client.NodeInfo{}
 	infoFile := filepath.Join(dir, "info.yaml")
-	data, err := ioutil.ReadFile(infoFile)
+	data, err := os.ReadFile(infoFile)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +161,7 @@ func New(dir string, listen string, enableTLS bool, diskMode bool, clientSession
 		return nil, err
 	}
 	localServerFile := filepath.Join(dir, "localnode.yaml")
-	if err := ioutil.WriteFile(localServerFile, data, 0600); err != nil {
+	if err := os.WriteFile(localServerFile, data, 0600); err != nil {
 		return nil, err
 	}
 
