@@ -144,35 +144,7 @@ func New(dir string, listen string, enableTLS bool, diskMode bool, clientSession
 		return nil, err
 	}
 
-	// Connect to a single peer that is the current machine
-	info := client.NodeInfo{}
-	infoFile := filepath.Join(dir, "info.yaml")
-	data, err := os.ReadFile(infoFile)
-	if err != nil {
-		return nil, err
-	}
-	if err := yaml.Unmarshal(data, &info); err != nil {
-		return nil, err
-	}
-	serverList := []client.NodeInfo{}
-	serverList = append(serverList, info)
-	data, err = yaml.Marshal(serverList)
-	if err != nil {
-		return nil, err
-	}
-	localServerFile := filepath.Join(dir, "localnode.yaml")
-	if err := os.WriteFile(localServerFile, data, 0600); err != nil {
-		return nil, err
-	}
-
-	peers := localServerFile
-
-	ep := defaultKineEp
-	if listen != "" {
-		ep = listen
-	}
-
-	e := fmt.Sprintf("dqlite://k8s?peer-file=%s&driver-name=%s", peers, app.Driver())
+	e := fmt.Sprintf("dqlite://k8s?driver-name=%s", app.Driver())
 
 	// Tune kine compact interval
 	if v := cfg.DqliteTuning.KineCompactInterval; v != nil {
@@ -186,7 +158,7 @@ func New(dir string, listen string, enableTLS bool, diskMode bool, clientSession
 	log.Printf("Connecting to kine endpoint: %s", e)
 
 	config := endpoint.Config{
-		Listener: ep,
+		Listener: listen,
 		Endpoint: e,
 	}
 
