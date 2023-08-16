@@ -1,9 +1,9 @@
 package main
 
 import (
-	"github.com/canonical/k8s-dqlite/pkg/app"
+	"github.com/canonical/k8s-dqlite/cmd"
 )
 
 func main() {
-	app.Execute()
+	cmd.Execute()
 }
