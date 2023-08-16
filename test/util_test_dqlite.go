@@ -32,6 +32,6 @@ func makeEndpointConfig(ctx context.Context, tb testing.TB) endpoint.Config {
 
 	return endpoint.Config{
 		Listener: fmt.Sprintf("unix://%s/listen.sock", dir),
-		Endpoint: fmt.Sprintf("dqlite://k8s-%d?peer=%d:%s&driver-name=%s", nextIdx, app.ID(), app.Address(), app.Driver()),
+		Endpoint: fmt.Sprintf("dqlite://k8s-%d?driver-name=%s", nextIdx, app.Driver()),
 	}
 }
