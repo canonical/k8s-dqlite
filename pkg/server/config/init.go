@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -36,7 +35,7 @@ func loadInit(dir string) (*Init, error) {
 	}
 
 	// Check that the only files in the directory are the TLS certificate.
-	files, err := ioutil.ReadDir(dir)
+	files, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, errors.Wrap(err, "list data directory")
 	}
@@ -53,7 +52,7 @@ func loadInit(dir string) (*Init, error) {
 		}
 	}
 
-	data, err := ioutil.ReadFile(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, errors.Wrap(err, "read init.yaml")
 	}

@@ -9,7 +9,6 @@ import (
 	"crypto/x509"
 	"database/sql"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"strconv"
@@ -178,7 +177,7 @@ func getDialer(tlsInfo tls.Config) (driver.Option, error) {
 			return nil, errors.New("bad certificate pair")
 		}
 
-		data, err := ioutil.ReadFile(tlsInfo.CertFile)
+		data, err := os.ReadFile(tlsInfo.CertFile)
 		if err != nil {
 			return nil, errors.New("could not read certificate")
 		}

@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -42,7 +41,7 @@ func Load(dir string) (*Config, error) {
 		return nil, errors.Wrap(err, "load keypair")
 	}
 
-	data, err := ioutil.ReadFile(crt)
+	data, err := os.ReadFile(crt)
 	if err != nil {
 		return nil, errors.Wrap(err, "read certificate")
 	}
@@ -101,7 +100,7 @@ func loadFailureDomain(dir string) (uint64, error) {
 
 	}
 
-	data, err := ioutil.ReadFile(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return 0, errors.Wrap(err, "read failure-domain")
 	}
