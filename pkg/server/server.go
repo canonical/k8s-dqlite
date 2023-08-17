@@ -144,11 +144,13 @@ func New(dir string, listen string, enableTLS bool, diskMode bool, clientSession
 		if err != nil {
 			return nil, fmt.Errorf("failed to load keypair from cluster.crt and cluster.key: %w", err)
 		}
+		crtPEM, err := os.ReadFile(crtFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read cluster.crt: %w", err)
+		}
 		pool := x509.NewCertPool()
-		for idx, cert := range keypair.Certificate {
-			if !pool.AppendCertsFromPEM(cert) {
-				return nil, fmt.Errorf("failed to add certificate %d to pool", idx)
-			}
+		if !pool.AppendCertsFromPEM(crtPEM) {
+			return nil, fmt.Errorf("failed to add certificate to pool")
 		}
 
 		listen, dial := app.SimpleTLSConfig(keypair, pool)
