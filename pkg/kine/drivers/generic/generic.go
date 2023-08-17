@@ -350,11 +350,12 @@ func (d *Generic) query(ctx context.Context, sql string, args ...interface{}) (r
 			err = fmt.Errorf("query (try: %d): %w", i, err)
 		}
 	}()
+	strippedSQL := Stripped(sql)
 	for ; i < 500; i++ {
 		if i > 2 {
-			logrus.Debugf("QUERY (try: %d) %v : %s", i, args, Stripped(sql))
+			logrus.Debugf("QUERY (try: %d) %v : %s", i, args, strippedSQL)
 		} else {
-			logrus.Tracef("QUERY (try: %d) %v : %s", i, args, Stripped(sql))
+			logrus.Tracef("QUERY (try: %d) %v : %s", i, args, strippedSQL)
 		}
 		rows, err = d.DB.QueryContext(ctx, sql, args...)
 		if err != nil && d.Retry != nil && d.Retry(err) {
@@ -388,11 +389,13 @@ func (d *Generic) queryInt64(ctx context.Context, sql string, args ...interface{
 			err = fmt.Errorf("query int64 (try: %d): %w", i, err)
 		}
 	}()
+	strippedSQL := Stripped(sql)
+
 	for ; i < 500; i++ {
 		if i > 2 {
-			logrus.Debugf("QUERY INT64 (try: %d) %v : %s", i, args, Stripped(sql))
+			logrus.Debugf("QUERY INT64 (try: %d) %v : %s", i, args, strippedSQL)
 		} else {
-			logrus.Tracef("QUERY INT64 (try: %d) %v : %s", i, args, Stripped(sql))
+			logrus.Tracef("QUERY INT64 (try: %d) %v : %s", i, args, strippedSQL)
 		}
 		row := d.DB.QueryRowContext(ctx, sql, args...)
 		err = row.Scan(&n)
@@ -417,11 +420,12 @@ func (d *Generic) execute(ctx context.Context, sql string, args ...interface{}) 
 		defer d.Unlock()
 	}
 
+	strippedSQL := Stripped(sql)
 	for ; i < 500; i++ {
 		if i > 2 {
-			logrus.Debugf("EXEC (try: %d) %v : %s", i, args, Stripped(sql))
+			logrus.Debugf("EXEC (try: %d) %v : %s", i, args, strippedSQL)
 		} else {
-			logrus.Tracef("EXEC (try: %d) %v : %s", i, args, Stripped(sql))
+			logrus.Tracef("EXEC (try: %d) %v : %s", i, args, strippedSQL)
 		}
 		result, err = d.DB.ExecContext(ctx, sql, args...)
 		if err != nil && d.Retry != nil && d.Retry(err) {
@@ -445,11 +449,12 @@ func (d *Generic) executePrepared(ctx context.Context, sql string, prepared *sql
 		defer d.Unlock()
 	}
 
+	strippedSQL := Stripped(sql)
 	for ; i < 500; i++ {
 		if i > 2 {
-			logrus.Debugf("EXEC (try: %d) %v : %s", i, args, Stripped(sql))
+			logrus.Debugf("EXEC (try: %d) %v : %s", i, args, strippedSQL)
 		} else {
-			logrus.Tracef("EXEC (try: %d) %v : %s", i, args, Stripped(sql))
+			logrus.Tracef("EXEC (try: %d) %v : %s", i, args, strippedSQL)
 		}
 		result, err = prepared.ExecContext(ctx, args...)
 		if err != nil && d.Retry != nil && d.Retry(err) {
