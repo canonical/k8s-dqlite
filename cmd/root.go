@@ -9,8 +9,8 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/canonical/k8s-dqlite/pkg/old_server"
-	log "github.com/sirupsen/logrus"
+	"github.com/canonical/k8s-dqlite/pkg/server"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"golang.org/x/sys/unix"
 )
@@ -34,9 +34,8 @@ var rootCmd = &cobra.Command{
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	Run: func(cmd *cobra.Command, args []string) {
-		log.Println("Starting dqlite")
 		if debug {
-			log.SetLevel(log.TraceLevel)
+			logrus.SetLevel(logrus.TraceLevel)
 		}
 
 		if enableProfiling {
@@ -45,25 +44,33 @@ var rootCmd = &cobra.Command{
 			}()
 		}
 
-		server, err := old_server.New(storageDir, listenAddress, enableTLS, diskMode, clientSessionCacheSize)
+		server, err := server.New(storageDir, listenAddress, enableTLS, diskMode, clientSessionCacheSize)
 		if err != nil {
-			log.Fatalf("Failed to start server: %s\n", err)
+			logrus.WithError(err).Fatal("Failed to create server")
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 
+		ctx, cancel := context.WithCancel(cmd.Context())
+		if err := server.Start(ctx); err != nil {
+			logrus.WithError(err).Error("Server terminated")
+		}
+
+		// Cancel context if we receive an exit signal
 		ch := make(chan os.Signal, 1)
 		signal.Notify(ch, unix.SIGPWR)
 		signal.Notify(ch, unix.SIGINT)
 		signal.Notify(ch, unix.SIGQUIT)
 		signal.Notify(ch, unix.SIGTERM)
+
 		<-ch
-
-		log.Printf("Shutting down\n")
 		cancel()
-		server.Close(ctx)
 
-		log.Printf("Dqlite stopped\n")
+		// Create a separate context with 30 seconds to cleanup
+		stopCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
 
+		if err := server.Shutdown(stopCtx); err != nil {
+			logrus.WithError(err).Fatal("Failed to shutdown server")
+		}
 	},
 }
 
