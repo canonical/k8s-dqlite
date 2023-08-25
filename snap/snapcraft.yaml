@@ -26,10 +26,9 @@ parts:
       make go.build.static
       make dqlite
 
-      mkdir -p $SNAPCRAFT_STAGE/bin
-      cp k8s-dqlite $SNAPCRAFT_STAGE/bin/k8s-dqlite
-      cp dqlite $SNAPCRAFT_STAGE/bin/dqlite
-
+      mkdir -p $SNAPCRAFT_PRIME/bin
+      cp k8s-dqlite $SNAPCRAFT_PRIME/bin/k8s-dqlite
+      cp dqlite $SNAPCRAFT_PRIME/bin/dqlite
 
   k8s-dqlite-daemon:
     source: .
