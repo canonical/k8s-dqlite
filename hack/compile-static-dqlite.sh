@@ -12,7 +12,7 @@ TAG_DQLITE="v1.14.0"
 ### END CONFIGURATION
 
 DIR="$(realpath `dirname "${0}"`)"
-BUILD_DIR="${DIR}/build"
+BUILD_DIR="$(realpath ${DIR}/../build)"
 INSTALL_DIR="$(realpath ${DIR}/../deps)"
 
 mkdir -p "${BUILD_DIR}" "${INSTALL_DIR}" "${INSTALL_DIR}/lib" "${INSTALL_DIR}/include"
