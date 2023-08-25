@@ -18,10 +18,10 @@ INSTALL_DIR="$(realpath ${DIR}/../deps)"
 mkdir -p "${BUILD_DIR}" "${INSTALL_DIR}" "${INSTALL_DIR}/lib" "${INSTALL_DIR}/include"
 
 MACHINE_TYPE="$(uname -m)"
-CUSTOM_CFLAGS=""
 if [ "${MACHINE_TYPE}" = "ppc64le" ]; then
   MACHINE_TYPE="powerpc64le"
-  CUSTOM_CFLAGS="-mlong-double-64"
+  export CFLAGS="-mlong-double-64"
+  export LDFLAGS="-static"
 fi
 
 # dependencies
@@ -32,11 +32,11 @@ if [ ! -f "${INSTALL_DIR}/musl/bin/musl-gcc" ]; then
   (
     cd "${BUILD_DIR}"
     rm -rf musl
-    git clone git://git.musl-libc.org/musl --depth 1 --branch v1.2.3 musl > /dev/null
+    git clone https://git.launchpad.net/musl --depth 1 --branch v1.2.3 musl > /dev/null
     cd musl
-    ./configure CFLAGS="${CUSTOM_CFLAGS}" --prefix="${INSTALL_DIR}/musl" > /dev/null
+    ./configure --prefix="${INSTALL_DIR}/musl" > /dev/null
     make -j > /dev/null
-    make -j install || true > /dev/null
+    make -j install > /dev/null || true
 
     # missing musl header files
     ln -s /usr/include/${MACHINE_TYPE}-linux-gnu/asm "${INSTALL_DIR}/musl/include/asm" || true
@@ -58,7 +58,7 @@ if [ ! -f "${BUILD_DIR}/libtirpc/src/libtirpc.la" ]; then
     cd libtirpc
     chmod +x autogen.sh
     ./autogen.sh > /dev/null
-    ./configure --disable-shared --disable-gssapi CFLAGS="${CUSTOM_CFLAGS}" > /dev/null
+    ./configure --disable-shared --disable-gssapi > /dev/null
     make -j > /dev/null
   )
 fi
@@ -74,8 +74,8 @@ if [ ! -f "${BUILD_DIR}/libnsl/src/libnsl.la" ]; then
     autoreconf -i > /dev/null
     autoconf > /dev/null
     ./configure --disable-shared \
-      CFLAGS="${CUSTOM_CFLAGS} -I${BUILD_DIR}/libtirpc/tirpc" \
-      LDFLAGS="-L${BUILD_DIR}/libtirpc/src" \
+      CFLAGS="${CFLAGS} -I${BUILD_DIR}/libtirpc/tirpc" \
+      LDFLAGS="${LDFLAGS} -L${BUILD_DIR}/libtirpc/src" \
       TIRPC_CFLAGS="-I${BUILD_DIR}/libtirpc/tirpc" \
       TIRPC_LIBS="-L${BUILD_DIR}/libtirpc/src" \
       > /dev/null
@@ -91,7 +91,7 @@ if [ ! -f "${BUILD_DIR}/libuv/libuv.la" ]; then
     git clone https://github.com/libuv/libuv.git --depth 1 --branch "${TAG_LIBUV}" > /dev/null
     cd libuv
     ./autogen.sh > /dev/null
-    ./configure CFLAGS="${CUSTOM_CFLAGS}" > /dev/null
+    ./configure > /dev/null
     make -j > /dev/null
   )
 fi
@@ -103,7 +103,7 @@ if [ ! -f "${BUILD_DIR}/lz4/lib/liblz4.a" ] || [ ! -f "${BUILD_DIR}/lz4/lib/libl
     rm -rf lz4
     git clone https://github.com/lz4/lz4.git --depth 1 --branch "${TAG_LIBLZ4}" > /dev/null
     cd lz4
-    make lib -j CFLAGS="${CUSTOM_CFLAGS}" > /dev/null
+    make lib -j > /dev/null
   )
 fi
 
@@ -116,8 +116,8 @@ if [ ! -f "${BUILD_DIR}/raft/libraft.la" ]; then
     cd raft
     autoreconf -i > /dev/null
     ./configure --disable-shared \
-      CFLAGS="-I${BUILD_DIR}/libuv/include -I${BUILD_DIR}/lz4/lib ${CUSTOM_CFLAGS}" \
-      LDFLAGS="-L${BUILD_DIR}/libuv/.libs -L${BUILD_DIR}/lz4/lib" \
+      CFLAGS="${CFLAGS} -I${BUILD_DIR}/libuv/include -I${BUILD_DIR}/lz4/lib" \
+      LDFLAGS="${LDFLAGS} -L${BUILD_DIR}/libuv/.libs -L${BUILD_DIR}/lz4/lib" \
       UV_CFLAGS="-I${BUILD_DIR}/libuv/include" \
       UV_LIBS="-L${BUILD_DIR}/libuv/.libs" \
       LZ4_CFLAGS="-I${BUILD_DIR}/lz4/lib" \
@@ -135,8 +135,8 @@ if [ ! -f "${BUILD_DIR}/sqlite/libsqlite3.la" ]; then
     rm -rf sqlite
     git clone https://github.com/sqlite/sqlite.git --depth 1 --branch "${TAG_SQLITE}" > /dev/null
     cd sqlite
-    ./configure --disable-shared CFLAGS="${CUSTOM_CFLAGS}" > /dev/null
-    make CFLAGS="${CUSTOM_CFLAGS}" -j > /dev/null
+    ./configure --disable-shared > /dev/null
+    make BCC="${CC} -g -O2 ${CFLAGS} ${LDFLAGS}" -j > /dev/null
   )
 fi
 
@@ -149,8 +149,8 @@ if [ ! -f "${BUILD_DIR}/dqlite/libdqlite.la" ]; then
     cd dqlite
     autoreconf -i > /dev/null
     ./configure --disable-shared \
-      CFLAGS="-I${BUILD_DIR}/raft/include -I${BUILD_DIR}/sqlite -I${BUILD_DIR}/libuv/include -I${BUILD_DIR}/lz4/lib -I${INSTALL_DIR}/musl/include -Werror=implicit-function-declaration" \
-      LDFLAGS="-L${BUILD_DIR}/raft/.libs -L${BUILD_DIR}/libuv/.libs -L${BUILD_DIR}/lz4/lib -L${BUILD_DIR}/libnsl/src" \
+      CFLAGS="${CFLAGS} -I${BUILD_DIR}/raft/include -I${BUILD_DIR}/sqlite -I${BUILD_DIR}/libuv/include -I${BUILD_DIR}/lz4/lib -I${INSTALL_DIR}/musl/include -Werror=implicit-function-declaration" \
+      LDFLAGS="${LDFLAGS} -L${BUILD_DIR}/raft/.libs -L${BUILD_DIR}/libuv/.libs -L${BUILD_DIR}/lz4/lib -L${BUILD_DIR}/libnsl/src" \
       RAFT_CFLAGS="-I${BUILD_DIR}/raft/include" \
       RAFT_LIBS="-L${BUILD_DIR}/raft/.libs" \
       UV_CFLAGS="-I${BUILD_DIR}/libuv/include" \

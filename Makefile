@@ -20,7 +20,7 @@ go.bench.dqlite:
 go.build:
 	CGO_LDFLAGS_ALLOW=-Wl,-z,now go build -tags=dqlite,libsqlite3 -o k8s-dqlite -ldflags '-s -w' k8s-dqlite.go
 
-deps/lib/libdqlite.a:
+deps/lib/libdqlite.a: hack/compile-static-dqlite.sh
 	./hack/compile-static-dqlite.sh
 
 go.build.static: deps/lib/libdqlite.a
@@ -60,6 +60,7 @@ migrator: deps/lib/libdqlite.a
 		CGO_LDFLAGS_ALLOW="-Wl,-z,now" \
 		CC="musl-gcc" \
 		go build \
+			-tags=dqlite,libsqlite3 \
 			-ldflags '-s -w -linkmode "external" -extldflags "-static"' \
 			-o ../migrator \
 			main.go
