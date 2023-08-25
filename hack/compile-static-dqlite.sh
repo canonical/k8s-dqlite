@@ -17,11 +17,11 @@ INSTALL_DIR="$(realpath ${DIR}/../deps)"
 
 mkdir -p "${BUILD_DIR}" "${INSTALL_DIR}" "${INSTALL_DIR}/lib" "${INSTALL_DIR}/include"
 
+export LDFLAGS="-static"
 MACHINE_TYPE="$(uname -m)"
 if [ "${MACHINE_TYPE}" = "ppc64le" ]; then
   MACHINE_TYPE="powerpc64le"
   export CFLAGS="-mlong-double-64"
-  export LDFLAGS="-static"
 fi
 
 # dependencies
