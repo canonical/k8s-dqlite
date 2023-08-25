@@ -55,12 +55,11 @@ migrator: deps/lib/libdqlite.a
 	git clone https://github.com/canonical/go-migrator
 	cd go-migrator && env \
 		PATH="${PATH}:${PWD}/deps/musl/bin" \
-		CGO_CFLAGS="-I${PWD}/deps/include" \
+		CGO_CFLAGS="-mlong-double-64 -I${PWD}/deps/include" \
 		CGO_LDFLAGS="-L${PWD}/deps/lib -luv -lraft -ldqlite -llz4 -lsqlite3" \
 		CGO_LDFLAGS_ALLOW="-Wl,-z,now" \
 		CC="musl-gcc" \
 		go build \
-			-tags=dqlite,libsqlite3 \
 			-ldflags '-s -w -linkmode "external" -extldflags "-static"' \
 			-o ../migrator \
 			main.go
