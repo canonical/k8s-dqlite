@@ -25,7 +25,7 @@ if [ "${MACHINE_TYPE}" = "ppc64le" ]; then
 fi
 
 # dependencies
-sudo apt install -y build-essential automake libtool gettext autopoint tclsh tcl libsqlite3-dev pkg-config libsqlite3-dev git > /dev/null
+sudo apt install -y build-essential automake libtool gettext autopoint tclsh tcl libsqlite3-dev pkg-config libsqlite3-dev git curl > /dev/null
 
 # build musl
 if [ ! -f "${INSTALL_DIR}/musl/bin/musl-gcc" ]; then
