@@ -23,6 +23,9 @@ go.build:
 deps/lib/libdqlite.a: hack/compile-static-dqlite.sh
 	./hack/compile-static-dqlite.sh
 
+dynamic/deps/lib/libdqlite.la: hack/compile-dynamic-dqlite.sh
+	./hack/compile-dynamic-dqlite.sh
+
 go.build.static: deps/lib/libdqlite.a
 	env \
 		PATH="${PATH}:${PWD}/deps/musl/bin" \
@@ -34,6 +37,17 @@ go.build.static: deps/lib/libdqlite.a
 			-tags=dqlite,libsqlite3 \
 			-o k8s-dqlite \
 			-ldflags '-s -w -linkmode "external" -extldflags "-static"' \
+			k8s-dqlite.go
+
+go.build.dynamic: dynamic/deps/lib/libdqlite.la
+	env \
+		CGO_CFLAGS="-I${PWD}/dynamic/deps/include" \
+		CGO_LDFLAGS="-L${PWD}/dynamic/deps/lib -lraft -luv -llz4 -lsqlite3" \
+		CGO_LDFLAGS_ALLOW="-Wl,-z,now" \
+		go build \
+			-tags=dqlite,libsqlite3 \
+			-o dynamic/k8s-dqlite \
+			-ldflags '-s -w' \
 			k8s-dqlite.go
 
 dqlite: deps/lib/libdqlite.a

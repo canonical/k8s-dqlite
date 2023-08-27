@@ -15,6 +15,7 @@ vendor/
 /k8s-dqlite
 deps/
 build/
+dynamic/
 /dqlite
 /migrator
 /hack/build
