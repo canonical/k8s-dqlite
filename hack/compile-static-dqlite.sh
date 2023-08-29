@@ -26,7 +26,7 @@ if [ "${MACHINE_TYPE}" = "ppc64le" ]; then
 fi
 
 # dependencies
-sudo apt install -y build-essential automake libtool gettext autopoint tclsh tcl libsqlite3-dev pkg-config libsqlite3-dev git curl libreadline-dev > /dev/null
+sudo apt install -y build-essential automake libtool gettext autopoint tclsh tcl libsqlite3-dev pkg-config libsqlite3-dev git curl > /dev/null
 
 # build musl
 if [ ! -f "${INSTALL_DIR}/musl/bin/musl-gcc" ]; then
@@ -136,7 +136,7 @@ if [ ! -f "${BUILD_DIR}/sqlite/libsqlite3.la" ]; then
     rm -rf sqlite
     git clone https://github.com/sqlite/sqlite.git --depth 1 --branch "${TAG_SQLITE}" > /dev/null
     cd sqlite
-    ./configure --disable-shared > /dev/null
+    ./configure --disable-shared --disable-readline > /dev/null
     make BCC="${CC} -g -O2 ${CFLAGS} ${LDFLAGS}" -j > /dev/null
   )
 fi

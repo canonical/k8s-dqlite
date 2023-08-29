@@ -19,7 +19,7 @@ INSTALL_DIR="$(realpath ${DIR}/../deps/dynamic)"
 mkdir -p "${BUILD_DIR}" "${INSTALL_DIR}" "${INSTALL_DIR}/lib" "${INSTALL_DIR}/include"
 
 # dependencies
-sudo apt install -y build-essential automake libtool gettext autopoint tclsh tcl libsqlite3-dev pkg-config libsqlite3-dev git curl libreadline-dev > /dev/null
+sudo apt install -y build-essential automake libtool gettext autopoint tclsh tcl libsqlite3-dev pkg-config libsqlite3-dev git curl > /dev/null
 
 # build libtirpc
 if [ ! -f "${BUILD_DIR}/libtirpc/src/libtirpc.la" ]; then
@@ -107,7 +107,7 @@ if [ ! -f "${BUILD_DIR}/sqlite/libsqlite3.la" ]; then
     rm -rf sqlite
     git clone https://github.com/sqlite/sqlite.git --depth 1 --branch "${TAG_SQLITE}" > /dev/null
     cd sqlite
-    ./configure > /dev/null
+    ./configure --disable-readline > /dev/null
     make -j > /dev/null
   )
 fi
