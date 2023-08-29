@@ -19,7 +19,7 @@ INSTALL_DIR="$(realpath ${DIR}/../deps/dynamic)"
 mkdir -p "${BUILD_DIR}" "${INSTALL_DIR}" "${INSTALL_DIR}/lib" "${INSTALL_DIR}/include"
 
 # dependencies
-sudo apt install -y build-essential automake libtool gettext autopoint tclsh tcl libsqlite3-dev pkg-config libsqlite3-dev git curl > /dev/null
+sudo apt install -y build-essential automake libtool gettext autopoint tclsh tcl libsqlite3-dev pkg-config libsqlite3-dev git curl libreadline-dev > /dev/null
 
 # build libtirpc
 if [ ! -f "${BUILD_DIR}/libtirpc/src/libtirpc.la" ]; then
