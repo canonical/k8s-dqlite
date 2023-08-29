@@ -63,7 +63,6 @@ bin/static/dqlite: deps/static/lib/libdqlite.a
 			-o ${PWD}/bin/static/dqlite \
 			github.com/canonical/go-dqlite/cmd/dqlite
 
-
 bin/static/migrator: deps/static/lib/libdqlite.a
 	mkdir -p bin/static
 	rm -rf build/go-migrator
