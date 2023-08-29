@@ -107,8 +107,10 @@ if [ ! -f "${BUILD_DIR}/sqlite/libsqlite3.la" ]; then
     rm -rf sqlite
     git clone https://github.com/sqlite/sqlite.git --depth 1 --branch "${TAG_SQLITE}" > /dev/null
     cd sqlite
-    ./configure --disable-readline > /dev/null
-    make -j > /dev/null
+    ./configure --disable-readline \
+      CFLAGS="${CFLAGS} -DSQLITE_ENABLE_DBSTAT_VTAB=1" \
+      > /dev/null
+    make libsqlite3.la -j > /dev/null
   )
 fi
 
