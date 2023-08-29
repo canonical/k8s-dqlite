@@ -12,9 +12,9 @@ TAG_DQLITE="v1.14.0"
 ### END CONFIGURATION
 
 DIR="$(realpath `dirname "${0}"`)"
-mkdir -p "${DIR}/../dynamic"
-BUILD_DIR="$(realpath ${DIR}/../dynamic/build)"
-INSTALL_DIR="$(realpath ${DIR}/../dynamic/deps)"
+mkdir -p "${DIR}/../deps" "${DIR}/../build"
+BUILD_DIR="$(realpath ${DIR}/../build/dynamic)"
+INSTALL_DIR="$(realpath ${DIR}/../deps/dynamic)"
 
 mkdir -p "${BUILD_DIR}" "${INSTALL_DIR}" "${INSTALL_DIR}/lib" "${INSTALL_DIR}/include"
 
