@@ -23,12 +23,11 @@ parts:
       sudo apt update
       sudo apt install -y make
 
-      make go.build.static
-      make dqlite
+      make static -j
 
       mkdir -p $SNAPCRAFT_PRIME/bin
-      cp k8s-dqlite $SNAPCRAFT_PRIME/bin/k8s-dqlite
-      cp dqlite $SNAPCRAFT_PRIME/bin/dqlite
+      cp bin/static/k8s-dqlite $SNAPCRAFT_PRIME/bin/k8s-dqlite
+      cp bin/static/dqlite $SNAPCRAFT_PRIME/bin/dqlite
 
   k8s-dqlite-daemon:
     source: .
