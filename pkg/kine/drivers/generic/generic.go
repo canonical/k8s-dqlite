@@ -310,11 +310,12 @@ func getPrefixRange(prefix string) (start, end string) {
 
 func (d *Generic) query(ctx context.Context, txName, sql string, args ...interface{}) (rows *sql.Rows, err error) {
 	i := uint(0)
+	start := time.Now()
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("query (try: %d): %w", i, err)
 		}
-		inc(metricsOpResult, txName, err)
+		recordOpResult(txName, err, start)
 	}()
 	for ; i < 500; i++ {
 		if i > 2 {
@@ -327,7 +328,7 @@ func (d *Generic) query(ctx context.Context, txName, sql string, args ...interfa
 			time.Sleep(jitter.Deviation(nil, 0.3)(2 * time.Millisecond))
 			continue
 		}
-		inc(metricsTxResult, txName, err)
+		recordTxResult(txName, err)
 		return rows, err
 	}
 	return
@@ -335,35 +336,39 @@ func (d *Generic) query(ctx context.Context, txName, sql string, args ...interfa
 
 func (d *Generic) queryPrepared(ctx context.Context, txName, sql string, prepared *sql.Stmt, args ...interface{}) (result *sql.Rows, err error) {
 	logrus.Tracef("QUERY %v : %s", args, Stripped(sql))
+	start := time.Now()
 	r, err := prepared.QueryContext(ctx, args...)
-	inc(metricsOpResult, txName, err)
-	inc(metricsTxResult, txName, err)
+	recordOpResult(txName, err, start)
+	recordTxResult(txName, err)
 	return r, err
 }
 
 func (d *Generic) queryRow(ctx context.Context, txName, sql string, args ...interface{}) (result *sql.Row) {
 	logrus.Tracef("QUERY ROW %v : %s", args, Stripped(sql))
+	start := time.Now()
 	r := d.DB.QueryRowContext(ctx, sql, args...)
-	inc(metricsOpResult, txName, r.Err())
-	inc(metricsTxResult, txName, r.Err())
+	recordOpResult(txName, r.Err(), start)
+	recordTxResult(txName, r.Err())
 	return r
 }
 
 func (d *Generic) queryRowPrepared(ctx context.Context, txName, sql string, prepared *sql.Stmt, args ...interface{}) (result *sql.Row) {
 	logrus.Tracef("QUERY ROW %v : %s", args, Stripped(sql))
+	start := time.Now()
 	r := prepared.QueryRowContext(ctx, args...)
-	inc(metricsOpResult, txName, r.Err())
-	inc(metricsTxResult, txName, r.Err())
+	recordOpResult(txName, r.Err(), start)
+	recordTxResult(txName, r.Err())
 	return r
 }
 
 func (d *Generic) executePrepared(ctx context.Context, txName, sql string, prepared *sql.Stmt, args ...interface{}) (result sql.Result, err error) {
 	i := uint(0)
+	start := time.Now()
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("exec (try: %d): %w", i, err)
 		}
-		inc(metricsOpResult, txName, err)
+		recordOpResult(txName, err, start)
 	}()
 	if d.LockWrites {
 		d.Lock()
@@ -381,7 +386,7 @@ func (d *Generic) executePrepared(ctx context.Context, txName, sql string, prepa
 			time.Sleep(jitter.Deviation(nil, 0.3)(2 * time.Millisecond))
 			continue
 		}
-		inc(metricsTxResult, txName, err)
+		recordTxResult(txName, err)
 		return result, err
 	}
 	return
@@ -389,8 +394,17 @@ func (d *Generic) executePrepared(ctx context.Context, txName, sql string, prepa
 
 func (d *Generic) GetCompactRevision(ctx context.Context) (int64, int64, error) {
 	var compact, target sql.NullInt64
+	start := time.Now()
+	var err error
+	defer func() {
+		if err == sql.ErrNoRows {
+			err = nil
+		}
+		recordOpResult("revision_interval_sql", err, start)
+		recordTxResult("revision_interval_sql", err)
+	}()
 	row := d.DB.QueryRow(revisionIntervalSQL)
-	err := row.Scan(&compact, &target)
+	err = row.Scan(&compact, &target)
 	if err == sql.ErrNoRows {
 		return 0, 0, nil
 	}
