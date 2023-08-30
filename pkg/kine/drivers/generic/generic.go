@@ -31,7 +31,7 @@ var (
 	listSQL = fmt.Sprintf(`
 		SELECT %s
 		FROM kine AS kv
-			LEFT JOIN kine kv2 
+			LEFT JOIN kine kv2
 				ON kv.name = kv2.name
 				AND kv.id < kv2.id
 		WHERE kv2.name IS NULL
@@ -72,7 +72,7 @@ var (
 
 	revisionIntervalSQL = `
 		SELECT (
-			SELECT crkv.prev_revision 
+			SELECT crkv.prev_revision
 			FROM kine AS crkv
 			WHERE crkv.name = 'compact_rev_key'
 			ORDER BY prev_revision
@@ -246,7 +246,7 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 		AfterSQLPrefix: q(fmt.Sprintf(`
 			SELECT %s
 			FROM kine AS kv
-			WHERE 
+			WHERE
 				kv.name >= ? AND kv.name < ?
 				AND kv.id > ?
 			ORDER BY kv.id ASC`, columns), paramCharacter, numbered),

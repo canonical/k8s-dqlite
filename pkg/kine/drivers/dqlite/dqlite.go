@@ -1,24 +1,17 @@
 //go:build dqlite
-// +build dqlite
 
 package dqlite
 
 import (
 	"context"
-	crypto_tls "crypto/tls"
-	"crypto/x509"
 	"database/sql"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/canonical/go-dqlite"
-	"github.com/canonical/go-dqlite/app"
-	"github.com/canonical/go-dqlite/client"
 	"github.com/canonical/go-dqlite/driver"
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/sqlite"
 	"github.com/canonical/k8s-dqlite/pkg/kine/server"
@@ -26,11 +19,6 @@ import (
 	"github.com/mattn/go-sqlite3"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-)
-
-var (
-	Dialer = client.DefaultDialFunc
-	Logger = client.DefaultLogFunc
 )
 
 func init() {
@@ -41,8 +29,6 @@ func init() {
 }
 
 type opts struct {
-	peers      []client.NodeInfo
-	peerFile   string
 	dsn        string
 	driverName string // If not empty, use a pre-registered dqlite driver
 
@@ -50,70 +36,16 @@ type opts struct {
 	pollInterval    time.Duration
 }
 
-func AddPeers(ctx context.Context, nodeStore client.NodeStore, additionalPeers ...client.NodeInfo) error {
-	existing, err := nodeStore.Get(ctx)
-	if err != nil {
-		return err
-	}
-
-	var peers []client.NodeInfo
-
-outer:
-	for _, peer := range additionalPeers {
-		for _, check := range existing {
-			if check.Address == peer.Address {
-				continue outer
-			}
-		}
-		peers = append(peers, peer)
-	}
-
-	if len(peers) > 0 {
-		err = nodeStore.Set(ctx, append(existing, peers...))
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
 func New(ctx context.Context, datasourceName string, tlsInfo tls.Config) (server.Backend, error) {
-	logrus.Printf("New kine for dqlite.")
+	logrus.Printf("New kine for dqlite")
 	opts, err := parseOpts(datasourceName)
 	if err != nil {
 		return nil, err
 	}
 
-	var nodeStore client.NodeStore
-	if opts.peerFile != "" {
-		nodeStore, err = client.DefaultNodeStore(opts.peerFile)
-		if err != nil {
-			return nil, errors.Wrap(err, "opening peerfile")
-		}
-	} else {
-		nodeStore = client.NewInmemNodeStore()
-	}
-
-	if err := AddPeers(ctx, nodeStore, opts.peers...); err != nil {
-		return nil, errors.Wrap(err, "add peers")
-	}
-
 	logrus.Printf("DriverName is %s.", opts.driverName)
 	if opts.driverName == "" {
-		opts.driverName = "dqlite"
-		dial, err := getDialer(tlsInfo)
-		if err != nil {
-			return nil, err
-		}
-		d, err := driver.New(nodeStore,
-			driver.WithLogFunc(Logger),
-			driver.WithContext(ctx),
-			dial)
-		if err != nil {
-			return nil, errors.Wrap(err, "new dqlite driver")
-		}
-		sql.Register(opts.driverName, d)
+		return nil, fmt.Errorf("required option 'driver-name' not set in connection string")
 	}
 
 	backend, generic, err := sqlite.NewVariant(ctx, opts.driverName, opts.dsn)
@@ -165,34 +97,6 @@ func New(ctx context.Context, datasourceName string, tlsInfo tls.Config) (server
 	generic.CompactInterval = opts.compactInterval
 	generic.PollInterval = opts.pollInterval
 	return backend, nil
-}
-
-func getDialer(tlsInfo tls.Config) (driver.Option, error) {
-	dial := client.DefaultDialFunc
-	if (tlsInfo.CertFile != "" && tlsInfo.KeyFile == "") || (tlsInfo.KeyFile != "" && tlsInfo.CertFile == "") {
-		return nil, errors.New("both TLS certificate and key must be given")
-	}
-	if tlsInfo.CertFile != "" {
-		cert, err := crypto_tls.LoadX509KeyPair(tlsInfo.CertFile, tlsInfo.KeyFile)
-		if err != nil {
-			return nil, errors.New("bad certificate pair")
-		}
-
-		data, err := ioutil.ReadFile(tlsInfo.CertFile)
-		if err != nil {
-			return nil, errors.New("could not read certificate")
-		}
-
-		pool := x509.NewCertPool()
-		if !pool.AppendCertsFromPEM(data) {
-			return nil, errors.New("bad certificate")
-		}
-
-		config := app.SimpleDialTLSConfig(cert, pool)
-		dial = client.DialFuncWithTLS(dial, config)
-		logrus.Printf("dial set to DialFuncWithTLS")
-	}
-	return driver.WithDialFunc(dial), nil
 }
 
 func migrate(ctx context.Context, newDB *sql.DB) (exitErr error) {
@@ -284,43 +188,24 @@ func parseOpts(dsn string) (opts, error) {
 		}
 
 		switch k {
-		case "peer":
-			for _, v := range vs {
-				parts := strings.SplitN(v, ":", 3)
-				if len(parts) != 3 {
-					return result, fmt.Errorf("must be ID:IP:PORT format got: %s", v)
-				}
-				id, err := strconv.ParseUint(parts[0], 10, 64)
-				if err != nil {
-					return result, errors.Wrapf(err, "failed to parse %s", parts[0])
-				}
-				result.peers = append(result.peers, client.NodeInfo{
-					ID:      id,
-					Address: parts[1] + ":" + parts[2],
-				})
-			}
-			delete(values, k)
-		case "peer-file":
-			result.peerFile = vs[0]
-			delete(values, k)
 		case "driver-name":
 			result.driverName = vs[0]
-			delete(values, k)
 		case "compact-interval":
 			d, err := time.ParseDuration(vs[0])
 			if err != nil {
 				return opts{}, fmt.Errorf("failed to parse compact-interval duration value %q: %w", vs[0], err)
 			}
 			result.compactInterval = d
-			delete(values, k)
 		case "poll-interval":
 			d, err := time.ParseDuration(vs[0])
 			if err != nil {
 				return opts{}, fmt.Errorf("failed to parse poll-interval duration value %q: %w", vs[0], err)
 			}
 			result.pollInterval = d
-			delete(values, k)
+		default:
+			return opts{}, fmt.Errorf("unknown option %s=%v", k, vs)
 		}
+		delete(values, k)
 	}
 
 	if len(values) == 0 {

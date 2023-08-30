@@ -5,7 +5,6 @@ go 1.20
 require (
 	github.com/Rican7/retry v0.3.1
 	github.com/canonical/go-dqlite v1.11.8
-	github.com/ghodss/yaml v1.0.0
 	github.com/mattn/go-sqlite3 v2.0.3+incompatible
 	github.com/onsi/gomega v1.27.10
 	github.com/pkg/errors v0.9.1
