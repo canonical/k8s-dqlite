@@ -2,11 +2,8 @@ name: Build snap on PR and push to master
 
 on:
   push:
-    branches:
-      - master
+    branches: [master]
   pull_request:
-    branches:
-      - master
 
 jobs:
   build:
@@ -41,7 +38,7 @@ jobs:
         run: |
           set -x
           sudo snap install k8s-dqlite.snap --classic --dangerous
-          sudo snap install go --channel 1.18/stable --classic
+          sudo snap install go --channel 1.20/stable --classic
           sudo apt install git
           git clone https://github.com/etcd-io/etcd.git
           cd etcd

@@ -1,0 +1,130 @@
+name: Go
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+
+jobs:
+  code-quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2.4.0
+
+      - name: Install Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: "1.20"
+
+      - name: go mod download
+        run: go mod download
+
+      - name: go fmt
+        run: make go.fmt
+
+      - name: check diff
+        run: |
+          if ! git diff; then
+            echo "Detected changes that have not been committed to the repository"
+            exit 1
+          fi
+
+      - name: install dqlite
+        run: |
+          sudo add-apt-repository ppa:dqlite/dev
+          sudo apt update
+          sudo apt install -y libdqlite-dev
+
+      - name: go vet
+        run: make go.vet
+
+  tests-sqlite:
+    name: Test sqlite
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out Code
+        uses: actions/checkout@v2.4.0
+
+      - name: Install Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: "1.20"
+
+      - name: go mod download
+        run: go mod download
+
+      - name: Run tests
+        run: make go.test
+
+  tests-dqlite:
+    name: Test dqlite
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out Code
+        uses: actions/checkout@v2.4.0
+
+      - name: Install Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: "1.20"
+
+      - name: go mod download
+        run: go mod download
+
+      - name: install dqlite
+        run: |
+          sudo add-apt-repository ppa:dqlite/dev
+          sudo apt update
+          sudo apt install -y libdqlite-dev
+
+      - name: Run tests
+        run: make go.test.dqlite
+
+  benchmarks:
+    name: Benchmark sqlite
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out Code
+        uses: actions/checkout@v2.4.0
+
+      - name: Install Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: "1.20"
+
+      - name: go mod download
+        run: go mod download
+
+      - name: Run benchmarks
+        run: make go.bench
+
+  benchmarks-dqlite:
+    name: Benchmark dqlite
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out Code
+        uses: actions/checkout@v2.4.0
+
+      - name: Install Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: "1.20"
+
+      - name: go mod download
+        run: go mod download
+
+      - name: install dqlite
+        run: |
+          sudo add-apt-repository ppa:dqlite/dev
+          sudo apt update
+          sudo apt install -y libdqlite-dev
+
+      - name: Run benchmarks
+        run: make go.bench.dqlite
