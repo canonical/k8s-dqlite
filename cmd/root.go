@@ -51,7 +51,7 @@ var rootCmd = &cobra.Command{
 
 		ctx, cancel := context.WithCancel(cmd.Context())
 		if err := server.Start(ctx); err != nil {
-			logrus.WithError(err).Error("Server terminated")
+			logrus.WithError(err).Fatal("Server terminated")
 		}
 
 		// Cancel context if we receive an exit signal
