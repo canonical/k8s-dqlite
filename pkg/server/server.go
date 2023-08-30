@@ -38,7 +38,7 @@ var expectedFilesDuringInitialization = map[string]struct{}{
 }
 
 // New creates a new instance of Server based on configuration.
-func New(dir string, listen string, enableTLS bool, diskMode bool, clientSessionCacheSize uint) (*Server, error) {
+func New(dir string, listen string, enableTLS bool, diskMode bool, clientSessionCacheSize uint, minTLSVersion string) (*Server, error) {
 	var (
 		options         []app.Option
 		kineConfig      endpoint.Config
@@ -136,7 +136,6 @@ func New(dir string, listen string, enableTLS bool, diskMode bool, clientSession
 
 	// handle TLS
 	if enableTLS {
-		logrus.Print("Enable TLS")
 		crtFile := filepath.Join(dir, "cluster.crt")
 		keyFile := filepath.Join(dir, "cluster.key")
 
@@ -163,11 +162,25 @@ func New(dir string, listen string, enableTLS bool, diskMode bool, clientSession
 			dial.ClientSessionCache = nil
 		}
 
+		switch minTLSVersion {
+		case "tls10":
+			listen.MinVersion = tls.VersionTLS10
+		case "tls11":
+			listen.MinVersion = tls.VersionTLS11
+		case "", "tls12":
+			minTLSVersion = "tls12"
+			listen.MinVersion = tls.VersionTLS12
+		case "tls13":
+			listen.MinVersion = tls.VersionTLS13
+		default:
+			return nil, fmt.Errorf("unsupported TLS version %v (supported values are tls10, tls11, tls12, tls13)", minTLSVersion)
+		}
+		logrus.WithField("min_tls_version", minTLSVersion).Print("Enable TLS")
+
 		kineConfig.Config = kine_tls.Config{
 			CertFile: crtFile,
 			KeyFile:  keyFile,
 		}
-
 		options = append(options, app.WithTLS(listen, dial))
 	}
 

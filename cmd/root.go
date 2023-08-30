@@ -24,6 +24,7 @@ var (
 	profilingListenAddress string
 	diskMode               bool
 	clientSessionCacheSize uint
+	minTLSVersion          string
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -44,7 +45,7 @@ var rootCmd = &cobra.Command{
 			}()
 		}
 
-		server, err := server.New(storageDir, listenAddress, enableTLS, diskMode, clientSessionCacheSize)
+		server, err := server.New(storageDir, listenAddress, enableTLS, diskMode, clientSessionCacheSize, minTLSVersion)
 		if err != nil {
 			logrus.WithError(err).Fatal("Failed to create server")
 		}
@@ -92,4 +93,5 @@ func init() {
 	rootCmd.Flags().StringVar(&profilingListenAddress, "profiling-listen", "127.0.0.1:4000", "listen address for pprof endpoint")
 	rootCmd.Flags().BoolVar(&diskMode, "disk-mode", false, "(experimental) run dqlite store in disk mode")
 	rootCmd.Flags().UintVar(&clientSessionCacheSize, "tls-client-session-cache-size", 0, "ClientCacheSession size for dial TLS config")
+	rootCmd.Flags().StringVar(&minTLSVersion, "min-tls-version", "tls12", "Minimum TLS version for dqlite endpoint (tls10|tls11|tls12|tls13). Default is tls12")
 }
