@@ -147,8 +147,8 @@ jobs:
           make -j static
 
           ./bin/static/k8s-dqlite --help
+          ./bin/static/k8s-dqlite migrator --help
           ./bin/static/dqlite --help
-          ./bin/static/migrator --help
 
       - name: Build shared binaries
         run: |
@@ -156,5 +156,5 @@ jobs:
           export LD_LIBRARY_PATH=bin/dynamic/lib
 
           ./bin/dynamic/k8s-dqlite --help
+          ./bin/dynamic/k8s-dqlite migrator --help
           ./bin/dynamic/dqlite --help
-          ./bin/dynamic/migrator --help
