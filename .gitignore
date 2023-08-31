@@ -12,4 +12,7 @@ tests/__pycache__
 .tox_env/
 __pycache__/
 vendor/
-/k8s-dqlite
+deps/
+build/
+bin/
+k8s-dqlite
