@@ -1,24 +1,16 @@
-#!/bin/bash -xe
-
-### BEGIN CONFIGURATION
-TAG_MUSL="v1.2.3"
-TAG_LIBTIRPC="upstream/1.3.3"
-TAG_LIBNSL="v2.0.0"
-TAG_LIBUV="v1.44.2"
-TAG_LIBLZ4="v1.9.4"
-TAG_RAFT="v0.17.1"
-TAG_SQLITE="version-3.40.0"
-TAG_DQLITE="v1.14.0"
-### END CONFIGURATION
+#!/bin/bash -xeu
 
 DIR="$(realpath `dirname "${0}"`)"
-mkdir -p "${DIR}/../build" "${DIR}/../deps"
-BUILD_DIR="$(realpath ${DIR}/../build/static)"
-INSTALL_DIR="$(realpath ${DIR}/../deps/static)"
+. "${DIR}/env.sh"
 
+BUILD_DIR="${DIR}/../build/static"
+INSTALL_DIR="${DIR}/../deps/static"
 mkdir -p "${BUILD_DIR}" "${INSTALL_DIR}" "${INSTALL_DIR}/lib" "${INSTALL_DIR}/include"
+BUILD_DIR="$(realpath "${BUILD_DIR}")"
+INSTALL_DIR="$(realpath "${INSTALL_DIR}")"
 
 export LDFLAGS="-static"
+export CFLAGS=""
 MACHINE_TYPE="$(uname -m)"
 if [ "${MACHINE_TYPE}" = "ppc64le" ]; then
   MACHINE_TYPE="powerpc64le"
@@ -33,7 +25,7 @@ if [ ! -f "${INSTALL_DIR}/musl/bin/musl-gcc" ]; then
   (
     cd "${BUILD_DIR}"
     rm -rf musl
-    git clone https://git.launchpad.net/musl --depth 1 --branch v1.2.3 musl > /dev/null
+    git clone "${REPO_MUSL}" --depth 1 --branch "${TAG_MUSL}" musl > /dev/null
     cd musl
     ./configure --prefix="${INSTALL_DIR}/musl" > /dev/null
     make -j > /dev/null
@@ -55,7 +47,7 @@ if [ ! -f "${BUILD_DIR}/libtirpc/src/libtirpc.la" ]; then
   (
     cd "${BUILD_DIR}"
     rm -rf libtirpc
-    git clone https://salsa.debian.org/debian/libtirpc.git --depth 1 --branch "${TAG_LIBTIRPC}" > /dev/null
+    git clone "${REPO_LIBTIRPC}" --depth 1 --branch "${TAG_LIBTIRPC}" > /dev/null
     cd libtirpc
     chmod +x autogen.sh
     ./autogen.sh > /dev/null
@@ -69,7 +61,7 @@ if [ ! -f "${BUILD_DIR}/libnsl/src/libnsl.la" ]; then
   (
     cd "${BUILD_DIR}"
     rm -rf libnsl
-    git clone https://github.com/thkukuk/libnsl --depth 1 --branch "${TAG_LIBNSL}" > /dev/null
+    git clone "${REPO_LIBNSL}" --depth 1 --branch "${TAG_LIBNSL}" > /dev/null
     cd libnsl
     ./autogen.sh > /dev/null
     autoreconf -i > /dev/null
@@ -89,7 +81,7 @@ if [ ! -f "${BUILD_DIR}/libuv/libuv.la" ]; then
   (
     cd "${BUILD_DIR}"
     rm -rf libuv
-    git clone https://github.com/libuv/libuv.git --depth 1 --branch "${TAG_LIBUV}" > /dev/null
+    git clone "${REPO_LIBUV}" --depth 1 --branch "${TAG_LIBUV}" > /dev/null
     cd libuv
     ./autogen.sh > /dev/null
     ./configure > /dev/null
@@ -102,7 +94,7 @@ if [ ! -f "${BUILD_DIR}/lz4/lib/liblz4.a" ] || [ ! -f "${BUILD_DIR}/lz4/lib/libl
   (
     cd "${BUILD_DIR}"
     rm -rf lz4
-    git clone https://github.com/lz4/lz4.git --depth 1 --branch "${TAG_LIBLZ4}" > /dev/null
+    git clone "${REPO_LIBLZ4}" --depth 1 --branch "${TAG_LIBLZ4}" > /dev/null
     cd lz4
     make lib -j > /dev/null
   )
@@ -113,7 +105,7 @@ if [ ! -f "${BUILD_DIR}/raft/libraft.la" ]; then
   (
     cd "${BUILD_DIR}"
     rm -rf raft
-    git clone https://github.com/canonical/raft.git --depth 1 --branch "${TAG_RAFT}" > /dev/null
+    git clone "${REPO_RAFT}" --depth 1 --branch "${TAG_RAFT}" > /dev/null
     cd raft
     autoreconf -i > /dev/null
     ./configure --disable-shared \
@@ -134,7 +126,7 @@ if [ ! -f "${BUILD_DIR}/sqlite/libsqlite3.la" ]; then
   (
     cd "${BUILD_DIR}"
     rm -rf sqlite
-    git clone https://github.com/sqlite/sqlite.git --depth 1 --branch "${TAG_SQLITE}" > /dev/null
+    git clone "${REPO_SQLITE}" --depth 1 --branch "${TAG_SQLITE}" > /dev/null
     cd sqlite
     ./configure --disable-shared --disable-readline \
       CFLAGS="${CFLAGS} -DSQLITE_ENABLE_DBSTAT_VTAB=1" \
@@ -148,7 +140,7 @@ if [ ! -f "${BUILD_DIR}/dqlite/libdqlite.la" ]; then
   (
     cd "${BUILD_DIR}"
     rm -rf dqlite
-    git clone https://github.com/canonical/dqlite.git --depth 1 --branch "${TAG_DQLITE}" > /dev/null
+    git clone "${REPO_DQLITE}" --depth 1 --branch "${TAG_DQLITE}" > /dev/null
     cd dqlite
     autoreconf -i > /dev/null
     ./configure --disable-shared \
