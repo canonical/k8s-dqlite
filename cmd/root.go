@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/canonical/k8s-dqlite/pkg/server"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"golang.org/x/sys/unix"
@@ -25,6 +26,8 @@ var (
 	diskMode               bool
 	clientSessionCacheSize uint
 	minTLSVersion          string
+	enableMetrics          bool
+	metricsListenAddress   string
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -41,7 +44,17 @@ var rootCmd = &cobra.Command{
 
 		if enableProfiling {
 			go func() {
+				logrus.WithField("address", profilingListenAddress).Print("Enable pprof endpoint")
 				http.ListenAndServe(profilingListenAddress, nil)
+			}()
+		}
+
+		if enableMetrics {
+			go func() {
+				logrus.WithField("address", metricsListenAddress).Print("Enable metrics endpoint")
+				mux := http.NewServeMux()
+				mux.Handle("/metrics", promhttp.Handler())
+				http.ListenAndServe(metricsListenAddress, mux)
 			}()
 		}
 
@@ -94,4 +107,6 @@ func init() {
 	rootCmd.Flags().BoolVar(&diskMode, "disk-mode", false, "(experimental) run dqlite store in disk mode")
 	rootCmd.Flags().UintVar(&clientSessionCacheSize, "tls-client-session-cache-size", 0, "ClientCacheSession size for dial TLS config")
 	rootCmd.Flags().StringVar(&minTLSVersion, "min-tls-version", "tls12", "Minimum TLS version for dqlite endpoint (tls10|tls11|tls12|tls13). Default is tls12")
+	rootCmd.Flags().BoolVar(&enableMetrics, "metrics", true, "enable metrics endpoint")
+	rootCmd.Flags().StringVar(&metricsListenAddress, "metrics-listen", "127.0.0.1:9042", "listen address for metrics endpoint")
 }
