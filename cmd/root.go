@@ -41,6 +41,18 @@ var (
 			if rootCmdOpts.debug {
 				logrus.SetLevel(logrus.TraceLevel)
 			}
+			var stat unix.Statfs_t
+
+			unix.Statfs(rootCmdOpts.dir, &stat)
+
+			avail := stat.Bavail * uint64(stat.Bsize)
+
+			var disk_threshold uint64 = 10000000
+
+			// If available space is less than 10MB reject to start.
+			if avail < disk_threshold {
+				logrus.WithField("dir", rootCmdOpts.dir).Fatal("Disk is critically low, rejecting startup")
+			}
 
 			if rootCmdOpts.profiling {
 				go func() {
