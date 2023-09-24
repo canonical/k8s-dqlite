@@ -16,14 +16,20 @@ import (
 	"github.com/canonical/k8s-dqlite/pkg/kine/endpoint"
 	kine_tls "github.com/canonical/k8s-dqlite/pkg/kine/tls"
 	"github.com/sirupsen/logrus"
-	"golang.org/x/sys/unix"
 )
+
+type StorageWatcherConfig struct {
+	storageDir         string
+	storageWatchTicker *time.Ticker
+	storageWatchQuit   chan struct{}
+	diskThreshold      uint64
+}
 
 // Server is the main k8s-dqlite server.
 type Server struct {
 	// app is the dqlite application driving the server.
-	app        *app.App
-	storageDir string
+	app            *app.App
+	swatcherConfig StorageWatcherConfig
 	// kineConfig is the configuration to use for starting kine against the dqlite application.
 	kineConfig endpoint.Config
 }
@@ -38,12 +44,8 @@ var expectedFilesDuringInitialization = map[string]struct{}{
 	"tuning.yaml":    {},
 }
 
-var storageWatchTicker = time.NewTicker(5 * time.Second)
-var storageWatchQuit = make(chan struct{})
-var disk_threshold uint64 = 10000000
-
 // New creates a new instance of Server based on configuration.
-func New(dir string, listen string, enableTLS bool, diskMode bool, clientSessionCacheSize uint, minTLSVersion string) (*Server, error) {
+func New(dir string, listen string, enableTLS bool, diskMode bool, clientSessionCacheSize uint, minTLSVersion string, storageWatchPeriod uint16, storageDiskThreshold uint64) (*Server, error) {
 	var (
 		options         []app.Option
 		kineConfig      endpoint.Config
@@ -242,10 +244,44 @@ func New(dir string, listen string, enableTLS bool, diskMode bool, clientSession
 	kineConfig.Endpoint = fmt.Sprintf("dqlite://k8s?%s", params.Encode())
 
 	return &Server{
-		app:        app,
-		storageDir: dir,
+		app: app,
+		swatcherConfig: StorageWatcherConfig{
+			storageDir:         dir,
+			storageWatchTicker: time.NewTicker(time.Duration(storageWatchPeriod) * time.Second),
+			storageWatchQuit:   make(chan struct{}),
+			diskThreshold:      storageDiskThreshold,
+		},
 		kineConfig: kineConfig,
 	}, nil
+}
+
+func (s *Server) WatchStorage() {
+	for {
+		select {
+		case <-s.swatcherConfig.storageWatchTicker.C:
+			isFull, err := IsStorageFull(s.swatcherConfig.storageDir, s.swatcherConfig.diskThreshold)
+			// If available space is less than threshold transfer roles and shutdown.
+			if err != nil {
+				logrus.WithError(err).Errorf("failed to check storage capacity")
+			} else if isFull {
+				// Create a separate context with 30 seconds to cleanup
+				stopCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				logrus.Debug("Handing over dqlite leadership")
+				if err := s.app.Handover(stopCtx); err != nil {
+					logrus.WithError(err).Errorf("Failed to handover dqlite")
+				}
+				logrus.Debug("Closing dqlite application")
+				if err := s.app.Close(); err != nil {
+					logrus.WithError(err).Errorf("failed to close dqlite app")
+				}
+				logrus.WithField("dir", s.swatcherConfig.storageDir).Fatalf("Disk is critically low, gracefully shutdown...")
+			}
+		case <-s.swatcherConfig.storageWatchQuit:
+			s.swatcherConfig.storageWatchTicker.Stop()
+			return
+		}
+	}
 }
 
 // Start the dqlite node and the kine machinery.
@@ -255,35 +291,7 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	logrus.WithFields(logrus.Fields{"id": s.app.ID(), "address": s.app.Address()}).Print("Started dqlite")
 
-	go func() {
-		for {
-			select {
-			case <-storageWatchTicker.C:
-				var stat unix.Statfs_t
-				unix.Statfs(s.storageDir, &stat)
-				avail := stat.Bavail * uint64(stat.Bsize)
-				// If available space is less than 10MB reject to start.
-				if avail < disk_threshold {
-					// Create a separate context with 30 seconds to cleanup
-					stopCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-					defer cancel()
-
-					logrus.Debug("Handing over dqlite leadership")
-					if err := s.app.Handover(stopCtx); err != nil {
-						logrus.WithError(err).Errorf("Failed to handover dqlite")
-					}
-					logrus.Debug("Closing dqlite application")
-					if err := s.app.Close(); err != nil {
-						logrus.WithError(err).Errorf("failed to close dqlite app")
-					}
-					logrus.WithField("dir", s.storageDir).Fatal("Disk is critically low, gracefully shutdown...")
-				}
-			case <-storageWatchQuit:
-				storageWatchTicker.Stop()
-				return
-			}
-		}
-	}()
+	go s.WatchStorage()
 
 	logrus.WithField("config", s.kineConfig).Debug("Starting kine")
 	if _, err := endpoint.Listen(ctx, s.kineConfig); err != nil {
@@ -304,6 +312,6 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		return fmt.Errorf("failed to close dqlite app: %w", err)
 	}
 	logrus.Debug("Closing storage watch")
-	close(storageWatchQuit)
+	close(s.swatcherConfig.storageWatchQuit)
 	return nil
 }

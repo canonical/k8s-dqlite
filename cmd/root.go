@@ -29,6 +29,8 @@ var (
 		minTLSVersion          string
 		metrics                bool
 		metricsAddress         string
+		storageWatchPeriod     uint16
+		storageDiskThreshold   uint64
 	}
 
 	rootCmd = &cobra.Command{
@@ -41,16 +43,12 @@ var (
 			if rootCmdOpts.debug {
 				logrus.SetLevel(logrus.TraceLevel)
 			}
-			var stat unix.Statfs_t
 
-			unix.Statfs(rootCmdOpts.dir, &stat)
-
-			avail := stat.Bavail * uint64(stat.Bsize)
-
-			var disk_threshold uint64 = 10000000
-
-			// If available space is less than 10MB reject to start.
-			if avail < disk_threshold {
+			isFull, err := server.IsStorageFull(rootCmdOpts.dir, rootCmdOpts.storageDiskThreshold)
+			// If available space is less than threshold reject startup.
+			if err != nil {
+				logrus.WithError(err).Fatal("failed to check storage capacity")
+			} else if isFull {
 				logrus.WithField("dir", rootCmdOpts.dir).Fatal("Disk is critically low, rejecting startup")
 			}
 
@@ -70,7 +68,7 @@ var (
 				}()
 			}
 
-			server, err := server.New(rootCmdOpts.dir, rootCmdOpts.listen, rootCmdOpts.tls, rootCmdOpts.diskMode, rootCmdOpts.clientSessionCacheSize, rootCmdOpts.minTLSVersion)
+			server, err := server.New(rootCmdOpts.dir, rootCmdOpts.listen, rootCmdOpts.tls, rootCmdOpts.diskMode, rootCmdOpts.clientSessionCacheSize, rootCmdOpts.minTLSVersion, rootCmdOpts.storageWatchPeriod, rootCmdOpts.storageDiskThreshold)
 			if err != nil {
 				logrus.WithError(err).Fatal("Failed to create server")
 			}
@@ -122,4 +120,6 @@ func init() {
 	rootCmd.Flags().StringVar(&rootCmdOpts.minTLSVersion, "min-tls-version", "tls12", "Minimum TLS version for dqlite endpoint (tls10|tls11|tls12|tls13). Default is tls12")
 	rootCmd.Flags().BoolVar(&rootCmdOpts.metrics, "metrics", true, "enable metrics endpoint")
 	rootCmd.Flags().StringVar(&rootCmdOpts.metricsAddress, "metrics-listen", "127.0.0.1:9042", "listen address for metrics endpoint")
+	rootCmd.Flags().Uint16Var(&rootCmdOpts.storageWatchPeriod, "storage-watch-period", 5, "Time in seconds to check storage capacity periodically")
+	rootCmd.Flags().Uint64Var(&rootCmdOpts.storageDiskThreshold, "storage-disk-threshold", 10000000, "Remaining storage threshold(in bytes) that determines if disk is full") // 10MB
 }

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"golang.org/x/sys/unix"
 	"gopkg.in/yaml.v2"
 )
 
@@ -38,4 +39,15 @@ func fileExists(path ...string) (bool, error) {
 		return false, nil
 	}
 	return true, nil
+}
+
+func IsStorageFull(storageDir string, diskThreshold uint64) (bool, error) {
+	var stat unix.Statfs_t
+	err := unix.Statfs(storageDir, &stat)
+	if err != nil {
+		return false, fmt.Errorf("failed to check disk capacity: %w", err)
+	}
+	avail := stat.Bavail * uint64(stat.Bsize)
+	// If available space is less than 10MB reject to start.
+	return avail < diskThreshold, nil
 }
