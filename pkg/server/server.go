@@ -30,6 +30,7 @@ type Server struct {
 	// app is the dqlite application driving the server.
 	app            *app.App
 	swatcherConfig StorageWatcherConfig
+	stopCh         chan (struct{})
 	// kineConfig is the configuration to use for starting kine against the dqlite application.
 	kineConfig endpoint.Config
 }
@@ -255,7 +256,7 @@ func New(dir string, listen string, enableTLS bool, diskMode bool, clientSession
 	}, nil
 }
 
-func (s *Server) WatchStorage() {
+func (s *Server) watchStorage(ctx context.Context) {
 	for {
 		select {
 		case <-s.swatcherConfig.storageWatchTicker.C:
@@ -264,24 +265,26 @@ func (s *Server) WatchStorage() {
 			if err != nil {
 				logrus.WithError(err).Errorf("failed to check storage capacity")
 			} else if isFull {
+				logrus.WithField("dir", s.swatcherConfig.storageDir).Debug("Disk is critically low, gracefully shutting down")
 				// Create a separate context with 30 seconds to cleanup
 				stopCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer cancel()
-				logrus.Debug("Handing over dqlite leadership")
-				if err := s.app.Handover(stopCtx); err != nil {
-					logrus.WithError(err).Errorf("Failed to handover dqlite")
+				if err := s.Shutdown(stopCtx); err != nil {
+					logrus.WithError(err).Fatal("Failed to shutdown server")
 				}
-				logrus.Debug("Closing dqlite application")
-				if err := s.app.Close(); err != nil {
-					logrus.WithError(err).Errorf("failed to close dqlite app")
-				}
-				logrus.WithField("dir", s.swatcherConfig.storageDir).Fatalf("Disk is critically low, gracefully shutdown...")
+				logrus.WithField("dir", s.swatcherConfig.storageDir).Fatalf("Disk is critically low, gracefully shutdown")
 			}
-		case <-s.swatcherConfig.storageWatchQuit:
+		case <-s.stopCh:
+		case <-ctx.Done():
+			logrus.Debug("Closing storage watcher")
 			s.swatcherConfig.storageWatchTicker.Stop()
 			return
 		}
 	}
+}
+
+func (s *Server) Done() <-chan struct{} {
+	return s.stopCh
 }
 
 // Start the dqlite node and the kine machinery.
@@ -291,7 +294,7 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	logrus.WithFields(logrus.Fields{"id": s.app.ID(), "address": s.app.Address()}).Print("Started dqlite")
 
-	go s.WatchStorage()
+	go s.watchStorage(ctx)
 
 	logrus.WithField("config", s.kineConfig).Debug("Starting kine")
 	if _, err := endpoint.Listen(ctx, s.kineConfig); err != nil {
@@ -311,7 +314,5 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	if err := s.app.Close(); err != nil {
 		return fmt.Errorf("failed to close dqlite app: %w", err)
 	}
-	logrus.Debug("Closing storage watch")
-	close(s.swatcherConfig.storageWatchQuit)
 	return nil
 }

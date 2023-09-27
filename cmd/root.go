@@ -49,7 +49,7 @@ var (
 			if err != nil {
 				logrus.WithError(err).Fatal("failed to check storage capacity")
 			} else if isFull {
-				logrus.WithField("dir", rootCmdOpts.dir).Fatal("Disk is critically low, rejecting startup")
+				logrus.WithField("dir", rootCmdOpts.dir).Fatal("Disk is critically low, refusing to start")
 			}
 
 			if rootCmdOpts.profiling {
