@@ -34,6 +34,9 @@ type Server struct {
 	// validateStorageAvailableInterval is the interval to check for available disk size. If set to
 	// zero, then no checks will be performed.
 	validateStorageAvailableInterval time.Duration
+	// actionOnLowDisk is the action to perform in case the system is running low on disk.
+	// One of "terminate", "handover", "none"
+	actionOnLowDisk string
 
 	// mustStopCh is used when the server must terminate.
 	mustStopCh chan struct{}
@@ -50,13 +53,19 @@ var expectedFilesDuringInitialization = map[string]struct{}{
 }
 
 // New creates a new instance of Server based on configuration.
-func New(dir string, listen string, enableTLS bool, diskMode bool, clientSessionCacheSize uint, minTLSVersion string, validateAvailableStorageInterval time.Duration, validateAvailableStorageMinBytes uint64) (*Server, error) {
+func New(dir string, listen string, enableTLS bool, diskMode bool, clientSessionCacheSize uint, minTLSVersion string, validateAvailableStorageInterval time.Duration, validateAvailableStorageMinBytes uint64, lowAvailableStorageAction string) (*Server, error) {
 	var (
 		options         []app.Option
 		kineConfig      endpoint.Config
 		compactInterval *time.Duration
 		pollInterval    *time.Duration
 	)
+
+	switch lowAvailableStorageAction {
+	case "none", "handover", "terminate":
+	default:
+		return nil, fmt.Errorf("unsupported low available storage action %v (supported values are none, handover, terminate)", lowAvailableStorageAction)
+	}
 
 	if mustInit, err := fileExists(dir, "init.yaml"); err != nil {
 		return nil, fmt.Errorf("failed to check for init.yaml: %w", err)
@@ -255,12 +264,13 @@ func New(dir string, listen string, enableTLS bool, diskMode bool, clientSession
 		storageDir:                       dir,
 		validateAvailableStorageMinBytes: validateAvailableStorageMinBytes,
 		validateStorageAvailableInterval: validateAvailableStorageInterval,
+		actionOnLowDisk:                  lowAvailableStorageAction,
 
 		mustStopCh: make(chan struct{}, 1),
 	}, nil
 }
 
-func (s *Server) watchStorage(ctx context.Context) {
+func (s *Server) watchAvailableStorageSize(ctx context.Context) {
 	logrus := logrus.WithField("dir", s.storageDir)
 
 	if s.validateStorageAvailableInterval <= 0 {
@@ -275,8 +285,20 @@ func (s *Server) watchStorage(ctx context.Context) {
 			return
 		case <-time.After(s.validateStorageAvailableInterval):
 			if err := validateStorageDirAvailableSize(s.storageDir, s.validateAvailableStorageMinBytes); err != nil {
-				logrus.WithError(err).Error("Terminating due to low disk space")
-				s.mustStopCh <- struct{}{}
+				err := fmt.Errorf("periodic check for available disk storage failed: %w", err)
+
+				switch s.actionOnLowDisk {
+				case "none":
+					logrus.WithError(err).Info("Ignoring failed available disk storage check")
+				case "handover":
+					logrus.WithError(err).Info("Handover dqlite leadership role")
+					if err := s.app.Handover(ctx); err != nil {
+						logrus.WithError(err).Warning("Failed to handover dqlite leadership")
+					}
+				case "terminate":
+					logrus.WithError(err).Error("Terminating due to failed available disk storage check")
+					s.mustStopCh <- struct{}{}
+				}
 			}
 		}
 	}
@@ -289,10 +311,6 @@ func (s *Server) MustStop() <-chan struct{} {
 
 // Start the dqlite node and the kine machinery.
 func (s *Server) Start(ctx context.Context) error {
-	if err := validateStorageDirAvailableSize(s.storageDir, s.validateAvailableStorageMinBytes); err != nil {
-		return fmt.Errorf("available disk size validation failed: %w", err)
-	}
-
 	if err := s.app.Ready(ctx); err != nil {
 		return fmt.Errorf("failed to start dqlite app: %w", err)
 	}
@@ -304,7 +322,7 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	logrus.WithFields(logrus.Fields{"address": s.kineConfig.Listener, "database": s.kineConfig.Endpoint}).Print("Started kine")
 
-	go s.watchStorage(ctx)
+	go s.watchAvailableStorageSize(ctx)
 
 	return nil
 }
