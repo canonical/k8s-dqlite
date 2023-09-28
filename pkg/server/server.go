@@ -337,5 +337,6 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	if err := s.app.Close(); err != nil {
 		return fmt.Errorf("failed to close dqlite app: %w", err)
 	}
+	close(s.mustStopCh)
 	return nil
 }
