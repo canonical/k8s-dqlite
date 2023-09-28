@@ -22,6 +22,7 @@ import (
 type Server struct {
 	// app is the dqlite application driving the server.
 	app *app.App
+
 	// kineConfig is the configuration to use for starting kine against the dqlite application.
 	kineConfig endpoint.Config
 
@@ -281,7 +282,7 @@ func (s *Server) watchStorage(ctx context.Context) {
 	}
 }
 
-// Terminated returns a channel that can be used to check whether the server must stop.
+// MustStop returns a channel that can be used to check whether the server must stop.
 func (s *Server) MustStop() <-chan struct{} {
 	return s.mustStopCh
 }
