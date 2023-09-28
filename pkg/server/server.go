@@ -18,21 +18,24 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type StorageWatcherConfig struct {
-	storageDir         string
-	storageWatchTicker *time.Ticker
-	storageWatchQuit   chan struct{}
-	diskThreshold      uint64
-}
-
 // Server is the main k8s-dqlite server.
 type Server struct {
 	// app is the dqlite application driving the server.
-	app            *app.App
-	swatcherConfig StorageWatcherConfig
-	stopCh         chan (struct{})
+	app *app.App
 	// kineConfig is the configuration to use for starting kine against the dqlite application.
 	kineConfig endpoint.Config
+
+	// storageDir is the root directory used for dqlite storage.
+	storageDir string
+	// validateAvailableStorageMinBytes is the minimum required bytes that the server will expect to be
+	// available on the storage directory. If not, it will handover the leader role and terminate.
+	validateAvailableStorageMinBytes uint64
+	// validateStorageAvailableInterval is the interval to check for available disk size. If set to
+	// zero, then no checks will be performed.
+	validateStorageAvailableInterval time.Duration
+
+	// mustStopCh is used when the server must terminate.
+	mustStopCh chan struct{}
 }
 
 // expectedFilesDuringInitialization is a list of files that are allowed to exist when initializing the dqlite node.
@@ -46,7 +49,7 @@ var expectedFilesDuringInitialization = map[string]struct{}{
 }
 
 // New creates a new instance of Server based on configuration.
-func New(dir string, listen string, enableTLS bool, diskMode bool, clientSessionCacheSize uint, minTLSVersion string, storageWatchPeriod uint16, storageDiskThreshold uint64) (*Server, error) {
+func New(dir string, listen string, enableTLS bool, diskMode bool, clientSessionCacheSize uint, minTLSVersion string, validateAvailableStorageInterval time.Duration, validateAvailableStorageMinBytes uint64) (*Server, error) {
 	var (
 		options         []app.Option
 		kineConfig      endpoint.Config
@@ -245,62 +248,63 @@ func New(dir string, listen string, enableTLS bool, diskMode bool, clientSession
 	kineConfig.Endpoint = fmt.Sprintf("dqlite://k8s?%s", params.Encode())
 
 	return &Server{
-		app: app,
-		swatcherConfig: StorageWatcherConfig{
-			storageDir:         dir,
-			storageWatchTicker: time.NewTicker(time.Duration(storageWatchPeriod) * time.Second),
-			storageWatchQuit:   make(chan struct{}),
-			diskThreshold:      storageDiskThreshold,
-		},
+		app:        app,
 		kineConfig: kineConfig,
+
+		storageDir:                       dir,
+		validateAvailableStorageMinBytes: validateAvailableStorageMinBytes,
+		validateStorageAvailableInterval: validateAvailableStorageInterval,
+
+		mustStopCh: make(chan struct{}, 1),
 	}, nil
 }
 
 func (s *Server) watchStorage(ctx context.Context) {
+	logrus := logrus.WithField("dir", s.storageDir)
+
+	if s.validateStorageAvailableInterval <= 0 {
+		logrus.Info("Disable periodic check for available disk size")
+		return
+	}
+
+	logrus.WithField("interval", s.validateStorageAvailableInterval).Info("Enable periodic check for available disk size")
 	for {
 		select {
-		case <-s.swatcherConfig.storageWatchTicker.C:
-			isFull, err := IsStorageFull(s.swatcherConfig.storageDir, s.swatcherConfig.diskThreshold)
-			// If available space is less than threshold transfer roles and shutdown.
-			if err != nil {
-				logrus.WithError(err).Errorf("failed to check storage capacity")
-			} else if isFull {
-				logrus.WithField("dir", s.swatcherConfig.storageDir).Debug("Disk is critically low, gracefully shutting down")
-				// Create a separate context with 30 seconds to cleanup
-				stopCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-				defer cancel()
-				if err := s.Shutdown(stopCtx); err != nil {
-					logrus.WithError(err).Fatal("Failed to shutdown server")
-				}
-				logrus.WithField("dir", s.swatcherConfig.storageDir).Fatalf("Disk is critically low, gracefully shutdown")
-			}
-		case <-s.stopCh:
 		case <-ctx.Done():
-			logrus.Debug("Closing storage watcher")
-			s.swatcherConfig.storageWatchTicker.Stop()
 			return
+		case <-time.After(s.validateStorageAvailableInterval):
+			if err := validateStorageDirAvailableSize(s.storageDir, s.validateAvailableStorageMinBytes); err != nil {
+				logrus.WithError(err).Error("Terminating due to low disk space")
+				s.mustStopCh <- struct{}{}
+			}
 		}
 	}
 }
 
-func (s *Server) Done() <-chan struct{} {
-	return s.stopCh
+// Terminated returns a channel that can be used to check whether the server must stop.
+func (s *Server) MustStop() <-chan struct{} {
+	return s.mustStopCh
 }
 
 // Start the dqlite node and the kine machinery.
 func (s *Server) Start(ctx context.Context) error {
+	if err := validateStorageDirAvailableSize(s.storageDir, s.validateAvailableStorageMinBytes); err != nil {
+		return fmt.Errorf("available disk size validation failed: %w", err)
+	}
+
 	if err := s.app.Ready(ctx); err != nil {
 		return fmt.Errorf("failed to start dqlite app: %w", err)
 	}
 	logrus.WithFields(logrus.Fields{"id": s.app.ID(), "address": s.app.Address()}).Print("Started dqlite")
-
-	go s.watchStorage(ctx)
 
 	logrus.WithField("config", s.kineConfig).Debug("Starting kine")
 	if _, err := endpoint.Listen(ctx, s.kineConfig); err != nil {
 		return fmt.Errorf("failed to start kine: %w", err)
 	}
 	logrus.WithFields(logrus.Fields{"address": s.kineConfig.Listener, "database": s.kineConfig.Endpoint}).Print("Started kine")
+
+	go s.watchStorage(ctx)
+
 	return nil
 }
 

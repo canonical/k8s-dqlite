@@ -29,8 +29,9 @@ var (
 		minTLSVersion          string
 		metrics                bool
 		metricsAddress         string
-		storageWatchPeriod     uint16
-		storageDiskThreshold   uint64
+
+		validateAvailableStorageInterval time.Duration
+		validateAvailableStorageMinBytes uint64
 	}
 
 	rootCmd = &cobra.Command{
@@ -42,14 +43,6 @@ var (
 		Run: func(cmd *cobra.Command, args []string) {
 			if rootCmdOpts.debug {
 				logrus.SetLevel(logrus.TraceLevel)
-			}
-
-			isFull, err := server.IsStorageFull(rootCmdOpts.dir, rootCmdOpts.storageDiskThreshold)
-			// If available space is less than threshold reject startup.
-			if err != nil {
-				logrus.WithError(err).Fatal("failed to check storage capacity")
-			} else if isFull {
-				logrus.WithField("dir", rootCmdOpts.dir).Fatal("Disk is critically low, refusing to start")
 			}
 
 			if rootCmdOpts.profiling {
@@ -68,14 +61,23 @@ var (
 				}()
 			}
 
-			server, err := server.New(rootCmdOpts.dir, rootCmdOpts.listen, rootCmdOpts.tls, rootCmdOpts.diskMode, rootCmdOpts.clientSessionCacheSize, rootCmdOpts.minTLSVersion, rootCmdOpts.storageWatchPeriod, rootCmdOpts.storageDiskThreshold)
+			server, err := server.New(
+				rootCmdOpts.dir,
+				rootCmdOpts.listen,
+				rootCmdOpts.tls,
+				rootCmdOpts.diskMode,
+				rootCmdOpts.clientSessionCacheSize,
+				rootCmdOpts.minTLSVersion,
+				rootCmdOpts.validateAvailableStorageInterval,
+				rootCmdOpts.validateAvailableStorageMinBytes,
+			)
 			if err != nil {
 				logrus.WithError(err).Fatal("Failed to create server")
 			}
 
 			ctx, cancel := context.WithCancel(cmd.Context())
 			if err := server.Start(ctx); err != nil {
-				logrus.WithError(err).Fatal("Server terminated")
+				logrus.WithError(err).Fatal("Server failed to start")
 			}
 
 			// Cancel context if we receive an exit signal
@@ -85,7 +87,10 @@ var (
 			signal.Notify(ch, unix.SIGQUIT)
 			signal.Notify(ch, unix.SIGTERM)
 
-			<-ch
+			select {
+			case <-ch:
+			case <-server.MustStop():
+			}
 			cancel()
 
 			// Create a separate context with 30 seconds to cleanup
@@ -120,6 +125,6 @@ func init() {
 	rootCmd.Flags().StringVar(&rootCmdOpts.minTLSVersion, "min-tls-version", "tls12", "Minimum TLS version for dqlite endpoint (tls10|tls11|tls12|tls13). Default is tls12")
 	rootCmd.Flags().BoolVar(&rootCmdOpts.metrics, "metrics", true, "enable metrics endpoint")
 	rootCmd.Flags().StringVar(&rootCmdOpts.metricsAddress, "metrics-listen", "127.0.0.1:9042", "listen address for metrics endpoint")
-	rootCmd.Flags().Uint16Var(&rootCmdOpts.storageWatchPeriod, "storage-watch-period", 5, "Time in seconds to check storage capacity periodically")
-	rootCmd.Flags().Uint64Var(&rootCmdOpts.storageDiskThreshold, "storage-disk-threshold", 10000000, "Remaining storage threshold(in bytes) that determines if disk is full") // 10MB
+	rootCmd.Flags().DurationVar(&rootCmdOpts.validateAvailableStorageInterval, "validate-storage-available-size-interval", 0, "Interval to check if the disk is running low on space. Set to 0 to disable the periodic disk size check")
+	rootCmd.Flags().Uint64Var(&rootCmdOpts.validateAvailableStorageMinBytes, "validate-storage-available-size-min-bytes", 10*1024*1024, "Minimum required available disk size (in bytes) to continue operation. If available disk space gets below this threshold, the server will refuse to start")
 }
