@@ -41,7 +41,7 @@ func fileExists(path ...string) (bool, error) {
 	return true, nil
 }
 
-func validateStorageDirAvailableSize(storageDir string, minimumBytes uint64) error {
+func checkAvailableStorageSize(storageDir string, minimumBytes uint64) error {
 	var stat unix.Statfs_t
 	if err := unix.Statfs(storageDir, &stat); err != nil {
 		return fmt.Errorf("failed to check available disk size: %w", err)

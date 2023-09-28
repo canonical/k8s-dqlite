@@ -284,7 +284,7 @@ func (s *Server) watchAvailableStorageSize(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-time.After(s.validateStorageAvailableInterval):
-			if err := validateStorageDirAvailableSize(s.storageDir, s.validateAvailableStorageMinBytes); err != nil {
+			if err := checkAvailableStorageSize(s.storageDir, s.validateAvailableStorageMinBytes); err != nil {
 				err := fmt.Errorf("periodic check for available disk storage failed: %w", err)
 
 				switch s.actionOnLowDisk {
