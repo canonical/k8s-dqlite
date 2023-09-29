@@ -53,7 +53,7 @@ var expectedFilesDuringInitialization = map[string]struct{}{
 }
 
 // New creates a new instance of Server based on configuration.
-func New(dir string, listen string, enableTLS bool, diskMode bool, clientSessionCacheSize uint, minTLSVersion string, validateAvailableStorageInterval time.Duration, watchAvailableStorageMinBytes uint64, lowAvailableStorageAction string) (*Server, error) {
+func New(dir string, listen string, enableTLS bool, diskMode bool, clientSessionCacheSize uint, minTLSVersion string, watchAvailableStorageInterval time.Duration, watchAvailableStorageMinBytes uint64, lowAvailableStorageAction string) (*Server, error) {
 	var (
 		options         []app.Option
 		kineConfig      endpoint.Config
@@ -263,7 +263,7 @@ func New(dir string, listen string, enableTLS bool, diskMode bool, clientSession
 
 		storageDir:                    dir,
 		watchAvailableStorageMinBytes: watchAvailableStorageMinBytes,
-		watchAvailableStorageInterval: validateAvailableStorageInterval,
+		watchAvailableStorageInterval: watchAvailableStorageInterval,
 		actionOnLowDisk:               lowAvailableStorageAction,
 
 		mustStopCh: make(chan struct{}, 1),
