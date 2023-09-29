@@ -28,12 +28,12 @@ type Server struct {
 
 	// storageDir is the root directory used for dqlite storage.
 	storageDir string
-	// validateAvailableStorageMinBytes is the minimum required bytes that the server will expect to be
+	// watchAvailableStorageMinBytes is the minimum required bytes that the server will expect to be
 	// available on the storage directory. If not, it will handover the leader role and terminate.
-	validateAvailableStorageMinBytes uint64
-	// validateStorageAvailableInterval is the interval to check for available disk size. If set to
+	watchAvailableStorageMinBytes uint64
+	// watchAvailableStorageInterval is the interval to check for available disk size. If set to
 	// zero, then no checks will be performed.
-	validateStorageAvailableInterval time.Duration
+	watchAvailableStorageInterval time.Duration
 	// actionOnLowDisk is the action to perform in case the system is running low on disk.
 	// One of "terminate", "handover", "none"
 	actionOnLowDisk string
@@ -53,7 +53,7 @@ var expectedFilesDuringInitialization = map[string]struct{}{
 }
 
 // New creates a new instance of Server based on configuration.
-func New(dir string, listen string, enableTLS bool, diskMode bool, clientSessionCacheSize uint, minTLSVersion string, validateAvailableStorageInterval time.Duration, validateAvailableStorageMinBytes uint64, lowAvailableStorageAction string) (*Server, error) {
+func New(dir string, listen string, enableTLS bool, diskMode bool, clientSessionCacheSize uint, minTLSVersion string, validateAvailableStorageInterval time.Duration, watchAvailableStorageMinBytes uint64, lowAvailableStorageAction string) (*Server, error) {
 	var (
 		options         []app.Option
 		kineConfig      endpoint.Config
@@ -261,10 +261,10 @@ func New(dir string, listen string, enableTLS bool, diskMode bool, clientSession
 		app:        app,
 		kineConfig: kineConfig,
 
-		storageDir:                       dir,
-		validateAvailableStorageMinBytes: validateAvailableStorageMinBytes,
-		validateStorageAvailableInterval: validateAvailableStorageInterval,
-		actionOnLowDisk:                  lowAvailableStorageAction,
+		storageDir:                    dir,
+		watchAvailableStorageMinBytes: watchAvailableStorageMinBytes,
+		watchAvailableStorageInterval: validateAvailableStorageInterval,
+		actionOnLowDisk:               lowAvailableStorageAction,
 
 		mustStopCh: make(chan struct{}, 1),
 	}, nil
@@ -273,18 +273,18 @@ func New(dir string, listen string, enableTLS bool, diskMode bool, clientSession
 func (s *Server) watchAvailableStorageSize(ctx context.Context) {
 	logrus := logrus.WithField("dir", s.storageDir)
 
-	if s.validateStorageAvailableInterval <= 0 {
+	if s.watchAvailableStorageInterval <= 0 {
 		logrus.Info("Disable periodic check for available disk size")
 		return
 	}
 
-	logrus.WithField("interval", s.validateStorageAvailableInterval).Info("Enable periodic check for available disk size")
+	logrus.WithField("interval", s.watchAvailableStorageInterval).Info("Enable periodic check for available disk size")
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(s.validateStorageAvailableInterval):
-			if err := checkAvailableStorageSize(s.storageDir, s.validateAvailableStorageMinBytes); err != nil {
+		case <-time.After(s.watchAvailableStorageInterval):
+			if err := checkAvailableStorageSize(s.storageDir, s.watchAvailableStorageMinBytes); err != nil {
 				err := fmt.Errorf("periodic check for available disk storage failed: %w", err)
 
 				switch s.actionOnLowDisk {
