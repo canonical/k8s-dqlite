@@ -29,6 +29,10 @@ var (
 		minTLSVersion          string
 		metrics                bool
 		metricsAddress         string
+
+		watchAvailableStorageInterval time.Duration
+		watchAvailableStorageMinBytes uint64
+		lowAvailableStorageAction     string
 	}
 
 	rootCmd = &cobra.Command{
@@ -58,14 +62,24 @@ var (
 				}()
 			}
 
-			server, err := server.New(rootCmdOpts.dir, rootCmdOpts.listen, rootCmdOpts.tls, rootCmdOpts.diskMode, rootCmdOpts.clientSessionCacheSize, rootCmdOpts.minTLSVersion)
+			server, err := server.New(
+				rootCmdOpts.dir,
+				rootCmdOpts.listen,
+				rootCmdOpts.tls,
+				rootCmdOpts.diskMode,
+				rootCmdOpts.clientSessionCacheSize,
+				rootCmdOpts.minTLSVersion,
+				rootCmdOpts.watchAvailableStorageInterval,
+				rootCmdOpts.watchAvailableStorageMinBytes,
+				rootCmdOpts.lowAvailableStorageAction,
+			)
 			if err != nil {
 				logrus.WithError(err).Fatal("Failed to create server")
 			}
 
 			ctx, cancel := context.WithCancel(cmd.Context())
 			if err := server.Start(ctx); err != nil {
-				logrus.WithError(err).Fatal("Server terminated")
+				logrus.WithError(err).Fatal("Server failed to start")
 			}
 
 			// Cancel context if we receive an exit signal
@@ -75,7 +89,10 @@ var (
 			signal.Notify(ch, unix.SIGQUIT)
 			signal.Notify(ch, unix.SIGTERM)
 
-			<-ch
+			select {
+			case <-ch:
+			case <-server.MustStop():
+			}
 			cancel()
 
 			// Create a separate context with 30 seconds to cleanup
@@ -110,4 +127,7 @@ func init() {
 	rootCmd.Flags().StringVar(&rootCmdOpts.minTLSVersion, "min-tls-version", "tls12", "Minimum TLS version for dqlite endpoint (tls10|tls11|tls12|tls13). Default is tls12")
 	rootCmd.Flags().BoolVar(&rootCmdOpts.metrics, "metrics", true, "enable metrics endpoint")
 	rootCmd.Flags().StringVar(&rootCmdOpts.metricsAddress, "metrics-listen", "127.0.0.1:9042", "listen address for metrics endpoint")
+	rootCmd.Flags().DurationVar(&rootCmdOpts.watchAvailableStorageInterval, "watch-storage-available-size-interval", 5*time.Second, "Interval to check if the disk is running low on space. Set to 0 to disable the periodic disk size check")
+	rootCmd.Flags().Uint64Var(&rootCmdOpts.watchAvailableStorageMinBytes, "watch-storage-available-size-min-bytes", 10*1024*1024, "Minimum required available disk size (in bytes) to continue operation. If available disk space gets below this threshold, then the --low-available-storage-action is performed")
+	rootCmd.Flags().StringVar(&rootCmdOpts.lowAvailableStorageAction, "low-available-storage-action", "none", "Action to perform in case the available storage is low. One of (none|handover|terminate). none means no action is performed. handover means the dqlite node will handover its leadership role, if any. terminate means this dqlite node will shutdown")
 }

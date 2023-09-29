@@ -25,6 +25,21 @@ type Server struct {
 
 	// kineConfig is the configuration to use for starting kine against the dqlite application.
 	kineConfig endpoint.Config
+
+	// storageDir is the root directory used for dqlite storage.
+	storageDir string
+	// watchAvailableStorageMinBytes is the minimum required bytes that the server will expect to be
+	// available on the storage directory. If not, it will handover the leader role and terminate.
+	watchAvailableStorageMinBytes uint64
+	// watchAvailableStorageInterval is the interval to check for available disk size. If set to
+	// zero, then no checks will be performed.
+	watchAvailableStorageInterval time.Duration
+	// actionOnLowDisk is the action to perform in case the system is running low on disk.
+	// One of "terminate", "handover", "none"
+	actionOnLowDisk string
+
+	// mustStopCh is used when the server must terminate.
+	mustStopCh chan struct{}
 }
 
 // expectedFilesDuringInitialization is a list of files that are allowed to exist when initializing the dqlite node.
@@ -38,13 +53,19 @@ var expectedFilesDuringInitialization = map[string]struct{}{
 }
 
 // New creates a new instance of Server based on configuration.
-func New(dir string, listen string, enableTLS bool, diskMode bool, clientSessionCacheSize uint, minTLSVersion string) (*Server, error) {
+func New(dir string, listen string, enableTLS bool, diskMode bool, clientSessionCacheSize uint, minTLSVersion string, watchAvailableStorageInterval time.Duration, watchAvailableStorageMinBytes uint64, lowAvailableStorageAction string) (*Server, error) {
 	var (
 		options         []app.Option
 		kineConfig      endpoint.Config
 		compactInterval *time.Duration
 		pollInterval    *time.Duration
 	)
+
+	switch lowAvailableStorageAction {
+	case "none", "handover", "terminate":
+	default:
+		return nil, fmt.Errorf("unsupported low available storage action %v (supported values are none, handover, terminate)", lowAvailableStorageAction)
+	}
 
 	if mustInit, err := fileExists(dir, "init.yaml"); err != nil {
 		return nil, fmt.Errorf("failed to check for init.yaml: %w", err)
@@ -239,7 +260,53 @@ func New(dir string, listen string, enableTLS bool, diskMode bool, clientSession
 	return &Server{
 		app:        app,
 		kineConfig: kineConfig,
+
+		storageDir:                    dir,
+		watchAvailableStorageMinBytes: watchAvailableStorageMinBytes,
+		watchAvailableStorageInterval: watchAvailableStorageInterval,
+		actionOnLowDisk:               lowAvailableStorageAction,
+
+		mustStopCh: make(chan struct{}, 1),
 	}, nil
+}
+
+func (s *Server) watchAvailableStorageSize(ctx context.Context) {
+	logrus := logrus.WithField("dir", s.storageDir)
+
+	if s.watchAvailableStorageInterval <= 0 {
+		logrus.Info("Disable periodic check for available disk size")
+		return
+	}
+
+	logrus.WithField("interval", s.watchAvailableStorageInterval).Info("Enable periodic check for available disk size")
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(s.watchAvailableStorageInterval):
+			if err := checkAvailableStorageSize(s.storageDir, s.watchAvailableStorageMinBytes); err != nil {
+				err := fmt.Errorf("periodic check for available disk storage failed: %w", err)
+
+				switch s.actionOnLowDisk {
+				case "none":
+					logrus.WithError(err).Info("Ignoring failed available disk storage check")
+				case "handover":
+					logrus.WithError(err).Info("Handover dqlite leadership role")
+					if err := s.app.Handover(ctx); err != nil {
+						logrus.WithError(err).Warning("Failed to handover dqlite leadership")
+					}
+				case "terminate":
+					logrus.WithError(err).Error("Terminating due to failed available disk storage check")
+					s.mustStopCh <- struct{}{}
+				}
+			}
+		}
+	}
+}
+
+// MustStop returns a channel that can be used to check whether the server must stop.
+func (s *Server) MustStop() <-chan struct{} {
+	return s.mustStopCh
 }
 
 // Start the dqlite node and the kine machinery.
@@ -254,6 +321,9 @@ func (s *Server) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start kine: %w", err)
 	}
 	logrus.WithFields(logrus.Fields{"address": s.kineConfig.Listener, "database": s.kineConfig.Endpoint}).Print("Started kine")
+
+	go s.watchAvailableStorageSize(ctx)
+
 	return nil
 }
 
@@ -267,5 +337,6 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	if err := s.app.Close(); err != nil {
 		return fmt.Errorf("failed to close dqlite app: %w", err)
 	}
+	close(s.mustStopCh)
 	return nil
 }
