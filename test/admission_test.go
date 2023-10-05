@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -11,8 +12,9 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
-// BenchmarkGet is a benchmark for the Get operation.
-func TestMixed(t *testing.T) {
+// TestAdmissionControl puts heavy load on kine and expects that some requests are denied
+// by the admission control.
+func TestAdmissionControl(t *testing.T) {
 	ctx := context.Background()
 	client, _ := newKine(ctx, t)
 	g := NewWithT(t)
@@ -32,16 +34,19 @@ func TestMixed(t *testing.T) {
 	}
 
 	t.Run("LatestRevision", func(t *testing.T) {
-		g := NewWithT(t)
 		var wg sync.WaitGroup
+
+		var numSuccessfulWriterTxn = atomic.Uint64{}
+		var numSuccessfulReaderTxn = atomic.Uint64{}
 
 		reader := func(first int, last int) {
 			defer wg.Done()
 			for i := first; i < last; i++ {
 				key := fmt.Sprintf("Key-%d", i)
-				resp, err := client.Get(ctx, key, clientv3.WithRange(""))
-				g.Expect(err).To(BeNil())
-				g.Expect(resp.Kvs).To(HaveLen(1))
+				_, err := client.Get(ctx, key, clientv3.WithRange(""))
+				if err == nil {
+					numSuccessfulReaderTxn.Add(1)
+				}
 			}
 		}
 
@@ -50,22 +55,21 @@ func TestMixed(t *testing.T) {
 			for i := first; i < last; i++ {
 				key := fmt.Sprintf("Key-%d", i)
 				new_value := fmt.Sprintf("New-Value-%d", i)
-				for {
-					resp, err := client.Get(ctx, key, clientv3.WithRange(""))
-					if err != nil {
-						t.Logf("Could not get %s\n", key)
-						continue
-					}
-					lastModRev := resp.Kvs[0].ModRevision
-					put_resp, err := client.Txn(ctx).
-						If(clientv3.Compare(clientv3.ModRevision(key), "=", lastModRev)).
-						Then(clientv3.OpPut(key, new_value)).
-						Else(clientv3.OpGet(key, clientv3.WithRange(""))).
-						Commit()
+				resp, err := client.Get(ctx, key, clientv3.WithRange(""))
+				if err != nil || len(resp.Kvs) == 0 {
+					t.Logf("Could not get %s\n", key)
+					continue
+				}
+				lastModRev := resp.Kvs[0].ModRevision
+				put_resp, err := client.Txn(ctx).
+					If(clientv3.Compare(clientv3.ModRevision(key), "=", lastModRev)).
+					Then(clientv3.OpPut(key, new_value)).
+					Else(clientv3.OpGet(key, clientv3.WithRange(""))).
+					Commit()
 
-					if err == nil && put_resp.Succeeded == true {
-						break
-					}
+				if err == nil && put_resp.Succeeded == true {
+					numSuccessfulWriterTxn.Add(1)
+					break
 				}
 			}
 		}
@@ -94,5 +98,11 @@ func TestMixed(t *testing.T) {
 		duration := time.Since(start)
 
 		t.Logf("Executed 1000 queries in %.2f seconds\n", duration.Seconds())
+		// It is expected that some queries are denied due to the load.
+		// TODO(MK-1397): This expects that the admission policy is set as `limit` with threshold 5000.
+		// This should be configured explicitly in the testcase once this is possible.
+		// Right now, we use the `allow-all` policy for background-compatibility, so the following checks are commented out.
+		// g.Expect(numSuccessfulReaderTxn.Load()).To(BeNumerically("<", readers*readers_replication*read_entries))
+		// g.Expect(numSuccessfulWriterTxn.Load()).To(BeNumerically("<", writers*writers_replication*write_entries))
 	})
 }

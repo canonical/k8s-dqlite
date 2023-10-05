@@ -123,6 +123,8 @@ type Generic struct {
 	TranslateErr                  TranslateErr
 	ErrCode                       ErrCode
 
+	ac AdmissionControlPolicy
+
 	// CompactInterval is interval between database compactions performed by kine.
 	CompactInterval time.Duration
 	// PollInterval is the event poll interval used by kine.
@@ -240,6 +242,10 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 
 		FillSQL: q(`INSERT INTO kine(id, name, created, deleted, create_revision, prev_revision, lease, value, old_value)
 			VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`, paramCharacter, numbered),
+
+		// Disable admission control for now to maintain backward-compatibility.
+		// TODO(MK-1397): Make policy and config configurable via CLI.
+		ac: &allowAllPolicy{},
 	}, err
 }
 
@@ -311,12 +317,19 @@ func getPrefixRange(prefix string) (start, end string) {
 func (d *Generic) query(ctx context.Context, txName, sql string, args ...interface{}) (rows *sql.Rows, err error) {
 	i := uint(0)
 	start := time.Now()
+
+	done, err := d.ac.Admit(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("denied: %w", err)
+	}
+
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("query (try: %d): %w", i, err)
 		}
 		recordOpResult(txName, err, start)
 	}()
+
 	strippedSQL := Stripped(sql)
 	for ; i < 500; i++ {
 		if i > 2 {
@@ -329,16 +342,26 @@ func (d *Generic) query(ctx context.Context, txName, sql string, args ...interfa
 			time.Sleep(jitter.Deviation(nil, 0.3)(2 * time.Millisecond))
 			continue
 		}
+		done()
 		recordTxResult(txName, err)
 		return rows, err
 	}
+	done()
 	return
 }
 
 func (d *Generic) queryPrepared(ctx context.Context, txName, sql string, prepared *sql.Stmt, args ...interface{}) (result *sql.Rows, err error) {
 	logrus.Tracef("QUERY %v : %s", args, Stripped(sql))
+
+	done, err := d.ac.Admit(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("denied: %w", err)
+	}
+
 	start := time.Now()
 	r, err := prepared.QueryContext(ctx, args...)
+	done()
+
 	recordOpResult(txName, err, start)
 	recordTxResult(txName, err)
 	return r, err
@@ -371,6 +394,12 @@ func (d *Generic) executePrepared(ctx context.Context, txName, sql string, prepa
 		}
 		recordOpResult(txName, err, start)
 	}()
+
+	done, err := d.ac.Admit(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("denied: %w", err)
+	}
+
 	if d.LockWrites {
 		d.Lock()
 		defer d.Unlock()
@@ -388,9 +417,11 @@ func (d *Generic) executePrepared(ctx context.Context, txName, sql string, prepa
 			time.Sleep(jitter.Deviation(nil, 0.3)(2 * time.Millisecond))
 			continue
 		}
+		done()
 		recordTxResult(txName, err)
 		return result, err
 	}
+	done()
 	return
 }
 
@@ -405,7 +436,14 @@ func (d *Generic) GetCompactRevision(ctx context.Context) (int64, int64, error) 
 		recordOpResult("revision_interval_sql", err, start)
 		recordTxResult("revision_interval_sql", err)
 	}()
+
+	done, err := d.ac.Admit(ctx)
+	if err != nil {
+		return 0, 0, fmt.Errorf("denied: %w", err)
+	}
+
 	row := d.DB.QueryRow(revisionIntervalSQL)
+	done()
 	err = row.Scan(&compact, &target)
 	if err == sql.ErrNoRows {
 		return 0, 0, nil
@@ -471,8 +509,16 @@ func (d *Generic) Count(ctx context.Context, prefix string) (int64, int64, error
 
 func (d *Generic) CurrentRevision(ctx context.Context) (int64, error) {
 	var id int64
+	var err error
+
+	done, err := d.ac.Admit(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("denied: %w", err)
+	}
+
 	row := d.queryRow(ctx, "rev_sql", revSQL)
-	err := row.Scan(&id)
+	done()
+	err = row.Scan(&id)
 	if err == sql.ErrNoRows {
 		return 0, nil
 	}
