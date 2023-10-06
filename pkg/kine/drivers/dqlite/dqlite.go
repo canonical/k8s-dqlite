@@ -13,6 +13,7 @@ import (
 
 	"github.com/canonical/go-dqlite"
 	"github.com/canonical/go-dqlite/driver"
+	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/generic"
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/sqlite"
 	"github.com/canonical/k8s-dqlite/pkg/kine/server"
 	"github.com/canonical/k8s-dqlite/pkg/kine/tls"
@@ -36,7 +37,7 @@ type opts struct {
 	pollInterval    time.Duration
 }
 
-func New(ctx context.Context, datasourceName string, tlsInfo tls.Config) (server.Backend, error) {
+func New(ctx context.Context, datasourceName string, tlsInfo tls.Config, acPolicyConfig generic.AdmissionControlPolicyConfig) (server.Backend, error) {
 	logrus.Printf("New kine for dqlite")
 	opts, err := parseOpts(datasourceName)
 	if err != nil {
@@ -48,7 +49,7 @@ func New(ctx context.Context, datasourceName string, tlsInfo tls.Config) (server
 		return nil, fmt.Errorf("required option 'driver-name' not set in connection string")
 	}
 
-	backend, generic, err := sqlite.NewVariant(ctx, opts.driverName, opts.dsn)
+	backend, generic, err := sqlite.NewVariant(ctx, opts.driverName, opts.dsn, acPolicyConfig)
 	if err != nil {
 		return nil, errors.Wrap(err, "sqlite client")
 	}

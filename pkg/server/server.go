@@ -13,6 +13,7 @@ import (
 	"github.com/canonical/go-dqlite"
 	"github.com/canonical/go-dqlite/app"
 	"github.com/canonical/go-dqlite/client"
+	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/generic"
 	"github.com/canonical/k8s-dqlite/pkg/kine/endpoint"
 	kine_tls "github.com/canonical/k8s-dqlite/pkg/kine/tls"
 	"github.com/sirupsen/logrus"
@@ -53,7 +54,7 @@ var expectedFilesDuringInitialization = map[string]struct{}{
 }
 
 // New creates a new instance of Server based on configuration.
-func New(dir string, listen string, enableTLS bool, diskMode bool, clientSessionCacheSize uint, minTLSVersion string, watchAvailableStorageInterval time.Duration, watchAvailableStorageMinBytes uint64, lowAvailableStorageAction string) (*Server, error) {
+func New(dir string, listen string, enableTLS bool, diskMode bool, clientSessionCacheSize uint, minTLSVersion string, watchAvailableStorageInterval time.Duration, watchAvailableStorageMinBytes uint64, lowAvailableStorageAction string, acPolicyConfig generic.AdmissionControlPolicyConfig) (*Server, error) {
 	var (
 		options         []app.Option
 		kineConfig      endpoint.Config
@@ -256,6 +257,7 @@ func New(dir string, listen string, enableTLS bool, diskMode bool, clientSession
 
 	kineConfig.Listener = listen
 	kineConfig.Endpoint = fmt.Sprintf("dqlite://k8s?%s", params.Encode())
+	kineConfig.AdmissionControlPolicyConfig = acPolicyConfig
 
 	return &Server{
 		app:        app,

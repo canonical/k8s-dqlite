@@ -52,3 +52,25 @@ func newKine(ctx context.Context, tb testing.TB) (*clientv3.Client, server.Backe
 	}
 	return client, backend
 }
+
+func newKineWithEndpoint(ctx context.Context, tb testing.TB, endpointConfig endpoint.Config) (*clientv3.Client, server.Backend) {
+	logrus.SetLevel(logrus.ErrorLevel)
+
+	config, backend, err := endpoint.ListenAndReturnBackend(ctx, endpointConfig)
+	if err != nil {
+		panic(err)
+	}
+	tlsConfig, err := config.TLSConfig.ClientConfig()
+	if err != nil {
+		panic(err)
+	}
+	client, err := clientv3.New(clientv3.Config{
+		Endpoints:   []string{endpointConfig.Listener},
+		DialTimeout: 5 * time.Second,
+		TLS:         tlsConfig,
+	})
+	if err != nil {
+		panic(err)
+	}
+	return client, backend
+}

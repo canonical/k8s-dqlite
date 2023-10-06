@@ -11,7 +11,7 @@ func TestAllowAllPolicy_Admit(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 	policy := &allowAllPolicy{}
 
-	callOnFinish, err := policy.Admit(context.Background())
+	callOnFinish, err := policy.admit(context.Background())
 
 	g.Expect(err).To(gomega.BeNil())
 	g.Expect(callOnFinish).ToNot(gomega.BeNil())

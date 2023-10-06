@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/generic"
 	. "github.com/onsi/gomega"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
@@ -16,7 +17,12 @@ import (
 // by the admission control.
 func TestAdmissionControl(t *testing.T) {
 	ctx := context.Background()
-	client, _ := newKine(ctx, t)
+	endpointConfig := makeEndpointConfig(ctx, t)
+	endpointConfig.AdmissionControlPolicyConfig = generic.AdmissionControlPolicyConfig{
+		PolicyName:         "limit",
+		LimitMaxRunningTxn: 300,
+	}
+	client, _ := newKineWithEndpoint(ctx, t, endpointConfig)
 	g := NewWithT(t)
 
 	// create a key space of 1000 items
@@ -34,6 +40,7 @@ func TestAdmissionControl(t *testing.T) {
 	}
 
 	t.Run("LatestRevision", func(t *testing.T) {
+		g := NewWithT(t)
 		var wg sync.WaitGroup
 
 		var numSuccessfulWriterTxn = atomic.Uint64{}
@@ -98,11 +105,8 @@ func TestAdmissionControl(t *testing.T) {
 		duration := time.Since(start)
 
 		t.Logf("Executed 1000 queries in %.2f seconds\n", duration.Seconds())
-		// It is expected that some queries are denied due to the load.
-		// TODO(MK-1397): This expects that the admission policy is set as `limit` with threshold 5000.
-		// This should be configured explicitly in the testcase once this is possible.
-		// Right now, we use the `allow-all` policy for background-compatibility, so the following checks are commented out.
-		// g.Expect(numSuccessfulReaderTxn.Load()).To(BeNumerically("<", readers*readers_replication*read_entries))
-		// g.Expect(numSuccessfulWriterTxn.Load()).To(BeNumerically("<", writers*writers_replication*write_entries))
+		// It is expected that some queries are denied by the admission control due to the load.
+		g.Expect(numSuccessfulReaderTxn.Load()).To(BeNumerically("<", readers*readers_replication*read_entries))
+		g.Expect(numSuccessfulWriterTxn.Load()).To(BeNumerically("<", writers*writers_replication*write_entries))
 	})
 }

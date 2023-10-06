@@ -16,12 +16,12 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func New(ctx context.Context, dataSourceName string) (server.Backend, error) {
-	backend, _, err := NewVariant(ctx, "sqlite3", dataSourceName)
+func New(ctx context.Context, dataSourceName string, acPolicyConfig generic.AdmissionControlPolicyConfig) (server.Backend, error) {
+	backend, _, err := NewVariant(ctx, "sqlite3", dataSourceName, acPolicyConfig)
 	return backend, err
 }
 
-func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.Backend, *generic.Generic, error) {
+func NewVariant(ctx context.Context, driverName, dataSourceName string, acPolicyConfig generic.AdmissionControlPolicyConfig) (server.Backend, *generic.Generic, error) {
 	const retryAttempts = 300
 
 	if dataSourceName == "" {
@@ -31,7 +31,7 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 		dataSourceName = "./db/state.db?_journal=WAL&cache=shared"
 	}
 
-	dialect, err := generic.Open(ctx, driverName, dataSourceName, "?", false)
+	dialect, err := generic.Open(ctx, driverName, dataSourceName, "?", false, acPolicyConfig)
 	if err != nil {
 		return nil, nil, err
 	}
