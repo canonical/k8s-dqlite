@@ -46,7 +46,7 @@ bin/static/k8s-dqlite: deps/static/lib/libdqlite.a
 bin/static/dqlite: deps/static/lib/libdqlite.a
 	mkdir -p bin/static
 	rm -rf build/go-dqlite
-	git clone https://github.com/canonical/go-dqlite --depth 1 -b v1.11.8 build/go-dqlite
+	git clone https://github.com/canonical/go-dqlite --depth 1 -b v1.20.0 build/go-dqlite
 	cd build/go-dqlite && env \
 		PATH="${PATH}:${PWD}/deps/static/musl/bin" \
 		CGO_CFLAGS="-I${PWD}/deps/static/include" \
@@ -84,7 +84,7 @@ bin/dynamic/k8s-dqlite: deps/dynamic/lib/libdqlite.so
 bin/dynamic/dqlite: deps/dynamic/lib/libdqlite.so
 	mkdir -p bin/dynamic
 	rm -rf build/go-dqlite
-	git clone https://github.com/canonical/go-dqlite --depth 1 -b v1.11.8 build/go-dqlite
+	git clone https://github.com/canonical/go-dqlite --depth 1 -b v1.20.0 build/go-dqlite
 	cd build/go-dqlite && env \
 		CGO_CFLAGS="-I${PWD}/deps/dynamic/include" \
 		CGO_LDFLAGS="-L${PWD}/deps/dynamic/lib -luv -lraft -ldqlite -llz4 -lsqlite3" \
