@@ -142,5 +142,5 @@ func init() {
 	rootCmd.Flags().StringVar(&rootCmdOpts.lowAvailableStorageAction, "low-available-storage-action", "none", "Action to perform in case the available storage is low. One of (none|handover|terminate). none means no action is performed. handover means the dqlite node will handover its leadership role, if any. terminate means this dqlite node will shutdown")
 	rootCmd.Flags().StringVar(&rootCmdOpts.admissionControlPolicy, "admission-control-policy", "allow-all", "Policy to use for the admission control ('allow-all'|'limit'). Disabled by default (='allow-all')")
 	// TODO(MK-1398): Find a sane default value here by observing normal/high load in microk8s
-	rootCmd.Flags().Int64Var(&rootCmdOpts.acpLimitMaxRunningTxn, "admission-control-policy-limit-max-running-txn", 300, "Max number of concurrently running transactions. Txns above this threshold will be denied.")
+	rootCmd.Flags().Int64Var(&rootCmdOpts.acpLimitMaxRunningTxn, "admission-control-policy-limit-max-concurrent-transactions", 300, "Maximum number of transactions that are allowed to run concurrently. Transactions will not be admitted after the limit is reached.")
 }
