@@ -3,6 +3,7 @@ package generic
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/semaphore"
@@ -25,17 +26,29 @@ func (p *allowAllPolicy) Admit(context.Context) (func(), error) {
 	return func() {}, nil
 }
 
+// limitPolicyMetrics stores admission-related metrics.
+type limitPolicyMetrics struct {
+	// NumConcurrentTxn stores the number of currently running transactions.
+	NumConcurrentTxn atomic.Int64
+}
+
 // limitPolicy denies queries when the maximum threshold is reached.
 type limitPolicy struct {
+	metrics          *limitPolicyMetrics
 	maxConcurrentTxn int64
 	semaphore        *semaphore.Weighted
 }
 
 func newLimitPolicy(maxConcurrentTxn int64) *limitPolicy {
-	return &limitPolicy{
+	policy := &limitPolicy{
 		maxConcurrentTxn: maxConcurrentTxn,
 		semaphore:        semaphore.NewWeighted(maxConcurrentTxn),
+		metrics:          &limitPolicyMetrics{},
 	}
+
+	// sync the internal metric with prometheus
+	registerNumConcurrentTxn(&policy.metrics.NumConcurrentTxn)
+	return policy
 }
 
 func (p *limitPolicy) Admit(ctx context.Context) (func(), error) {
@@ -43,7 +56,9 @@ func (p *limitPolicy) Admit(ctx context.Context) (func(), error) {
 	if !ok {
 		return func() {}, fmt.Errorf("current Txns reached limit (%d)", p.maxConcurrentTxn)
 	}
+	p.metrics.NumConcurrentTxn.Add(1)
 	return func() {
+		p.metrics.NumConcurrentTxn.Add(-1)
 		p.semaphore.Release(1)
 	}, nil
 }

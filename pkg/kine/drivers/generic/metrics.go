@@ -1,6 +1,7 @@
 package generic
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -37,6 +38,20 @@ func recordOpResult(txName string, err error, startTime time.Time) {
 	resultLabel := errorToResultLabel(err)
 	metricsOpLatency.WithLabelValues(txName, resultLabel).Observe(float64(time.Since(startTime) / time.Second))
 	metricsOpResult.WithLabelValues(txName, resultLabel).Inc()
+}
+
+func registerNumConcurrentTxn(numCurrentTxn *atomic.Int64) {
+	prometheus.MustRegister(
+		prometheus.NewGaugeFunc(
+			prometheus.GaugeOpts{
+				Name: "k8s_dqlite_generic_num_concurrent_txn",
+				Help: "Amount of transactions that are running concurrently.",
+			},
+			func() float64 {
+				return float64(numCurrentTxn.Load())
+			},
+		),
+	)
 }
 
 func init() {
