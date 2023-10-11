@@ -25,9 +25,10 @@ var (
 	testExpirePollPeriod = 100 * time.Millisecond
 )
 
-// newKine spins up a new instance of kine. it also registers cleanup functions for temporary data
+// newKine spins up a new instance of kine.
 //
-// newKine is currently hardcoded to using sqlite and a unix socket listener, but might be extended in the future
+// newKine will create a sqlite or dqlite endpoint based on the provided go build tags (see e.g. util_test_dqlite.go)
+// Custom endpoint query parameters can be configured with the `qs` parameter (e.g. "admission-control-policy=limit")
 //
 // newKine will panic in case of error
 //
