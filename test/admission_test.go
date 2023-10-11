@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/generic"
+	"github.com/canonical/k8s-dqlite/pkg/kine/endpoint"
 	. "github.com/onsi/gomega"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
@@ -17,10 +17,14 @@ import (
 // by the admission control.
 func TestAdmissionControl(t *testing.T) {
 	ctx := context.Background()
-	endpointConfig := makeEndpointConfig(ctx, t)
-	endpointConfig.AdmissionControlPolicyConfig = generic.AdmissionControlPolicyConfig{
-		PolicyName:         "limit",
-		LimitMaxRunningTxn: 300,
+	dqlite, err := newDqliteApp(t)
+	if err != nil {
+		t.Fatalf("Failed to create dqlite app: %v", err)
+	}
+	dir := t.TempDir()
+	endpointConfig := endpoint.Config{
+		Listener: fmt.Sprintf("unix://%s/listen.sock", dir),
+		Endpoint: fmt.Sprintf("dqlite://%s/data.db?admission-control-policy=limit&admission-control-policy-limit-max-concurrent-txn=600&driver-name=%s", dir, dqlite.Driver()),
 	}
 	client, _ := newKineWithEndpoint(ctx, t, endpointConfig)
 	g := NewWithT(t)

@@ -2,9 +2,11 @@ package test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
+	"github.com/canonical/go-dqlite/app"
 	"github.com/canonical/k8s-dqlite/pkg/kine/endpoint"
 	"github.com/canonical/k8s-dqlite/pkg/kine/server"
 	"github.com/sirupsen/logrus"
@@ -73,4 +75,14 @@ func newKineWithEndpoint(ctx context.Context, tb testing.TB, endpointConfig endp
 		panic(err)
 	}
 	return client, backend
+}
+
+func newDqliteApp(tb testing.TB) (*app.App, error) {
+	dir := tb.TempDir()
+	app, err := app.New(dir, app.WithAddress("127.0.0.1:9001"))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create dqlite app: %w", err)
+	}
+
+	return app, nil
 }

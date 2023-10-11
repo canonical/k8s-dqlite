@@ -8,12 +8,13 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/canonical/go-dqlite"
 	"github.com/canonical/go-dqlite/driver"
-	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/generic"
+	gen "github.com/canonical/k8s-dqlite/pkg/kine/drivers/generic"
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/sqlite"
 	"github.com/canonical/k8s-dqlite/pkg/kine/server"
 	"github.com/canonical/k8s-dqlite/pkg/kine/tls"
@@ -35,9 +36,12 @@ type opts struct {
 
 	compactInterval time.Duration
 	pollInterval    time.Duration
+
+	admissionControlPolicy                      string
+	admissionControlPolicyLimitMaxConcurrentTxn int64
 }
 
-func New(ctx context.Context, datasourceName string, tlsInfo tls.Config, acPolicyConfig generic.AdmissionControlPolicyConfig) (server.Backend, error) {
+func New(ctx context.Context, datasourceName string, tlsInfo tls.Config) (server.Backend, error) {
 	logrus.Printf("New kine for dqlite")
 	opts, err := parseOpts(datasourceName)
 	if err != nil {
@@ -49,14 +53,13 @@ func New(ctx context.Context, datasourceName string, tlsInfo tls.Config, acPolic
 		return nil, fmt.Errorf("required option 'driver-name' not set in connection string")
 	}
 
-	backend, generic, err := sqlite.NewVariant(ctx, opts.driverName, opts.dsn, acPolicyConfig)
+	backend, generic, err := sqlite.NewVariant(ctx, opts.driverName, opts.dsn)
 	if err != nil {
 		return nil, errors.Wrap(err, "sqlite client")
 	}
 	if err := migrate(ctx, generic.DB); err != nil {
 		return nil, errors.Wrap(err, "failed to migrate DB from sqlite")
 	}
-
 	generic.LockWrites = true
 	generic.Retry = func(err error) bool {
 		// get the inner-most error if possible
@@ -97,6 +100,10 @@ func New(ctx context.Context, datasourceName string, tlsInfo tls.Config, acPolic
 
 	generic.CompactInterval = opts.compactInterval
 	generic.PollInterval = opts.pollInterval
+	generic.AdmissionControlPolicy = gen.NewAdmissionControlPolicy(
+		opts.admissionControlPolicy,
+		opts.admissionControlPolicyLimitMaxConcurrentTxn,
+	)
 	return backend, nil
 }
 
@@ -203,6 +210,14 @@ func parseOpts(dsn string) (opts, error) {
 				return opts{}, fmt.Errorf("failed to parse poll-interval duration value %q: %w", vs[0], err)
 			}
 			result.pollInterval = d
+		case "admission-control-policy":
+			result.admissionControlPolicy = vs[0]
+		case "admission-control-policy-limit-max-concurrent-txn":
+			d, err := strconv.ParseInt(vs[0], 10, 64)
+			if err != nil {
+				return opts{}, fmt.Errorf("failed to parse max-concurrent-txn value %q: %w", vs[0], err)
+			}
+			result.admissionControlPolicyLimitMaxConcurrentTxn = d
 		default:
 			return opts{}, fmt.Errorf("unknown option %s=%v", k, vs)
 		}

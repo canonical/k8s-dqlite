@@ -123,7 +123,7 @@ type Generic struct {
 	TranslateErr                  TranslateErr
 	ErrCode                       ErrCode
 
-	ac admissionControlPolicy
+	AdmissionControlPolicy AdmissionControlPolicy
 
 	// CompactInterval is interval between database compactions performed by kine.
 	CompactInterval time.Duration
@@ -169,12 +169,11 @@ func openAndTest(driverName, dataSourceName string) (*sql.DB, error) {
 	return db, nil
 }
 
-func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter string, numbered bool, acPolicyConfig AdmissionControlPolicyConfig) (*Generic, error) {
+func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter string, numbered bool) (*Generic, error) {
 	var (
 		db  *sql.DB
 		err error
 	)
-
 	for i := 0; i < 300; i++ {
 		db, err = openAndTest(driverName, dataSourceName)
 		if err == nil {
@@ -243,7 +242,7 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 		FillSQL: q(`INSERT INTO kine(id, name, created, deleted, create_revision, prev_revision, lease, value, old_value)
 			VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`, paramCharacter, numbered),
 
-		ac: newAdmissionControlPolicy(acPolicyConfig),
+		AdmissionControlPolicy: &allowAllPolicy{},
 	}, err
 }
 
@@ -316,7 +315,7 @@ func (d *Generic) query(ctx context.Context, txName, sql string, args ...interfa
 	i := uint(0)
 	start := time.Now()
 
-	done, err := d.ac.admit(ctx)
+	done, err := d.AdmissionControlPolicy.admit(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("denied: %w", err)
 	}
@@ -351,7 +350,7 @@ func (d *Generic) query(ctx context.Context, txName, sql string, args ...interfa
 func (d *Generic) queryPrepared(ctx context.Context, txName, sql string, prepared *sql.Stmt, args ...interface{}) (result *sql.Rows, err error) {
 	logrus.Tracef("QUERY %v : %s", args, Stripped(sql))
 
-	done, err := d.ac.admit(ctx)
+	done, err := d.AdmissionControlPolicy.admit(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("denied: %w", err)
 	}
@@ -393,7 +392,7 @@ func (d *Generic) executePrepared(ctx context.Context, txName, sql string, prepa
 		recordOpResult(txName, err, start)
 	}()
 
-	done, err := d.ac.admit(ctx)
+	done, err := d.AdmissionControlPolicy.admit(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("denied: %w", err)
 	}
@@ -435,7 +434,7 @@ func (d *Generic) GetCompactRevision(ctx context.Context) (int64, int64, error) 
 		recordTxResult("revision_interval_sql", err)
 	}()
 
-	done, err := d.ac.admit(ctx)
+	done, err := d.AdmissionControlPolicy.admit(ctx)
 	if err != nil {
 		return 0, 0, fmt.Errorf("denied: %w", err)
 	}
@@ -509,7 +508,7 @@ func (d *Generic) CurrentRevision(ctx context.Context) (int64, error) {
 	var id int64
 	var err error
 
-	done, err := d.ac.admit(ctx)
+	done, err := d.AdmissionControlPolicy.admit(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("denied: %w", err)
 	}

@@ -7,7 +7,6 @@ import (
 	"path"
 	"testing"
 
-	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/generic"
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/sqlite"
 )
 
@@ -51,7 +50,7 @@ func TestMigration(t *testing.T) {
 	setupV0(db)
 
 	ctx := context.Background()
-	if _, err := sqlite.New(ctx, dbPath, generic.AdmissionControlPolicyConfig{}); err != nil {
+	if _, err := sqlite.New(ctx, dbPath); err != nil {
 		t.Fatal(err)
 	}
 

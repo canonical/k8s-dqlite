@@ -8,8 +8,8 @@ import (
 	"golang.org/x/sync/semaphore"
 )
 
-// admissionControlPolicy interface defines the admission policy contract.
-type admissionControlPolicy interface {
+// AdmissionControlPolicy interface defines the admission policy contract.
+type AdmissionControlPolicy interface {
 	// admit checks whether the query should be admitted.
 	// If the query is not admitted, a non-nil error is returned with the reason why the query was denied.
 	// If the query is admitted, then the error will be nil and a callback function is returned to the caller.
@@ -27,41 +27,36 @@ func (p *allowAllPolicy) admit(context.Context) (func(), error) {
 
 // limitPolicy denies queries when the maximum threshold is reached.
 type limitPolicy struct {
-	MaxRunningTxn int64
-	semaphore     *semaphore.Weighted
+	MaxConcurrentTxn int64
+	semaphore        *semaphore.Weighted
 }
 
-func newLimitPolicy(maxRunningTxn int64) *limitPolicy {
+func newLimitPolicy(maxConcurrentTxn int64) *limitPolicy {
 	return &limitPolicy{
-		MaxRunningTxn: maxRunningTxn,
-		semaphore:     semaphore.NewWeighted(maxRunningTxn),
+		MaxConcurrentTxn: maxConcurrentTxn,
+		semaphore:        semaphore.NewWeighted(maxConcurrentTxn),
 	}
 }
 
 func (p *limitPolicy) admit(ctx context.Context) (func(), error) {
 	ok := p.semaphore.TryAcquire(1)
 	if !ok {
-		return func() {}, fmt.Errorf("current Txns reached limit (%d)", p.MaxRunningTxn)
+		return func() {}, fmt.Errorf("current Txns reached limit (%d)", p.MaxConcurrentTxn)
 	}
 	return func() {
 		p.semaphore.Release(1)
 	}, nil
 }
 
-type AdmissionControlPolicyConfig struct {
-	PolicyName         string
-	LimitMaxRunningTxn int64
-}
-
-func newAdmissionControlPolicy(options AdmissionControlPolicyConfig) admissionControlPolicy {
-	switch options.PolicyName {
+func NewAdmissionControlPolicy(policyName string, limitMaxConcurrentTxn int64) AdmissionControlPolicy {
+	switch policyName {
 	case "limit":
-		return newLimitPolicy(options.LimitMaxRunningTxn)
+		return newLimitPolicy(limitMaxConcurrentTxn)
 	case "allow-all":
 		return &allowAllPolicy{}
 
 	default:
-		logrus.Warnf("unknown admission control policy %q - fallback to 'allow-all'", options.PolicyName)
+		logrus.Warnf("unknown admission control policy %q - fallback to 'allow-all'", policyName)
 		return &allowAllPolicy{}
 	}
 }

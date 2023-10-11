@@ -8,12 +8,12 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/canonical/go-dqlite"
 	"github.com/canonical/go-dqlite/app"
 	"github.com/canonical/go-dqlite/client"
-	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/generic"
 	"github.com/canonical/k8s-dqlite/pkg/kine/endpoint"
 	kine_tls "github.com/canonical/k8s-dqlite/pkg/kine/tls"
 	"github.com/sirupsen/logrus"
@@ -54,7 +54,7 @@ var expectedFilesDuringInitialization = map[string]struct{}{
 }
 
 // New creates a new instance of Server based on configuration.
-func New(dir string, listen string, enableTLS bool, diskMode bool, clientSessionCacheSize uint, minTLSVersion string, watchAvailableStorageInterval time.Duration, watchAvailableStorageMinBytes uint64, lowAvailableStorageAction string, acPolicyConfig generic.AdmissionControlPolicyConfig) (*Server, error) {
+func New(dir string, listen string, enableTLS bool, diskMode bool, clientSessionCacheSize uint, minTLSVersion string, watchAvailableStorageInterval time.Duration, watchAvailableStorageMinBytes uint64, lowAvailableStorageAction string, admissionControlPolicy string, admissionControlPolicyLimitMaxConcurrentTxn int64) (*Server, error) {
 	var (
 		options         []app.Option
 		kineConfig      endpoint.Config
@@ -255,9 +255,11 @@ func New(dir string, listen string, enableTLS bool, diskMode bool, clientSession
 		params["poll-interval"] = []string{fmt.Sprintf("%v", *v)}
 	}
 
+	params["admission-control-policy"] = []string{admissionControlPolicy}
+	params["admission-control-policy-limit-max-concurrent-txn"] = []string{strconv.Itoa(int(admissionControlPolicyLimitMaxConcurrentTxn))}
+
 	kineConfig.Listener = listen
 	kineConfig.Endpoint = fmt.Sprintf("dqlite://k8s?%s", params.Encode())
-	kineConfig.AdmissionControlPolicyConfig = acPolicyConfig
 
 	return &Server{
 		app:        app,
