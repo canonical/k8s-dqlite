@@ -34,7 +34,7 @@ var (
 //
 // newKine will return a context as well as a configured etcd client for the kine instance
 func newKine(ctx context.Context, tb testing.TB, qs ...string) (*clientv3.Client, server.Backend) {
-	logrus.SetLevel(logrus.InfoLevel)
+	logrus.SetLevel(logrus.ErrorLevel)
 
 	endpointConfig := makeEndpointConfig(ctx, tb)
 	if !strings.Contains(endpointConfig.Endpoint, "?") {
