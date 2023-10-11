@@ -256,7 +256,7 @@ func New(dir string, listen string, enableTLS bool, diskMode bool, clientSession
 	}
 
 	params["admission-control-policy"] = []string{admissionControlPolicy}
-	params["admission-control-policy-limit-max-concurrent-txn"] = []string{strconv.Itoa(int(admissionControlPolicyLimitMaxConcurrentTxn))}
+	params["admission-control-policy-limit-max-concurrent-txn"] = []string{fmt.Sprintf("%v", admissionControlPolicyLimitMaxConcurrentTxn)}
 
 	kineConfig.Listener = listen
 	kineConfig.Endpoint = fmt.Sprintf("dqlite://k8s?%s", params.Encode())

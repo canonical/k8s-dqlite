@@ -138,5 +138,4 @@ func init() {
 	rootCmd.Flags().StringVar(&rootCmdOpts.admissionControlPolicy, "admission-control-policy", "allow-all", "Transaction admission control policy to use. One of (allow-all|limit-concurrent-transactions). Set to allow-all to disable the admission control")
 	// TODO(MK-1398): Find a sane default value here by observing normal/high load in microk8s
 	rootCmd.Flags().Int64Var(&rootCmdOpts.acpLimitMaxConcurrentTxn, "admission-control-policy-limit-max-concurrent-transactions", 300, "Maximum number of transactions that are allowed to run concurrently. Transactions will not be admitted after the limit is reached.")
-
 }
