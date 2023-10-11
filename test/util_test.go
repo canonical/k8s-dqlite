@@ -3,10 +3,10 @@ package test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/canonical/go-dqlite/app"
 	"github.com/canonical/k8s-dqlite/pkg/kine/endpoint"
 	"github.com/canonical/k8s-dqlite/pkg/kine/server"
 	"github.com/sirupsen/logrus"
@@ -32,10 +32,16 @@ var (
 // newKine will panic in case of error
 //
 // newKine will return a context as well as a configured etcd client for the kine instance
-func newKine(ctx context.Context, tb testing.TB) (*clientv3.Client, server.Backend) {
-	logrus.SetLevel(logrus.ErrorLevel)
+func newKine(ctx context.Context, tb testing.TB, qs ...string) (*clientv3.Client, server.Backend) {
+	logrus.SetLevel(logrus.InfoLevel)
 
 	endpointConfig := makeEndpointConfig(ctx, tb)
+	if !strings.Contains(endpointConfig.Endpoint, "?") {
+		endpointConfig.Endpoint += "?"
+	}
+	for _, v := range qs {
+		endpointConfig.Endpoint = fmt.Sprintf("%s&%s", endpointConfig.Endpoint, v)
+	}
 	config, backend, err := endpoint.ListenAndReturnBackend(ctx, endpointConfig)
 	if err != nil {
 		panic(err)
@@ -53,36 +59,4 @@ func newKine(ctx context.Context, tb testing.TB) (*clientv3.Client, server.Backe
 		panic(err)
 	}
 	return client, backend
-}
-
-func newKineWithEndpoint(ctx context.Context, tb testing.TB, endpointConfig endpoint.Config) (*clientv3.Client, server.Backend) {
-	logrus.SetLevel(logrus.ErrorLevel)
-
-	config, backend, err := endpoint.ListenAndReturnBackend(ctx, endpointConfig)
-	if err != nil {
-		panic(err)
-	}
-	tlsConfig, err := config.TLSConfig.ClientConfig()
-	if err != nil {
-		panic(err)
-	}
-	client, err := clientv3.New(clientv3.Config{
-		Endpoints:   []string{endpointConfig.Listener},
-		DialTimeout: 5 * time.Second,
-		TLS:         tlsConfig,
-	})
-	if err != nil {
-		panic(err)
-	}
-	return client, backend
-}
-
-func newDqliteApp(tb testing.TB) (*app.App, error) {
-	dir := tb.TempDir()
-	app, err := app.New(dir, app.WithAddress("127.0.0.1:9001"))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create dqlite app: %w", err)
-	}
-
-	return app, nil
 }

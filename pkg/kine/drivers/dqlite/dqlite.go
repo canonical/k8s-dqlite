@@ -5,16 +5,11 @@ package dqlite
 import (
 	"context"
 	"database/sql"
-	"fmt"
-	"net/url"
 	"os"
-	"strconv"
 	"strings"
-	"time"
 
 	"github.com/canonical/go-dqlite"
 	"github.com/canonical/go-dqlite/driver"
-	gen "github.com/canonical/k8s-dqlite/pkg/kine/drivers/generic"
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/sqlite"
 	"github.com/canonical/k8s-dqlite/pkg/kine/server"
 	"github.com/canonical/k8s-dqlite/pkg/kine/tls"
@@ -30,30 +25,11 @@ func init() {
 	}
 }
 
-type opts struct {
-	dsn        string
-	driverName string // If not empty, use a pre-registered dqlite driver
-
-	compactInterval time.Duration
-	pollInterval    time.Duration
-
-	admissionControlPolicy                      string
-	admissionControlPolicyLimitMaxConcurrentTxn int64
-}
-
 func New(ctx context.Context, datasourceName string, tlsInfo tls.Config) (server.Backend, error) {
 	logrus.Printf("New kine for dqlite")
-	opts, err := parseOpts(datasourceName)
-	if err != nil {
-		return nil, err
-	}
 
-	logrus.Printf("DriverName is %s.", opts.driverName)
-	if opts.driverName == "" {
-		return nil, fmt.Errorf("required option 'driver-name' not set in connection string")
-	}
-
-	backend, generic, err := sqlite.NewVariant(ctx, opts.driverName, opts.dsn)
+	// Driver name will be extracted from query parameters
+	backend, generic, err := sqlite.NewVariant(ctx, "", datasourceName)
 	if err != nil {
 		return nil, errors.Wrap(err, "sqlite client")
 	}
@@ -98,12 +74,6 @@ func New(ctx context.Context, datasourceName string, tlsInfo tls.Config) (server
 		return err
 	}
 
-	generic.CompactInterval = opts.compactInterval
-	generic.PollInterval = opts.pollInterval
-	generic.AdmissionControlPolicy = gen.NewAdmissionControlPolicy(
-		opts.admissionControlPolicy,
-		opts.admissionControlPolicyLimitMaxConcurrentTxn,
-	)
 	return backend, nil
 }
 
@@ -173,62 +143,4 @@ func migrate(ctx context.Context, newDB *sql.DB) (exitErr error) {
 	}
 
 	return nil
-}
-
-func parseOpts(dsn string) (opts, error) {
-	result := opts{
-		dsn: dsn,
-	}
-
-	parts := strings.SplitN(dsn, "?", 2)
-	if len(parts) == 1 {
-		return result, nil
-	}
-
-	values, err := url.ParseQuery(parts[1])
-	if err != nil {
-		return result, err
-	}
-
-	for k, vs := range values {
-		if len(vs) == 0 {
-			continue
-		}
-
-		switch k {
-		case "driver-name":
-			result.driverName = vs[0]
-		case "compact-interval":
-			d, err := time.ParseDuration(vs[0])
-			if err != nil {
-				return opts{}, fmt.Errorf("failed to parse compact-interval duration value %q: %w", vs[0], err)
-			}
-			result.compactInterval = d
-		case "poll-interval":
-			d, err := time.ParseDuration(vs[0])
-			if err != nil {
-				return opts{}, fmt.Errorf("failed to parse poll-interval duration value %q: %w", vs[0], err)
-			}
-			result.pollInterval = d
-		case "admission-control-policy":
-			result.admissionControlPolicy = vs[0]
-		case "admission-control-policy-limit-max-concurrent-txn":
-			d, err := strconv.ParseInt(vs[0], 10, 64)
-			if err != nil {
-				return opts{}, fmt.Errorf("failed to parse max-concurrent-txn value %q: %w", vs[0], err)
-			}
-			result.admissionControlPolicyLimitMaxConcurrentTxn = d
-		default:
-			return opts{}, fmt.Errorf("unknown option %s=%v", k, vs)
-		}
-		delete(values, k)
-	}
-
-	if len(values) == 0 {
-		result.dsn = parts[0]
-	} else {
-		result.dsn = fmt.Sprintf("%s?%s", parts[0], values.Encode())
-	}
-
-	return result, nil
 }

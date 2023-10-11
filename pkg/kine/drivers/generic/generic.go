@@ -241,8 +241,6 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 
 		FillSQL: q(`INSERT INTO kine(id, name, created, deleted, create_revision, prev_revision, lease, value, old_value)
 			VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`, paramCharacter, numbered),
-
-		AdmissionControlPolicy: &allowAllPolicy{},
 	}, err
 }
 
