@@ -4,7 +4,7 @@ go 1.20
 
 require (
 	github.com/Rican7/retry v0.3.1
-	github.com/canonical/go-dqlite v1.11.8
+	github.com/canonical/go-dqlite v1.20.0
 	github.com/mattn/go-sqlite3 v2.0.3+incompatible
 	github.com/onsi/gomega v1.27.10
 	github.com/pkg/errors v0.9.1
@@ -16,6 +16,7 @@ require (
 	go.etcd.io/etcd/client/pkg/v3 v3.5.0
 	go.etcd.io/etcd/client/v3 v3.5.0
 	go.etcd.io/etcd/server/v3 v3.5.0
+	golang.org/x/sync v0.2.0
 	golang.org/x/sys v0.10.0
 	google.golang.org/grpc v1.38.0
 	gopkg.in/yaml.v2 v2.4.0
@@ -69,7 +70,6 @@ require (
 	go.uber.org/zap v1.17.0 // indirect
 	golang.org/x/crypto v0.11.0 // indirect
 	golang.org/x/net v0.12.0 // indirect
-	golang.org/x/sync v0.2.0 // indirect
 	golang.org/x/text v0.11.0 // indirect
 	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba // indirect
 	google.golang.org/genproto v0.0.0-20210602131652-f16073e35f0c // indirect
