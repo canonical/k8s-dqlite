@@ -18,16 +18,27 @@ type AdmissionControlPolicy interface {
 }
 
 const (
-	statusAccepted string = "accepted"
-	statusDenied   string = "denied"
+	// operation was evaluated by the admission control and accepted
+	resultAccepted string = "accepted"
+	// operation was evaluated by the admission control and denied by policy
+	resultDenied string = "denied"
 )
+
+// Queries that perform write operations on the database
+var writeQueries = map[string]struct{}{
+	"update_compact_sql":        {},
+	"delete_sql":                {},
+	"fill_sql":                  {},
+	"insert_last_insert_id_sql": {},
+	"insert_sql":                {},
+}
 
 // allowAllPolicy always admits queries.
 type allowAllPolicy struct{}
 
 // Admit always admits requests for AllowAllPolicy.
 func (p *allowAllPolicy) Admit(ctx context.Context, txName string) (func(), error) {
-	recordOpAdmissionControl(txName, statusAccepted)
+	recordOpAdmissionControl(txName, resultAccepted)
 	incCurrentOps(txName)
 	return func() {
 		decCurrentOps(txName)
@@ -38,33 +49,46 @@ func (p *allowAllPolicy) Admit(ctx context.Context, txName string) (func(), erro
 type limitPolicy struct {
 	maxConcurrentTxn int64
 	semaphore        *semaphore.Weighted
+	onlyWriteQueries bool
 }
 
-func newLimitPolicy(maxConcurrentTxn int64) *limitPolicy {
+func newLimitPolicy(onlyWriteQueries bool, maxConcurrentTxn int64) *limitPolicy {
 	return &limitPolicy{
 		maxConcurrentTxn: maxConcurrentTxn,
 		semaphore:        semaphore.NewWeighted(maxConcurrentTxn),
+		onlyWriteQueries: onlyWriteQueries,
 	}
+
+}
+
+func (p *limitPolicy) shouldCheck(txName string) bool {
+	_, isWriteQuery := writeQueries[txName]
+	return !p.onlyWriteQueries || isWriteQuery
 }
 
 func (p *limitPolicy) Admit(ctx context.Context, txName string) (func(), error) {
-	ok := p.semaphore.TryAcquire(1)
-	if !ok {
-		recordOpAdmissionControl(txName, statusDenied)
-		return func() {}, fmt.Errorf("number of concurrent database operations reached limit (%d)", p.maxConcurrentTxn)
+	if p.shouldCheck(txName) {
+		ok := p.semaphore.TryAcquire(1)
+		if !ok {
+			recordOpAdmissionControl(txName, resultDenied)
+			return func() {}, fmt.Errorf("number of concurrent database operations reached limit (%d)", p.maxConcurrentTxn)
+		}
 	}
-	recordOpAdmissionControl(txName, statusAccepted)
+
+	recordOpAdmissionControl(txName, resultAccepted)
 	incCurrentOps(txName)
 	return func() {
 		decCurrentOps(txName)
-		p.semaphore.Release(1)
+		if p.shouldCheck(txName) {
+			p.semaphore.Release(1)
+		}
 	}, nil
 }
 
-func NewAdmissionControlPolicy(policyName string, limitMaxConcurrentTxn int64) AdmissionControlPolicy {
+func NewAdmissionControlPolicy(policyName string, onlyWriteQueries bool, limitMaxConcurrentTxn int64) AdmissionControlPolicy {
 	switch policyName {
 	case "limit":
-		return newLimitPolicy(limitMaxConcurrentTxn)
+		return newLimitPolicy(onlyWriteQueries, limitMaxConcurrentTxn)
 	case "allow-all":
 		return &allowAllPolicy{}
 

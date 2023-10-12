@@ -9,6 +9,7 @@ import (
 	"time"
 
 	. "github.com/onsi/gomega"
+
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
@@ -16,7 +17,7 @@ import (
 // by the admission control.
 func TestAdmissionControl(t *testing.T) {
 	ctx := context.Background()
-	client, _ := newKine(ctx, t, "admission-control-policy=limit", "admission-control-policy-limit-max-concurrent-txn=600")
+	client, _ := newKine(ctx, t, "admission-control-policy=limit", "admission-control-policy-limit-max-concurrent-txn=600", "admission-control-only-write-queries=true")
 	g := NewWithT(t)
 
 	// create a key space of 1000 items
@@ -100,7 +101,9 @@ func TestAdmissionControl(t *testing.T) {
 
 		t.Logf("Executed 1000 queries in %.2f seconds\n", duration.Seconds())
 		// It is expected that some queries are denied by the admission control due to the load.
-		g.Expect(numSuccessfulReaderTxn.Load()).To(BeNumerically("<", readers*readers_replication*read_entries))
 		g.Expect(numSuccessfulWriterTxn.Load()).To(BeNumerically("<", writers*writers_replication*write_entries))
+
+		// read queries should be ignored by the admission control
+		g.Expect(numSuccessfulReaderTxn.Load()).To(BeNumerically("==", readers*readers_replication*read_entries))
 	})
 }
