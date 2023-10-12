@@ -22,12 +22,12 @@ var (
 	}, []string{"tx_name", "result"})
 	metricsCurrentOps = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "k8s_dqlite_generic_current_ops",
-		Help: "Number of database operations that run concurrently by tx_name",
+		Help: "Total number of database operations that are currently running by tx_name",
 	}, []string{"tx_name"})
 	metricsOpAdmissionControl = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "k8s_dqlite_generic_op_admission_control",
-		Help: "Number of database operations that the admission control handled by by tx_name and status",
-	}, []string{"tx_name", "status"})
+		Help: "Total number of database operations that the admission control handled by tx_name and result",
+	}, []string{"tx_name", "result"})
 )
 
 func errorToResultLabel(err error) string {
