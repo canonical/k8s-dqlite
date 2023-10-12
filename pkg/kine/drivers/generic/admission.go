@@ -19,7 +19,7 @@ type AdmissionControlPolicy interface {
 
 const (
 	statusAccepted string = "accepted"
-	statusDenied          = "denied"
+	statusDenied   string = "denied"
 )
 
 // allowAllPolicy always admits queries.
@@ -27,10 +27,10 @@ type allowAllPolicy struct{}
 
 // Admit always admits requests for AllowAllPolicy.
 func (p *allowAllPolicy) Admit(ctx context.Context, txName string) (func(), error) {
-	recordTxAdmissionControl(txName, statusAccepted)
-	incCurrentTx(txName)
+	recordOpAdmissionControl(txName, statusAccepted)
+	incCurrentOps(txName)
 	return func() {
-		decCurrentTx(txName)
+		decCurrentOps(txName)
 	}, nil
 }
 
@@ -50,13 +50,13 @@ func newLimitPolicy(maxConcurrentTxn int64) *limitPolicy {
 func (p *limitPolicy) Admit(ctx context.Context, txName string) (func(), error) {
 	ok := p.semaphore.TryAcquire(1)
 	if !ok {
-		recordTxAdmissionControl(txName, statusDenied)
-		return func() {}, fmt.Errorf("current Txns reached limit (%d)", p.maxConcurrentTxn)
+		recordOpAdmissionControl(txName, statusDenied)
+		return func() {}, fmt.Errorf("number of concurrent database operations reached limit (%d)", p.maxConcurrentTxn)
 	}
-	recordTxAdmissionControl(txName, statusAccepted)
-	incCurrentTx(txName)
+	recordOpAdmissionControl(txName, statusAccepted)
+	incCurrentOps(txName)
 	return func() {
-		decCurrentTx(txName)
+		decCurrentOps(txName)
 		p.semaphore.Release(1)
 	}, nil
 }
