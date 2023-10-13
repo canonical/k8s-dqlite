@@ -14,15 +14,24 @@ type AdmissionControlPolicy interface {
 	// If the query is not admitted, a non-nil error is returned with the reason why the query was denied.
 	// If the query is admitted, then the error will be nil and a callback function is returned to the caller.
 	// The caller must execute it after finishing the query
-	Admit(context.Context) (callOnFinish func(), err error)
+	Admit(ctx context.Context, txName string) (callOnFinish func(), err error)
 }
+
+const (
+	statusAccepted string = "accepted"
+	statusDenied   string = "denied"
+)
 
 // allowAllPolicy always admits queries.
 type allowAllPolicy struct{}
 
 // Admit always admits requests for AllowAllPolicy.
-func (p *allowAllPolicy) Admit(context.Context) (func(), error) {
-	return func() {}, nil
+func (p *allowAllPolicy) Admit(ctx context.Context, txName string) (func(), error) {
+	recordOpAdmissionControl(txName, statusAccepted)
+	incCurrentOps(txName)
+	return func() {
+		decCurrentOps(txName)
+	}, nil
 }
 
 // limitPolicy denies queries when the maximum threshold is reached.
@@ -38,12 +47,16 @@ func newLimitPolicy(maxConcurrentTxn int64) *limitPolicy {
 	}
 }
 
-func (p *limitPolicy) Admit(ctx context.Context) (func(), error) {
+func (p *limitPolicy) Admit(ctx context.Context, txName string) (func(), error) {
 	ok := p.semaphore.TryAcquire(1)
 	if !ok {
-		return func() {}, fmt.Errorf("current Txns reached limit (%d)", p.maxConcurrentTxn)
+		recordOpAdmissionControl(txName, statusDenied)
+		return func() {}, fmt.Errorf("number of concurrent database operations reached limit (%d)", p.maxConcurrentTxn)
 	}
+	recordOpAdmissionControl(txName, statusAccepted)
+	incCurrentOps(txName)
 	return func() {
+		decCurrentOps(txName)
 		p.semaphore.Release(1)
 	}, nil
 }
