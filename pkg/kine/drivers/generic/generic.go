@@ -123,7 +123,7 @@ type Generic struct {
 	TranslateErr                  TranslateErr
 	ErrCode                       ErrCode
 
-	ac AdmissionControlPolicy
+	AdmissionControlPolicy AdmissionControlPolicy
 
 	// CompactInterval is interval between database compactions performed by kine.
 	CompactInterval time.Duration
@@ -174,7 +174,6 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 		db  *sql.DB
 		err error
 	)
-
 	for i := 0; i < 300; i++ {
 		db, err = openAndTest(driverName, dataSourceName)
 		if err == nil {
@@ -242,10 +241,7 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 
 		FillSQL: q(`INSERT INTO kine(id, name, created, deleted, create_revision, prev_revision, lease, value, old_value)
 			VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`, paramCharacter, numbered),
-
-		// Disable admission control for now to maintain backward-compatibility.
-		// TODO(MK-1397): Make policy and config configurable via CLI.
-		ac: &allowAllPolicy{},
+		AdmissionControlPolicy: &allowAllPolicy{},
 	}, err
 }
 
@@ -318,7 +314,7 @@ func (d *Generic) query(ctx context.Context, txName, sql string, args ...interfa
 	i := uint(0)
 	start := time.Now()
 
-	done, err := d.ac.Admit(ctx)
+	done, err := d.AdmissionControlPolicy.Admit(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("denied: %w", err)
 	}
@@ -353,7 +349,7 @@ func (d *Generic) query(ctx context.Context, txName, sql string, args ...interfa
 func (d *Generic) queryPrepared(ctx context.Context, txName, sql string, prepared *sql.Stmt, args ...interface{}) (result *sql.Rows, err error) {
 	logrus.Tracef("QUERY %v : %s", args, Stripped(sql))
 
-	done, err := d.ac.Admit(ctx)
+	done, err := d.AdmissionControlPolicy.Admit(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("denied: %w", err)
 	}
@@ -395,7 +391,7 @@ func (d *Generic) executePrepared(ctx context.Context, txName, sql string, prepa
 		recordOpResult(txName, err, start)
 	}()
 
-	done, err := d.ac.Admit(ctx)
+	done, err := d.AdmissionControlPolicy.Admit(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("denied: %w", err)
 	}
@@ -437,7 +433,7 @@ func (d *Generic) GetCompactRevision(ctx context.Context) (int64, int64, error) 
 		recordTxResult("revision_interval_sql", err)
 	}()
 
-	done, err := d.ac.Admit(ctx)
+	done, err := d.AdmissionControlPolicy.Admit(ctx)
 	if err != nil {
 		return 0, 0, fmt.Errorf("denied: %w", err)
 	}
@@ -511,7 +507,7 @@ func (d *Generic) CurrentRevision(ctx context.Context) (int64, error) {
 	var id int64
 	var err error
 
-	done, err := d.ac.Admit(ctx)
+	done, err := d.AdmissionControlPolicy.Admit(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("denied: %w", err)
 	}

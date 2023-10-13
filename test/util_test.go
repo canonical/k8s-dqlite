@@ -2,6 +2,8 @@ package test
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,17 +25,24 @@ var (
 	testExpirePollPeriod = 100 * time.Millisecond
 )
 
-// newKine spins up a new instance of kine. it also registers cleanup functions for temporary data
+// newKine spins up a new instance of kine.
 //
-// newKine is currently hardcoded to using sqlite and a unix socket listener, but might be extended in the future
+// newKine will create a sqlite or dqlite endpoint based on the provided go build tags (see e.g. util_test_dqlite.go)
+// Custom endpoint query parameters can be configured with the `qs` parameter (e.g. "admission-control-policy=limit")
 //
 // newKine will panic in case of error
 //
 // newKine will return a context as well as a configured etcd client for the kine instance
-func newKine(ctx context.Context, tb testing.TB) (*clientv3.Client, server.Backend) {
+func newKine(ctx context.Context, tb testing.TB, qs ...string) (*clientv3.Client, server.Backend) {
 	logrus.SetLevel(logrus.ErrorLevel)
 
 	endpointConfig := makeEndpointConfig(ctx, tb)
+	if !strings.Contains(endpointConfig.Endpoint, "?") {
+		endpointConfig.Endpoint += "?"
+	}
+	for _, v := range qs {
+		endpointConfig.Endpoint = fmt.Sprintf("%s&%s", endpointConfig.Endpoint, v)
+	}
 	config, backend, err := endpoint.ListenAndReturnBackend(ctx, endpointConfig)
 	if err != nil {
 		panic(err)

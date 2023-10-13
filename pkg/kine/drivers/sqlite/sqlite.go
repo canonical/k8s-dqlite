@@ -4,7 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/url"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/generic"
@@ -16,13 +19,42 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+type opts struct {
+	dsn        string
+	driverName string // If not empty, use a pre-registered dqlite driver
+
+	compactInterval time.Duration
+	pollInterval    time.Duration
+
+	admissionControlPolicy                      string
+	admissionControlPolicyLimitMaxConcurrentTxn int64
+}
+
 func New(ctx context.Context, dataSourceName string) (server.Backend, error) {
 	backend, _, err := NewVariant(ctx, "sqlite3", dataSourceName)
+	if err != nil {
+		return nil, err
+	}
+
 	return backend, err
 }
 
 func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.Backend, *generic.Generic, error) {
 	const retryAttempts = 300
+
+	opts, err := parseOpts(dataSourceName)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if driverName == "" {
+		// Check if driver name is set via query parameters
+		if opts.driverName == "" {
+			return nil, nil, fmt.Errorf("required option 'driver-name' not set in connection string")
+		}
+		driverName = opts.driverName
+	}
+	logrus.Printf("DriverName is %s.", driverName)
 
 	if dataSourceName == "" {
 		if err := os.MkdirAll("./db", 0700); err != nil {
@@ -61,6 +93,13 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 	if err := dialect.Prepare(); err != nil {
 		return nil, nil, errors.Wrap(err, "query preparation failed")
 	}
+
+	dialect.CompactInterval = opts.compactInterval
+	dialect.PollInterval = opts.pollInterval
+	dialect.AdmissionControlPolicy = generic.NewAdmissionControlPolicy(
+		opts.admissionControlPolicy,
+		opts.admissionControlPolicyLimitMaxConcurrentTxn,
+	)
 
 	return logstructured.New(sqllog.New(dialect)), dialect, nil
 }
@@ -124,4 +163,62 @@ func migrate(ctx context.Context, txn *sql.Tx) error {
 	}
 
 	return nil
+}
+
+func parseOpts(dsn string) (opts, error) {
+	result := opts{
+		dsn: dsn,
+	}
+
+	parts := strings.SplitN(dsn, "?", 2)
+	if len(parts) == 1 {
+		return result, nil
+	}
+
+	values, err := url.ParseQuery(parts[1])
+	if err != nil {
+		return result, err
+	}
+
+	for k, vs := range values {
+		if len(vs) == 0 {
+			continue
+		}
+
+		switch k {
+		case "driver-name":
+			result.driverName = vs[0]
+		case "compact-interval":
+			d, err := time.ParseDuration(vs[0])
+			if err != nil {
+				return opts{}, fmt.Errorf("failed to parse compact-interval duration value %q: %w", vs[0], err)
+			}
+			result.compactInterval = d
+		case "poll-interval":
+			d, err := time.ParseDuration(vs[0])
+			if err != nil {
+				return opts{}, fmt.Errorf("failed to parse poll-interval duration value %q: %w", vs[0], err)
+			}
+			result.pollInterval = d
+		case "admission-control-policy":
+			result.admissionControlPolicy = vs[0]
+		case "admission-control-policy-limit-max-concurrent-txn":
+			d, err := strconv.ParseInt(vs[0], 10, 64)
+			if err != nil {
+				return opts{}, fmt.Errorf("failed to parse max-concurrent-txn value %q: %w", vs[0], err)
+			}
+			result.admissionControlPolicyLimitMaxConcurrentTxn = d
+		default:
+			return opts{}, fmt.Errorf("unknown option %s=%v", k, vs)
+		}
+		delete(values, k)
+	}
+
+	if len(values) == 0 {
+		result.dsn = parts[0]
+	} else {
+		result.dsn = fmt.Sprintf("%s?%s", parts[0], values.Encode())
+	}
+
+	return result, nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/semaphore"
 )
 
@@ -26,23 +27,36 @@ func (p *allowAllPolicy) Admit(context.Context) (func(), error) {
 
 // limitPolicy denies queries when the maximum threshold is reached.
 type limitPolicy struct {
-	MaxRunningTxn int64
-	semaphore     *semaphore.Weighted
+	maxConcurrentTxn int64
+	semaphore        *semaphore.Weighted
 }
 
-func newLimitPolicy(maxRunningTxn int64) *limitPolicy {
+func newLimitPolicy(maxConcurrentTxn int64) *limitPolicy {
 	return &limitPolicy{
-		MaxRunningTxn: maxRunningTxn,
-		semaphore:     semaphore.NewWeighted(maxRunningTxn),
+		maxConcurrentTxn: maxConcurrentTxn,
+		semaphore:        semaphore.NewWeighted(maxConcurrentTxn),
 	}
 }
 
-func (p *limitPolicy) admit(ctx context.Context) (func(), error) {
+func (p *limitPolicy) Admit(ctx context.Context) (func(), error) {
 	ok := p.semaphore.TryAcquire(1)
 	if !ok {
-		return func() {}, fmt.Errorf("current Txns reached limit (%d)", p.MaxRunningTxn)
+		return func() {}, fmt.Errorf("current Txns reached limit (%d)", p.maxConcurrentTxn)
 	}
 	return func() {
 		p.semaphore.Release(1)
 	}, nil
+}
+
+func NewAdmissionControlPolicy(policyName string, limitMaxConcurrentTxn int64) AdmissionControlPolicy {
+	switch policyName {
+	case "limit":
+		return newLimitPolicy(limitMaxConcurrentTxn)
+	case "allow-all":
+		return &allowAllPolicy{}
+
+	default:
+		logrus.Warnf("unknown admission control policy %q - fallback to 'allow-all'", policyName)
+		return &allowAllPolicy{}
+	}
 }
