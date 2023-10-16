@@ -25,12 +25,12 @@ const (
 )
 
 // Queries that perform write operations on the database
-var writeQueries = map[string]struct{}{
-	"update_compact_sql":        {},
-	"delete_sql":                {},
-	"fill_sql":                  {},
-	"insert_last_insert_id_sql": {},
-	"insert_sql":                {},
+var writeQueries = map[string]bool{
+	"update_compact_sql":        true,
+	"delete_sql":                true,
+	"fill_sql":                  true,
+	"insert_last_insert_id_sql": true,
+	"insert_sql":                true,
 }
 
 // allowAllPolicy always admits queries.
@@ -61,13 +61,9 @@ func newLimitPolicy(onlyWriteQueries bool, maxConcurrentTxn int64) *limitPolicy 
 
 }
 
-func (p *limitPolicy) shouldCheck(txName string) bool {
-	_, isWriteQuery := writeQueries[txName]
-	return !p.onlyWriteQueries || isWriteQuery
-}
-
 func (p *limitPolicy) Admit(ctx context.Context, txName string) (func(), error) {
-	if p.shouldCheck(txName) {
+	needSem := !p.onlyWriteQueries || writeQueries[txName]
+	if needSem {
 		ok := p.semaphore.TryAcquire(1)
 		if !ok {
 			recordOpAdmissionControl(txName, resultDenied)
@@ -79,7 +75,7 @@ func (p *limitPolicy) Admit(ctx context.Context, txName string) (func(), error) 
 	incCurrentOps(txName)
 	return func() {
 		decCurrentOps(txName)
-		if p.shouldCheck(txName) {
+		if needSem {
 			p.semaphore.Release(1)
 		}
 	}, nil
