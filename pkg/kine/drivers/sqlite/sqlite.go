@@ -29,6 +29,10 @@ type opts struct {
 	admissionControlPolicy                      string
 	admissionControlPolicyLimitMaxConcurrentTxn int64
 	admissionControlOnlyWriteQueries            bool
+
+	batchingInterval   time.Duration
+	batchingMaxQueries int
+	batchingEnabled    bool
 }
 
 func New(ctx context.Context, dataSourceName string) (server.Backend, error) {
@@ -102,6 +106,10 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 		opts.admissionControlOnlyWriteQueries,
 		opts.admissionControlPolicyLimitMaxConcurrentTxn,
 	)
+	dialect.BatchingEnabled = opts.batchingEnabled
+	dialect.BatchingInterval = opts.batchingInterval
+	dialect.BatchingMaxQueries = opts.batchingMaxQueries
+	dialect.InitializeWriteBatching(ctx)
 
 	return logstructured.New(sqllog.New(dialect)), dialect, nil
 }
@@ -216,6 +224,25 @@ func parseOpts(dsn string) (opts, error) {
 				return opts{}, fmt.Errorf("failed to parse admission-control-only-writes value %q: %w", vs[0], err)
 			}
 			result.admissionControlOnlyWriteQueries = d
+		case "batching-interval":
+			d, err := time.ParseDuration(vs[0])
+			if err != nil {
+				return opts{}, fmt.Errorf("failed to parse batching-interval duration value %q: %w", vs[0], err)
+			}
+			result.batchingInterval = d
+		case "batching-max-queries":
+			d, err := strconv.ParseInt(vs[0], 10, 64)
+			if err != nil {
+				return opts{}, fmt.Errorf("failed to parse max-concurrent-txn value %q: %w", vs[0], err)
+			}
+			result.batchingMaxQueries = int(d)
+
+		case "batching-enabled":
+			d, err := strconv.ParseBool(vs[0])
+			if err != nil {
+				return opts{}, fmt.Errorf("failed to parse batching-enabled value %q: %w", vs[0], err)
+			}
+			result.batchingEnabled = d
 		default:
 			return opts{}, fmt.Errorf("unknown option %s=%v", k, vs)
 		}

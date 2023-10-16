@@ -90,6 +90,11 @@ type ErrRetry func(error) bool
 type TranslateErr func(error) error
 type ErrCode func(error) string
 
+type BatchedInsert struct {
+	args  []interface{}
+	retCh chan int64
+}
+
 type Generic struct {
 	sync.Mutex
 
@@ -122,13 +127,18 @@ type Generic struct {
 	Retry                         ErrRetry
 	TranslateErr                  TranslateErr
 	ErrCode                       ErrCode
+	flushCh                       chan struct{}
+	batchingQueue                 []BatchedInsert
 
 	AdmissionControlPolicy AdmissionControlPolicy
 
 	// CompactInterval is interval between database compactions performed by kine.
 	CompactInterval time.Duration
 	// PollInterval is the event poll interval used by kine.
-	PollInterval time.Duration
+	PollInterval       time.Duration
+	BatchingInterval   time.Duration
+	BatchingMaxQueries int
+	BatchingEnabled    bool
 }
 
 func configureConnectionPooling(db *sql.DB) {
@@ -381,6 +391,104 @@ func (d *Generic) queryRowPrepared(ctx context.Context, txName, sql string, prep
 	return r
 }
 
+func (d *Generic) InitializeWriteBatching(ctx context.Context) {
+	if d.BatchingEnabled && d.BatchingInterval > 0 && d.BatchingMaxQueries > 0 {
+		d.flushCh = make(chan struct{})
+		d.batchingQueue = make([]BatchedInsert, 0, d.BatchingMaxQueries)
+
+		go d.watchBatchQueue(ctx)
+	}
+}
+
+func (d *Generic) processBatchedInserts(ctx context.Context, queue []BatchedInsert) ([]int64, error) {
+	valueStrings := make([]string, 0, len(queue))
+	// len(queue) * argument_count per insert
+	valueArgs := make([]interface{}, 0, len(queue)*8)
+
+	for _, insertItem := range queue {
+		valueStrings = append(valueStrings, "(?, ?, ?, ?, ?, ?, ?, ?)")
+		valueArgs = append(valueArgs, insertItem.args...)
+	}
+
+	// Maybe move this into the Generic struct like other queries
+	// Although since we are dynamically generating this we'd only store the template string there
+	stmt := fmt.Sprintf("INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value) VALUES%s", strings.Join(valueStrings, ","))
+
+	prepared, err := d.DB.Prepare(stmt)
+	if err != nil {
+		logrus.WithError(err).Error("Process batch queue error")
+		return nil, err
+	}
+
+	row, err := d.executePrepared(ctx, "batch_insert_last_insert_id_sql", stmt, prepared, valueArgs...)
+
+	if err != nil {
+		logrus.WithError(err).Error("Process batch queue error")
+		return nil, err
+	}
+
+	lastId, err := row.LastInsertId()
+
+	if err != nil {
+		logrus.WithError(err).Error("Process batch queue error")
+		return nil, err
+	}
+
+	var ids []int64
+
+	// Ideally instead of counting back from LastInsertId, sqlite supports RETURNING
+	// so something like "INSERT INTO .... RETURNING" id would be better.
+	// However db.Prepare complains about wrong syntax when RETURNING is used
+	for i := len(queue); i > 0; i-- {
+		ids = append(ids, lastId-int64(i)+1)
+	}
+
+	return ids, nil
+}
+
+func (d *Generic) processBatchQueue(ctx context.Context) {
+	if len(d.batchingQueue) > 0 {
+		dcq := make([]BatchedInsert, len(d.batchingQueue))
+		copy(dcq, d.batchingQueue)
+
+		ids, err := d.processBatchedInserts(ctx, dcq)
+
+		if err != nil {
+			logrus.WithError(err).Error("Process batch queue error")
+			return
+		}
+
+		for i, insertItem := range dcq {
+			insertItem.retCh <- ids[i]
+		}
+
+		d.batchingQueue = make([]BatchedInsert, 0, d.BatchingMaxQueries)
+	}
+}
+
+func (d *Generic) watchBatchQueue(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			d.processBatchQueue(ctx)
+			return
+		case <-d.flushCh:
+			d.processBatchQueue(ctx)
+		case <-time.After(d.BatchingInterval):
+			d.processBatchQueue(ctx)
+		}
+	}
+}
+
+func (d *Generic) batchQueryRowPrepared(ctx context.Context, txName, sqli string, prepared *sql.Stmt, args ...interface{}) (id int64) {
+	ret := make(chan int64)
+	d.batchingQueue = append(d.batchingQueue, BatchedInsert{retCh: ret, args: args})
+	if len(d.batchingQueue) == d.BatchingMaxQueries {
+		d.flushCh <- struct{}{}
+	}
+	return <-ret
+}
+
 func (d *Generic) executePrepared(ctx context.Context, txName, sql string, prepared *sql.Stmt, args ...interface{}) (result sql.Result, err error) {
 	i := uint(0)
 	start := time.Now()
@@ -563,6 +671,12 @@ func (d *Generic) Insert(ctx context.Context, key string, create, delete bool, c
 	}
 	if delete {
 		dVal = 1
+	}
+
+	if d.BatchingEnabled {
+		// Down below should return errors encountered while the batched operations are processed
+		id = d.batchQueryRowPrepared(ctx, "insert_sql", d.InsertSQL, d.insertSQLPrepared, key, cVal, dVal, createRevision, previousRevision, ttl, value, prevValue)
+		return id, nil
 	}
 
 	if d.LastInsertID {
