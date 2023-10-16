@@ -36,6 +36,7 @@ var (
 
 		admissionControlPolicy   string
 		acpLimitMaxConcurrentTxn int64
+		acpOnlyWriteQueries      bool
 	}
 
 	rootCmd = &cobra.Command{
@@ -77,6 +78,7 @@ var (
 				rootCmdOpts.lowAvailableStorageAction,
 				rootCmdOpts.admissionControlPolicy,
 				rootCmdOpts.acpLimitMaxConcurrentTxn,
+				rootCmdOpts.acpOnlyWriteQueries,
 			)
 			if err != nil {
 				logrus.WithError(err).Fatal("Failed to create server")
@@ -138,4 +140,5 @@ func init() {
 	rootCmd.Flags().StringVar(&rootCmdOpts.admissionControlPolicy, "admission-control-policy", "allow-all", "Transaction admission control policy to use. One of (allow-all|limit-concurrent-transactions). Set to allow-all to disable the admission control")
 	// TODO(MK-1408): This value is highly dependend on underlying hardware, thus making the default value a bit useless. The linked card will implement a dynamic way to set this value.
 	rootCmd.Flags().Int64Var(&rootCmdOpts.acpLimitMaxConcurrentTxn, "admission-control-policy-limit-max-concurrent-transactions", 300, "Maximum number of transactions that are allowed to run concurrently. Transactions will not be admitted after the limit is reached.")
+	rootCmd.Flags().BoolVar(&rootCmdOpts.acpOnlyWriteQueries, "admission-control-only-for-write-queries", false, "If set, admission control will only be applied to write queries.")
 }

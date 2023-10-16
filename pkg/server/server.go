@@ -53,7 +53,20 @@ var expectedFilesDuringInitialization = map[string]struct{}{
 }
 
 // New creates a new instance of Server based on configuration.
-func New(dir string, listen string, enableTLS bool, diskMode bool, clientSessionCacheSize uint, minTLSVersion string, watchAvailableStorageInterval time.Duration, watchAvailableStorageMinBytes uint64, lowAvailableStorageAction string, admissionControlPolicy string, admissionControlPolicyLimitMaxConcurrentTxn int64) (*Server, error) {
+func New(
+	dir string,
+	listen string,
+	enableTLS bool,
+	diskMode bool,
+	clientSessionCacheSize uint,
+	minTLSVersion string,
+	watchAvailableStorageInterval time.Duration,
+	watchAvailableStorageMinBytes uint64,
+	lowAvailableStorageAction string,
+	admissionControlPolicy string,
+	admissionControlPolicyLimitMaxConcurrentTxn int64,
+	admissionControlOnlyWriteQueries bool,
+) (*Server, error) {
 	var (
 		options         []app.Option
 		kineConfig      endpoint.Config
@@ -256,6 +269,7 @@ func New(dir string, listen string, enableTLS bool, diskMode bool, clientSession
 
 	params["admission-control-policy"] = []string{admissionControlPolicy}
 	params["admission-control-policy-limit-max-concurrent-txn"] = []string{fmt.Sprintf("%v", admissionControlPolicyLimitMaxConcurrentTxn)}
+	params["admission-control-only-write-queries"] = []string{fmt.Sprintf("%v", admissionControlOnlyWriteQueries)}
 
 	kineConfig.Listener = listen
 	kineConfig.Endpoint = fmt.Sprintf("dqlite://k8s?%s", params.Encode())

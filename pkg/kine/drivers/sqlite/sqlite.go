@@ -28,6 +28,7 @@ type opts struct {
 
 	admissionControlPolicy                      string
 	admissionControlPolicyLimitMaxConcurrentTxn int64
+	admissionControlOnlyWriteQueries            bool
 }
 
 func New(ctx context.Context, dataSourceName string) (server.Backend, error) {
@@ -98,6 +99,7 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 	dialect.PollInterval = opts.pollInterval
 	dialect.AdmissionControlPolicy = generic.NewAdmissionControlPolicy(
 		opts.admissionControlPolicy,
+		opts.admissionControlOnlyWriteQueries,
 		opts.admissionControlPolicyLimitMaxConcurrentTxn,
 	)
 
@@ -208,6 +210,12 @@ func parseOpts(dsn string) (opts, error) {
 				return opts{}, fmt.Errorf("failed to parse max-concurrent-txn value %q: %w", vs[0], err)
 			}
 			result.admissionControlPolicyLimitMaxConcurrentTxn = d
+		case "admission-control-only-write-queries":
+			d, err := strconv.ParseBool(vs[0])
+			if err != nil {
+				return opts{}, fmt.Errorf("failed to parse admission-control-only-writes value %q: %w", vs[0], err)
+			}
+			result.admissionControlOnlyWriteQueries = d
 		default:
 			return opts{}, fmt.Errorf("unknown option %s=%v", k, vs)
 		}
