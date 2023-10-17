@@ -64,7 +64,7 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 		dataSourceName = "./db/state.db?_journal=WAL&cache=shared"
 	}
 
-	dialect, err := generic.Open(ctx, driverName, dataSourceName, "?", false)
+	dialect, err := generic.Open(ctx, driverName, opts.dsn, "?", false)
 	if err != nil {
 		return nil, nil, err
 	}
