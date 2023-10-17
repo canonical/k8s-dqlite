@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -25,9 +24,6 @@ type opts struct {
 
 	compactInterval time.Duration
 	pollInterval    time.Duration
-
-	admissionControlPolicy                      string
-	admissionControlPolicyLimitMaxConcurrentTxn int64
 }
 
 func New(ctx context.Context, dataSourceName string) (server.Backend, error) {
@@ -97,8 +93,8 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 	dialect.CompactInterval = opts.compactInterval
 	dialect.PollInterval = opts.pollInterval
 	dialect.AdmissionControlPolicy = generic.NewAdmissionControlPolicy(
-		opts.admissionControlPolicy,
-		opts.admissionControlPolicyLimitMaxConcurrentTxn,
+		"limit",
+		300,
 	)
 
 	return logstructured.New(sqllog.New(dialect)), dialect, nil
@@ -200,14 +196,6 @@ func parseOpts(dsn string) (opts, error) {
 				return opts{}, fmt.Errorf("failed to parse poll-interval duration value %q: %w", vs[0], err)
 			}
 			result.pollInterval = d
-		case "admission-control-policy":
-			result.admissionControlPolicy = vs[0]
-		case "admission-control-policy-limit-max-concurrent-txn":
-			d, err := strconv.ParseInt(vs[0], 10, 64)
-			if err != nil {
-				return opts{}, fmt.Errorf("failed to parse max-concurrent-txn value %q: %w", vs[0], err)
-			}
-			result.admissionControlPolicyLimitMaxConcurrentTxn = d
 		default:
 			return opts{}, fmt.Errorf("unknown option %s=%v", k, vs)
 		}
