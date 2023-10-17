@@ -23,8 +23,7 @@ func New(ctx context.Context, dataSourceName string) (server.Backend, error) {
 
 func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.Backend, *generic.Generic, error) {
 	const retryAttempts = 300
-	logrus.Info("Sequential remove 3")
-
+	logrus.WithField("driverName", driverName).WithField("dataSourceName", dataSourceName).Print("Sequential remove 5")
 	if dataSourceName == "" {
 		if err := os.MkdirAll("./db", 0700); err != nil {
 			return nil, nil, err
