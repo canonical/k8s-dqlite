@@ -38,7 +38,6 @@ type opts struct {
 
 func New(ctx context.Context, datasourceName string, tlsInfo tls.Config) (server.Backend, error) {
 	logrus.Printf("New kine for dqlite")
-
 	opts, err := parseOpts(datasourceName)
 	if err != nil {
 		return nil, err
@@ -48,8 +47,6 @@ func New(ctx context.Context, datasourceName string, tlsInfo tls.Config) (server
 	if opts.driverName == "" {
 		return nil, fmt.Errorf("required option 'driver-name' not set in connection string")
 	}
-
-	// Driver name will be extracted from query parameters
 	backend, generic, err := sqlite.NewVariant(ctx, opts.driverName, datasourceName)
 	if err != nil {
 		return nil, errors.Wrap(err, "sqlite client")
@@ -96,7 +93,6 @@ func New(ctx context.Context, datasourceName string, tlsInfo tls.Config) (server
 	}
 	generic.CompactInterval = opts.compactInterval
 	generic.PollInterval = opts.pollInterval
-
 	return backend, nil
 }
 

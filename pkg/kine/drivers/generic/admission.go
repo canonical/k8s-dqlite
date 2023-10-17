@@ -27,21 +27,21 @@ func (p *allowAllPolicy) Admit(context.Context) (func(), error) {
 
 // limitPolicy denies queries when the maximum threshold is reached.
 type limitPolicy struct {
-	maxConcurrentTxn int64
-	semaphore        *semaphore.Weighted
+	maxRunningTxn int64
+	semaphore     *semaphore.Weighted
 }
 
-func newLimitPolicy(maxConcurrentTxn int64) *limitPolicy {
+func newLimitPolicy(maxRunningTxn int64) *limitPolicy {
 	return &limitPolicy{
-		maxConcurrentTxn: maxConcurrentTxn,
-		semaphore:        semaphore.NewWeighted(maxConcurrentTxn),
+		maxRunningTxn: maxRunningTxn,
+		semaphore:     semaphore.NewWeighted(maxRunningTxn),
 	}
 }
 
 func (p *limitPolicy) Admit(ctx context.Context) (func(), error) {
 	ok := p.semaphore.TryAcquire(1)
 	if !ok {
-		return func() {}, fmt.Errorf("current Txns reached limit (%d)", p.maxConcurrentTxn)
+		return func() {}, fmt.Errorf("current Txns reached limit (%d)", p.maxRunningTxn)
 	}
 	return func() {
 		p.semaphore.Release(1)

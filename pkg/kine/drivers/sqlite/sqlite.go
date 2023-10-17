@@ -18,13 +18,12 @@ import (
 
 func New(ctx context.Context, dataSourceName string) (server.Backend, error) {
 	backend, _, err := NewVariant(ctx, "sqlite3", dataSourceName)
-
 	return backend, err
 }
 
 func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.Backend, *generic.Generic, error) {
 	const retryAttempts = 300
-	logrus.Info("Sequential remove 2")
+	logrus.Info("Sequential remove 3")
 
 	if dataSourceName == "" {
 		if err := os.MkdirAll("./db", 0700); err != nil {
