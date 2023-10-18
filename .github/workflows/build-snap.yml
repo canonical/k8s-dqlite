@@ -12,7 +12,7 @@ jobs:
 
     steps:
       - name: Checking out repo
-        uses: actions/checkout@v4.1.0
+        uses: actions/checkout@v4.1.1
       - name: Install lxd
         run: |
           sudo lxd init --auto
