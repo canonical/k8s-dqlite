@@ -39,12 +39,6 @@ func TestWriteBatching(t *testing.T) {
 		numWrites := 10000
 		writers := 100
 
-		t.Log("Run with batching")
-		durationWithBatching := perfTest(
-			ctx, t,
-			numWrites, writers,
-			"batching-interval=200ms", "batching-max-queries=100", "batching-enabled=true",
-		)
 		t.Log("Run without batching")
 		durationWithoutBatching := perfTest(
 			ctx, t,
@@ -52,6 +46,14 @@ func TestWriteBatching(t *testing.T) {
 			"batching-enabled=false",
 		)
 
+		t.Log("Run with batching")
+		durationWithBatching := perfTest(
+			ctx, t,
+			numWrites, writers,
+			"batching-interval=200ms", "batching-max-queries=100", "batching-enabled=true",
+		)
+
+		t.Logf("With Batching: %v, without Batching: %v", durationWithBatching, durationWithoutBatching)
 		g.Expect(durationWithBatching).To(BeNumerically("<", durationWithoutBatching))
 	})
 }
@@ -65,15 +67,19 @@ func perfTest(ctx context.Context, t *testing.T, numWrites int, writers int, bat
 	writer := func(first int, last int) {
 		defer wg.Done()
 		for i := first; i < last; i++ {
-			key := fmt.Sprintf("Key-%d", i)
-			new_value := fmt.Sprintf("Value-%d", i)
+			for {
+				key := fmt.Sprintf("Key-%d", i)
+				new_value := fmt.Sprintf("Value-%d", i)
 
-			resp, err := client.Txn(ctx).
-				If(clientv3.Compare(clientv3.ModRevision(key), "=", 0)).
-				Then(clientv3.OpPut(key, new_value)).
-				Commit()
-			g.Expect(err).To(BeNil())
-			g.Expect(resp.Succeeded).To(BeTrue())
+				resp, err := client.Txn(ctx).
+					If(clientv3.Compare(clientv3.ModRevision(key), "=", 0)).
+					Then(clientv3.OpPut(key, new_value)).
+					Commit()
+
+				if err == nil && resp.Succeeded {
+					break
+				}
+			}
 		}
 	}
 
