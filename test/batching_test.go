@@ -33,10 +33,34 @@ func (wg *WaitGroupCount) GetCount() int {
 
 func TestWriteBatching(t *testing.T) {
 	ctx := context.Background()
-	client, _ := newKine(ctx, t, "batching-interval=200ms", "batching-max-queries=100", "batching-enabled=true")
-
 	g := NewWithT(t)
+
+	t.Run("PerformanceComparison", func(t *testing.T) {
+		numWrites := 10000
+		writers := 100
+
+		t.Log("Run with batching")
+		durationWithBatching := perfTest(
+			ctx, t,
+			numWrites, writers,
+			"batching-interval=200ms", "batching-max-queries=100", "batching-enabled=true",
+		)
+		t.Log("Run without batching")
+		durationWithoutBatching := perfTest(
+			ctx, t,
+			numWrites, writers,
+			"batching-enabled=false",
+		)
+
+		g.Expect(durationWithBatching).To(BeNumerically("<", durationWithoutBatching))
+	})
+}
+
+func perfTest(ctx context.Context, t *testing.T, numWrites int, writers int, batchingConfig ...string) time.Duration {
+
+	client, _ := newKine(ctx, t, batchingConfig...)
 	var wg WaitGroupCount
+	g := NewWithT(t)
 
 	writer := func(first int, last int) {
 		defer wg.Done()
@@ -53,34 +77,18 @@ func TestWriteBatching(t *testing.T) {
 		}
 	}
 
-	maxWrites := 1000
-	writers := 100
-	write_entries := maxWrites / writers
+	write_entries := numWrites / writers
 	wg.Add(writers)
 
 	start := time.Now()
-	fmt.Println("Start writing")
 	for i := 0; i < writers; i++ {
 		go writer(i*write_entries, (i+1)*write_entries)
 	}
-
-	go func() {
-		for {
-
-			count := wg.GetCount()
-			fmt.Printf("WG Count: %d\n", count)
-			if count == 0 {
-				return
-			}
-			wg.GetCount()
-			time.Sleep(time.Second)
-
-		}
-	}()
 	wg.Wait()
+	duration := time.Since(start)
 
-	fmt.Println("Validating writes")
-	for i := 0; i < maxWrites; i++ {
+	// Validating writes (excluded from timing ofc)
+	for i := 0; i < numWrites; i++ {
 		key := fmt.Sprintf("Key-%d", i)
 		expectedValue := fmt.Sprintf("Value-%d", i)
 		resp, err := client.Get(ctx, key, clientv3.WithRange(""))
@@ -90,7 +98,5 @@ func TestWriteBatching(t *testing.T) {
 		g.Expect(resp.Kvs[0].Value).To(Equal([]byte(expectedValue)))
 	}
 
-	duration := time.Since(start)
-
-	t.Logf("Executed 1000 queries in %.2f seconds\n", duration.Seconds())
+	return duration
 }
