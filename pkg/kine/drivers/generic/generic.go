@@ -483,8 +483,6 @@ func (d *Generic) processBatchQueue(ctx context.Context) {
 		}
 
 		d.removeFromBatchQueueCh <- len(dcq)
-	} else {
-		fmt.Printf("Queue is empty: %d\n", len(d.batchingQueue))
 	}
 }
 
