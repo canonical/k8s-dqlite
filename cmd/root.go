@@ -37,6 +37,10 @@ var (
 		admissionControlPolicy   string
 		acpLimitMaxConcurrentTxn int64
 		acpOnlyWriteQueries      bool
+
+		batching           bool
+		batchingInterval   time.Duration
+		batchingMaxQueries uint
 	}
 
 	rootCmd = &cobra.Command{
@@ -79,6 +83,9 @@ var (
 				rootCmdOpts.admissionControlPolicy,
 				rootCmdOpts.acpLimitMaxConcurrentTxn,
 				rootCmdOpts.acpOnlyWriteQueries,
+				rootCmdOpts.batching,
+				rootCmdOpts.batchingInterval,
+				rootCmdOpts.batchingMaxQueries,
 			)
 			if err != nil {
 				logrus.WithError(err).Fatal("Failed to create server")
@@ -131,14 +138,17 @@ func init() {
 	rootCmd.Flags().StringVar(&rootCmdOpts.profilingAddress, "profiling-listen", "127.0.0.1:4000", "listen address for pprof endpoint")
 	rootCmd.Flags().BoolVar(&rootCmdOpts.diskMode, "disk-mode", false, "(experimental) run dqlite store in disk mode")
 	rootCmd.Flags().UintVar(&rootCmdOpts.clientSessionCacheSize, "tls-client-session-cache-size", 0, "ClientCacheSession size for dial TLS config")
-	rootCmd.Flags().StringVar(&rootCmdOpts.minTLSVersion, "min-tls-version", "tls12", "Minimum TLS version for dqlite endpoint (tls10|tls11|tls12|tls13). Default is tls12")
+	rootCmd.Flags().StringVar(&rootCmdOpts.minTLSVersion, "min-tls-version", "tls12", "minimum TLS version for dqlite endpoint (tls10|tls11|tls12|tls13). Default is tls12")
 	rootCmd.Flags().BoolVar(&rootCmdOpts.metrics, "metrics", true, "enable metrics endpoint")
 	rootCmd.Flags().StringVar(&rootCmdOpts.metricsAddress, "metrics-listen", "127.0.0.1:9042", "listen address for metrics endpoint")
-	rootCmd.Flags().DurationVar(&rootCmdOpts.watchAvailableStorageInterval, "watch-storage-available-size-interval", 5*time.Second, "Interval to check if the disk is running low on space. Set to 0 to disable the periodic disk size check")
-	rootCmd.Flags().Uint64Var(&rootCmdOpts.watchAvailableStorageMinBytes, "watch-storage-available-size-min-bytes", 10*1024*1024, "Minimum required available disk size (in bytes) to continue operation. If available disk space gets below this threshold, then the --low-available-storage-action is performed")
-	rootCmd.Flags().StringVar(&rootCmdOpts.lowAvailableStorageAction, "low-available-storage-action", "none", "Action to perform in case the available storage is low. One of (none|handover|terminate). none means no action is performed. handover means the dqlite node will handover its leadership role, if any. terminate means this dqlite node will shutdown")
-	rootCmd.Flags().StringVar(&rootCmdOpts.admissionControlPolicy, "admission-control-policy", "allow-all", "Transaction admission control policy to use. One of (allow-all|limit-concurrent-transactions). Set to allow-all to disable the admission control")
+	rootCmd.Flags().DurationVar(&rootCmdOpts.watchAvailableStorageInterval, "watch-storage-available-size-interval", 5*time.Second, "interval to check if the disk is running low on space. Set to 0 to disable the periodic disk size check")
+	rootCmd.Flags().Uint64Var(&rootCmdOpts.watchAvailableStorageMinBytes, "watch-storage-available-size-min-bytes", 10*1024*1024, "minimum required available disk size (in bytes) to continue operation. If available disk space gets below this threshold, then the --low-available-storage-action is performed")
+	rootCmd.Flags().StringVar(&rootCmdOpts.lowAvailableStorageAction, "low-available-storage-action", "none", "action to perform in case the available storage is low. One of (none|handover|terminate). none means no action is performed. handover means the dqlite node will handover its leadership role, if any. terminate means this dqlite node will shutdown")
+	rootCmd.Flags().StringVar(&rootCmdOpts.admissionControlPolicy, "admission-control-policy", "allow-all", "transaction admission control policy to use. One of (allow-all|limit-concurrent-transactions). Set to allow-all to disable the admission control")
 	// TODO(MK-1408): This value is highly dependend on underlying hardware, thus making the default value a bit useless. The linked card will implement a dynamic way to set this value.
-	rootCmd.Flags().Int64Var(&rootCmdOpts.acpLimitMaxConcurrentTxn, "admission-control-policy-limit-max-concurrent-transactions", 300, "Maximum number of transactions that are allowed to run concurrently. Transactions will not be admitted after the limit is reached.")
-	rootCmd.Flags().BoolVar(&rootCmdOpts.acpOnlyWriteQueries, "admission-control-only-for-write-queries", false, "If set, admission control will only be applied to write queries.")
+	rootCmd.Flags().Int64Var(&rootCmdOpts.acpLimitMaxConcurrentTxn, "admission-control-policy-limit-max-concurrent-transactions", 300, "maximum number of transactions that are allowed to run concurrently. Transactions will not be admitted after the limit is reached")
+	rootCmd.Flags().BoolVar(&rootCmdOpts.acpOnlyWriteQueries, "admission-control-only-for-write-queries", false, "if set, admission control will only be applied to write queries")
+	rootCmd.Flags().BoolVar(&rootCmdOpts.batching, "batching", true, "batch multiple queries before sending them to the datastore")
+	rootCmd.Flags().DurationVar(&rootCmdOpts.batchingInterval, "batching-interval", 10*time.Microsecond, "max milliseconds to wait for queries to batch")
+	rootCmd.Flags().UintVar(&rootCmdOpts.batchingMaxQueries, "batching-max-queries", 5, "max queries to be batched")
 }

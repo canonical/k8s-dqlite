@@ -236,7 +236,6 @@ func parseOpts(dsn string) (opts, error) {
 				return opts{}, fmt.Errorf("failed to parse max-concurrent-txn value %q: %w", vs[0], err)
 			}
 			result.batchingMaxQueries = int(d)
-
 		case "batching-enabled":
 			d, err := strconv.ParseBool(vs[0])
 			if err != nil {

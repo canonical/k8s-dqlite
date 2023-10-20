@@ -66,6 +66,9 @@ func New(
 	admissionControlPolicy string,
 	admissionControlPolicyLimitMaxConcurrentTxn int64,
 	admissionControlOnlyWriteQueries bool,
+	batching bool,
+	batchingInterval time.Duration,
+	batchingMaxQueries uint,
 ) (*Server, error) {
 	var (
 		options         []app.Option
@@ -270,6 +273,10 @@ func New(
 	params["admission-control-policy"] = []string{admissionControlPolicy}
 	params["admission-control-policy-limit-max-concurrent-txn"] = []string{fmt.Sprintf("%v", admissionControlPolicyLimitMaxConcurrentTxn)}
 	params["admission-control-only-write-queries"] = []string{fmt.Sprintf("%v", admissionControlOnlyWriteQueries)}
+
+	params["batching-enabled"] = []string{fmt.Sprintf("%v", batching)}
+	params["batching-interval"] = []string{fmt.Sprintf("%v", batchingInterval)}
+	params["batching-max-queries"] = []string{fmt.Sprintf("%v", batchingMaxQueries)}
 
 	kineConfig.Listener = listen
 	kineConfig.Endpoint = fmt.Sprintf("dqlite://k8s?%s", params.Encode())
