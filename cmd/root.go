@@ -149,6 +149,6 @@ func init() {
 	rootCmd.Flags().Int64Var(&rootCmdOpts.acpLimitMaxConcurrentTxn, "admission-control-policy-limit-max-concurrent-transactions", 300, "maximum number of transactions that are allowed to run concurrently. Transactions will not be admitted after the limit is reached")
 	rootCmd.Flags().BoolVar(&rootCmdOpts.acpOnlyWriteQueries, "admission-control-only-for-write-queries", false, "if set, admission control will only be applied to write queries")
 	rootCmd.Flags().BoolVar(&rootCmdOpts.batching, "batching", true, "batch multiple queries before sending them to the datastore")
-	rootCmd.Flags().DurationVar(&rootCmdOpts.batchingInterval, "batching-interval", 10*time.Microsecond, "max milliseconds to wait for queries to batch")
+	rootCmd.Flags().DurationVar(&rootCmdOpts.batchingInterval, "batching-interval", 10*time.Millisecond, "max milliseconds to wait for queries to batch")
 	rootCmd.Flags().UintVar(&rootCmdOpts.batchingMaxQueries, "batching-max-queries", 5, "max queries to be batched")
 }
