@@ -131,6 +131,8 @@ type Generic struct {
 	addToBatchQueueCh             chan BatchedInsert
 	removeFromBatchQueueCh        chan int
 	batchingQueue                 []BatchedInsert
+	batchingMu                    sync.Mutex
+	batchingCond                  sync.Cond
 
 	AdmissionControlPolicy AdmissionControlPolicy
 
@@ -394,15 +396,32 @@ func (d *Generic) queryRowPrepared(ctx context.Context, txName, sql string, prep
 }
 
 func (d *Generic) InitializeWriteBatching(ctx context.Context) {
-	if d.BatchingEnabled && d.BatchingInterval > 0 && d.BatchingMaxQueries > 0 {
-		d.flushCh = make(chan struct{})
-		d.addToBatchQueueCh = make(chan BatchedInsert)
-		d.removeFromBatchQueueCh = make(chan int)
-		d.batchingQueue = make([]BatchedInsert, 0, d.BatchingMaxQueries)
 
-		go d.watchBatchQueue(ctx)
-		go d.batchQueueWatcher(ctx)
+	if !d.BatchingEnabled {
+		return
 	}
+
+	if d.BatchingInterval < 10*time.Millisecond {
+		logrus.WithFields(logrus.Fields{"interval": d.BatchingInterval, "queue_size": d.BatchingMaxQueries}).Print("Interval is less than 10ms, disabling batching of insert queries")
+		return
+	}
+
+	if d.BatchingMaxQueries < 5 {
+		logrus.WithFields(logrus.Fields{"interval": d.BatchingInterval, "queue_size": d.BatchingMaxQueries}).Print("Queue size is less than 5, disabling batching of insert queries")
+		return
+	}
+
+	logrus.Warn("Batching of write queries is currently experimental and MUST NOT be used in production. Expect data loss.")
+	logrus.WithFields(logrus.Fields{"interval": d.BatchingInterval, "queue_size": d.BatchingMaxQueries}).Print("Enabling batching of insert queries")
+	d.flushCh = make(chan struct{})
+	d.addToBatchQueueCh = make(chan BatchedInsert)
+	d.removeFromBatchQueueCh = make(chan int)
+	d.batchingQueue = make([]BatchedInsert, 0, d.BatchingMaxQueries)
+	d.batchingCond = sync.Cond{L: &d.batchingMu}
+
+	go d.watchBatchQueue(ctx)
+	go d.batchQueueWatcher(ctx)
+
 }
 
 func (d *Generic) batchQueueWatcher(ctx context.Context) {
@@ -411,12 +430,13 @@ func (d *Generic) batchQueueWatcher(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case item := <-d.addToBatchQueueCh:
-			d.batchingQueue = append(d.batchingQueue, item)
-			if len(d.batchingQueue) == d.BatchingMaxQueries {
+			d.batchingCond.L.Lock()
+			if len(d.batchingQueue) >= d.BatchingMaxQueries {
 				d.flushCh <- struct{}{}
+				d.batchingCond.Wait()
 			}
-		case count := <-d.removeFromBatchQueueCh:
-			d.batchingQueue = d.batchingQueue[count:]
+			d.batchingQueue = append(d.batchingQueue, item)
+			d.batchingCond.L.Unlock()
 		}
 	}
 }
@@ -469,8 +489,10 @@ func (d *Generic) processBatchedInserts(ctx context.Context, queue []BatchedInse
 
 func (d *Generic) processBatchQueue(ctx context.Context) {
 	if len(d.batchingQueue) > 0 {
+		d.batchingCond.L.Lock()
 		dcq := make([]BatchedInsert, len(d.batchingQueue))
 		copy(dcq, d.batchingQueue)
+		d.batchingCond.L.Unlock()
 
 		ids, err := d.processBatchedInserts(ctx, dcq)
 		if err != nil {
@@ -482,7 +504,10 @@ func (d *Generic) processBatchQueue(ctx context.Context) {
 			insertItem.retCh <- ids[i]
 		}
 
-		d.removeFromBatchQueueCh <- len(dcq)
+		d.batchingCond.L.Lock()
+		d.batchingQueue = d.batchingQueue[len(dcq):]
+		d.batchingCond.Signal()
+		d.batchingCond.L.Unlock()
 	}
 }
 
@@ -490,7 +515,6 @@ func (d *Generic) watchBatchQueue(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			d.processBatchQueue(ctx)
 			return
 		case <-d.flushCh:
 			d.processBatchQueue(ctx)
@@ -501,7 +525,8 @@ func (d *Generic) watchBatchQueue(ctx context.Context) {
 }
 
 func (d *Generic) batchQueryRowPrepared(ctx context.Context, txName, sqli string, prepared *sql.Stmt, args ...interface{}) (id int64) {
-	ret := make(chan int64)
+	ret := make(chan int64, 1)
+	defer close(ret)
 	d.addToBatchQueueCh <- BatchedInsert{retCh: ret, args: args}
 	return <-ret
 }
