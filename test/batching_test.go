@@ -35,6 +35,18 @@ func TestWriteBatching(t *testing.T) {
 	ctx := context.Background()
 	g := NewWithT(t)
 
+	t.Run("HighConcurrency", func(t *testing.T) {
+		numWrites := 1000000
+		writers := 10000
+
+		duration := perfTest(
+			ctx, t,
+			numWrites, writers,
+			"batching-interval=200ms", "batching-max-queries=5", "batching-enabled=true",
+		)
+		t.Logf("Took %v", duration)
+	})
+
 	t.Run("PerformanceComparison", func(t *testing.T) {
 		numWrites := 10000
 		writers := 100
