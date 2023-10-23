@@ -92,7 +92,12 @@ type ErrCode func(error) string
 
 type BatchedInsert struct {
 	args  []interface{}
-	retCh chan int64
+	retCh chan BatchedInsertResult
+}
+
+type BatchedInsertResult struct {
+	rowId int64
+	err   error
 }
 
 type Generic struct {
@@ -395,20 +400,22 @@ func (d *Generic) queryRowPrepared(ctx context.Context, txName, sql string, prep
 	return r
 }
 
-func (d *Generic) InitializeWriteBatching(ctx context.Context) {
+func (d *Generic) InitializeWriteBatching(ctx context.Context) error {
+	const minInterval = 10 * time.Millisecond
+	const maxInterval = 500 * time.Millisecond
+	const minQueueSize = 5
+	const maxQueueSize = 100
 
 	if !d.BatchingEnabled {
-		return
+		return nil
 	}
 
-	if d.BatchingInterval < 10*time.Millisecond {
-		logrus.WithFields(logrus.Fields{"interval": d.BatchingInterval, "queue_size": d.BatchingMaxQueries}).Print("Interval is less than 10ms, disabling batching of insert queries")
-		return
+	if d.BatchingInterval < minInterval || d.BatchingInterval > maxInterval {
+		return errors.New("Interval should be between 5ms to 500ms, disabling batching of insert queries")
 	}
 
-	if d.BatchingMaxQueries < 5 {
-		logrus.WithFields(logrus.Fields{"interval": d.BatchingInterval, "queue_size": d.BatchingMaxQueries}).Print("Queue size is less than 5, disabling batching of insert queries")
-		return
+	if d.BatchingMaxQueries < minQueueSize || d.BatchingMaxQueries > maxQueueSize {
+		return errors.New("Queue size should be between 5 to 100, disabling batching of insert queries")
 	}
 
 	logrus.Warn("Batching of write queries is currently experimental and MUST NOT be used in production. Expect data loss.")
@@ -422,6 +429,7 @@ func (d *Generic) InitializeWriteBatching(ctx context.Context) {
 	go d.watchBatchQueue(ctx)
 	go d.batchQueueWatcher(ctx)
 
+	return nil
 }
 
 func (d *Generic) batchQueueWatcher(ctx context.Context) {
@@ -431,11 +439,11 @@ func (d *Generic) batchQueueWatcher(ctx context.Context) {
 			return
 		case item := <-d.addToBatchQueueCh:
 			d.batchingCond.L.Lock()
-			if len(d.batchingQueue) >= d.BatchingMaxQueries {
+			d.batchingQueue = append(d.batchingQueue, item)
+			if len(d.batchingQueue) == d.BatchingMaxQueries {
 				d.flushCh <- struct{}{}
 				d.batchingCond.Wait()
 			}
-			d.batchingQueue = append(d.batchingQueue, item)
 			d.batchingCond.L.Unlock()
 		}
 	}
@@ -492,22 +500,20 @@ func (d *Generic) processBatchQueue(ctx context.Context) {
 		d.batchingCond.L.Lock()
 		dcq := make([]BatchedInsert, len(d.batchingQueue))
 		copy(dcq, d.batchingQueue)
-		d.batchingCond.L.Unlock()
-
-		ids, err := d.processBatchedInserts(ctx, dcq)
-		if err != nil {
-			logrus.WithError(err).Error("Process batch queue error")
-			return
-		}
-
-		for i, insertItem := range dcq {
-			insertItem.retCh <- ids[i]
-		}
-
-		d.batchingCond.L.Lock()
 		d.batchingQueue = d.batchingQueue[len(dcq):]
 		d.batchingCond.Signal()
 		d.batchingCond.L.Unlock()
+
+		ids, err := d.processBatchedInserts(ctx, dcq)
+
+		for i, insertItem := range dcq {
+			if err != nil {
+				insertItem.retCh <- BatchedInsertResult{rowId: 0, err: err}
+				continue
+			}
+			insertItem.retCh <- BatchedInsertResult{rowId: ids[i], err: nil}
+		}
+
 	}
 }
 
@@ -524,11 +530,12 @@ func (d *Generic) watchBatchQueue(ctx context.Context) {
 	}
 }
 
-func (d *Generic) batchQueryRowPrepared(ctx context.Context, txName, sqli string, prepared *sql.Stmt, args ...interface{}) (id int64) {
-	ret := make(chan int64, 1)
+func (d *Generic) batchQueryRowPrepared(ctx context.Context, txName, sqli string, prepared *sql.Stmt, args ...interface{}) (id int64, err error) {
+	ret := make(chan BatchedInsertResult, 1)
 	defer close(ret)
 	d.addToBatchQueueCh <- BatchedInsert{retCh: ret, args: args}
-	return <-ret
+	result := <-ret
+	return result.rowId, result.err
 }
 
 func (d *Generic) executePrepared(ctx context.Context, txName, sql string, prepared *sql.Stmt, args ...interface{}) (result sql.Result, err error) {
@@ -717,8 +724,8 @@ func (d *Generic) Insert(ctx context.Context, key string, create, delete bool, c
 
 	if d.BatchingEnabled {
 		// Down below should return errors encountered while the batched operations are processed
-		id = d.batchQueryRowPrepared(ctx, "insert_sql", d.InsertSQL, d.insertSQLPrepared, key, cVal, dVal, createRevision, previousRevision, ttl, value, prevValue)
-		return id, nil
+		id, err := d.batchQueryRowPrepared(ctx, "insert_sql", d.InsertSQL, d.insertSQLPrepared, key, cVal, dVal, createRevision, previousRevision, ttl, value, prevValue)
+		return id, err
 	}
 
 	if d.LastInsertID {

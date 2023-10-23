@@ -109,7 +109,9 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 	dialect.BatchingEnabled = opts.batchingEnabled
 	dialect.BatchingInterval = opts.batchingInterval
 	dialect.BatchingMaxQueries = opts.batchingMaxQueries
-	dialect.InitializeWriteBatching(ctx)
+	if err := dialect.InitializeWriteBatching(ctx); err != nil {
+		return nil, nil, errors.Wrap(err, "write batching initialization failed")
+	}
 
 	return logstructured.New(sqllog.New(dialect)), dialect, nil
 }
