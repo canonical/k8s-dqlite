@@ -450,11 +450,18 @@ func (d *Generic) batchQueueWatcher(ctx context.Context) {
 }
 
 func (d *Generic) processBatchedInserts(ctx context.Context, queue []BatchedInsert) ([]int64, error) {
+	_, rev, err := d.GetCompactRevision(ctx)
+	if err != nil {
+		logrus.WithError(err).Errorf("Get current rev error")
+		return nil, err
+	}
+
 	valueStrings := make([]string, 0, len(queue))
 	// len(queue) * argument_count per insert
 	valueArgs := make([]interface{}, 0, len(queue)*8)
 
-	for _, insertItem := range queue {
+	for i, insertItem := range queue {
+		insertItem.args[4] = rev + int64(i+1)
 		valueStrings = append(valueStrings, "(?, ?, ?, ?, ?, ?, ?, ?)")
 		valueArgs = append(valueArgs, insertItem.args...)
 	}
@@ -723,7 +730,6 @@ func (d *Generic) Insert(ctx context.Context, key string, create, delete bool, c
 	}
 
 	if d.BatchingEnabled {
-		// Down below should return errors encountered while the batched operations are processed
 		id, err := d.batchQueryRowPrepared(ctx, "insert_sql", d.InsertSQL, d.insertSQLPrepared, key, cVal, dVal, createRevision, previousRevision, ttl, value, prevValue)
 		return id, err
 	}
