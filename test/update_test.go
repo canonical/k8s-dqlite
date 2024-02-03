@@ -78,7 +78,7 @@ func TestUpdate(t *testing.T) {
 			g.Expect(resp.Kvs[0].ModRevision).To(BeNumerically(">", resp.Kvs[0].CreateRevision))
 		}
 	})
-	t.Run("UpdateSameKeyLinerity", func(t *testing.T) {
+	t.Run("UpdateSameKeyLinearity", func(t *testing.T) {
 		g := NewWithT(t)
 
 		// Add a large number of entries, two times and
