@@ -24,14 +24,17 @@ var (
 
 	listSQL = fmt.Sprintf(`
 		SELECT %s
-		FROM kine AS kv
-			LEFT JOIN kine kv2
-				ON kv.name = kv2.name
-				AND kv.id < kv2.id
-		WHERE kv2.name IS NULL
-			AND kv.name >= ? AND kv.name < ?
-			AND (? OR kv.deleted = 0)
-			%%s
+		FROM kine kv
+		JOIN (
+			SELECT MAX(mkv.id) as id
+			FROM kine mkv
+			WHERE
+				mkv.name >= ? AND mkv.name < ?
+				%%s
+			GROUP BY mkv.name) maxkv
+	    	ON maxkv.id = kv.id
+		WHERE
+			  (kv.deleted = 0 OR ?)
 		ORDER BY kv.id ASC
 	`, columns)
 
@@ -200,7 +203,7 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 			WHERE kv.id = ?`, columns), paramCharacter, numbered),
 
 		GetCurrentSQL:        q(fmt.Sprintf(listSQL, ""), paramCharacter, numbered),
-		ListRevisionStartSQL: q(fmt.Sprintf(listSQL, "AND kv.id <= ?"), paramCharacter, numbered),
+		ListRevisionStartSQL: q(fmt.Sprintf(listSQL, "AND mkv.id <= ?"), paramCharacter, numbered),
 		GetRevisionAfterSQL:  q(revisionAfterSQL, paramCharacter, numbered),
 
 		CountSQL: q(fmt.Sprintf(`
