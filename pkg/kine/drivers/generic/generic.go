@@ -102,7 +102,8 @@ type Generic struct {
 	RevisionSQL                   string
 	ListRevisionStartSQL          string
 	GetRevisionAfterSQL           string
-	CountSQL                      string
+	CountCurrentSQL               string
+	CountRevisionSQL              string
 	countSQLPrepared              *sql.Stmt
 	AfterSQLPrefix                string
 	afterSQLPrefixPrepared        *sql.Stmt
@@ -203,11 +204,17 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 		ListRevisionStartSQL: q(fmt.Sprintf(listSQL, "AND kv.id <= ?"), paramCharacter, numbered),
 		GetRevisionAfterSQL:  q(revisionAfterSQL, paramCharacter, numbered),
 
-		CountSQL: q(fmt.Sprintf(`
+		CountCurrentSQL: q(fmt.Sprintf(`
 			SELECT (%s), COUNT(*)
 			FROM (
 				%s
 			) c`, revSQL, fmt.Sprintf(listSQL, "")), paramCharacter, numbered),
+
+		CountRevisionSQL: q(fmt.Sprintf(`
+			SELECT (%s), COUNT(c.theid)
+			FROM (
+				%s
+			) c`, revSQL, fmt.Sprintf(listSQL, "AND mkv.id <= ?")), paramCharacter, numbered),
 
 		AfterSQLPrefix: q(fmt.Sprintf(`
 			SELECT %s
@@ -253,7 +260,7 @@ func (d *Generic) Prepare() error {
 		return err
 	}
 
-	d.countSQLPrepared, err = d.DB.Prepare(d.CountSQL)
+	d.countSQLPrepared, err = d.DB.Prepare(d.CountCurrentSQL)
 	if err != nil {
 		return err
 	}
@@ -361,6 +368,28 @@ func (d *Generic) queryPrepared(ctx context.Context, txName, sql string, prepare
 	recordOpResult(txName, err, start)
 	recordTxResult(txName, err)
 	return r, err
+}
+
+func (d *Generic) CountCurrent(ctx context.Context, prefix string) (int64, int64, error) {
+	var (
+		rev sql.NullInt64
+		id  int64
+	)
+
+	row := d.queryRow(ctx, d.CountCurrentSQL, prefix, false)
+	err := row.Scan(&rev, &id)
+	return rev.Int64, id, err
+}
+
+func (d *Generic) Count(ctx context.Context, prefix string, revision int64) (int64, int64, error) {
+	var (
+		rev sql.NullInt64
+		id  int64
+	)
+
+	row := d.queryRow(ctx, d.CountRevisionSQL, prefix, revision, false)
+	err := row.Scan(&rev, &id)
+	return rev.Int64, id, err
 }
 
 func (d *Generic) queryRow(ctx context.Context, txName, sql string, args ...interface{}) (result *sql.Row) {
@@ -487,20 +516,6 @@ func (d *Generic) List(ctx context.Context, prefix, startKey string, limit, revi
 		sql = fmt.Sprintf("%s LIMIT %d", sql, limit)
 	}
 	return d.query(ctx, "get_revision_after_sql", sql, start, end, revision, startKey, revision, includeDeleted)
-}
-
-func (d *Generic) Count(ctx context.Context, prefix string) (int64, int64, error) {
-	var (
-		rev sql.NullInt64
-		id  int64
-	)
-
-	start, end := getPrefixRange(prefix)
-
-	row := d.queryRowPrepared(ctx, "count_sql", d.CountSQL, d.countSQLPrepared, start, end, false)
-	err := row.Scan(&rev, &id)
-
-	return rev.Int64, id, err
 }
 
 func (d *Generic) CurrentRevision(ctx context.Context) (int64, error) {
