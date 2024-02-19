@@ -474,7 +474,6 @@ func canSkipRevision(rev, skip int64, skipTime time.Time) bool {
 func (s *SQLLog) Count(ctx context.Context, prefix string, revision int64) (int64, int64, error) {
 	if strings.HasSuffix(prefix, "/") {
 		prefix += "%"
-		prefix += "%"
 	}
 
 	if revision == 0 {
