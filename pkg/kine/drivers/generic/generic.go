@@ -103,8 +103,9 @@ type Generic struct {
 	ListRevisionStartSQL          string
 	GetRevisionAfterSQL           string
 	CountCurrentSQL               string
+	countCurrentSQLPrepared       *sql.Stmt
 	CountRevisionSQL              string
-	countSQLPrepared              *sql.Stmt
+	countRevisionSQLPrepared      *sql.Stmt
 	AfterSQLPrefix                string
 	afterSQLPrefixPrepared        *sql.Stmt
 	AfterSQL                      string
@@ -260,7 +261,12 @@ func (d *Generic) Prepare() error {
 		return err
 	}
 
-	d.countSQLPrepared, err = d.DB.Prepare(d.CountCurrentSQL)
+	d.countCurrentSQLPrepared, err = d.DB.Prepare(d.CountCurrentSQL)
+	if err != nil {
+		return err
+	}
+
+	d.countRevisionSQLPrepared, err = d.DB.Prepare(d.CountRevisionSQL)
 	if err != nil {
 		return err
 	}
@@ -376,7 +382,7 @@ func (d *Generic) CountCurrent(ctx context.Context, prefix string) (int64, int64
 		id  int64
 	)
 
-	row := d.queryRow(ctx, d.CountCurrentSQL, prefix, false)
+	row := d.queryRowPrepared(ctx, "count_current", d.CountCurrentSQL, d.countCurrentSQLPrepared, prefix, false)
 	err := row.Scan(&rev, &id)
 	return rev.Int64, id, err
 }
@@ -387,7 +393,7 @@ func (d *Generic) Count(ctx context.Context, prefix string, revision int64) (int
 		id  int64
 	)
 
-	row := d.queryRow(ctx, d.CountRevisionSQL, prefix, revision, false)
+	row := d.queryRowPrepared(ctx, "count_revision", d.CountRevisionSQL, d.countRevisionSQLPrepared, prefix, revision, false)
 	err := row.Scan(&rev, &id)
 	return rev.Int64, id, err
 }
