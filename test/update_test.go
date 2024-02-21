@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	. "github.com/onsi/gomega"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -77,6 +78,24 @@ func TestUpdate(t *testing.T) {
 			g.Expect(resp.Kvs[0].ModRevision).To(BeNumerically(">", resp.Kvs[0].CreateRevision))
 		}
 	})
+	t.Run("UpdateSameKeyLinearity", func(t *testing.T) {
+		g := NewWithT(t)
+
+		// Add a large number of entries, two times and
+		// it should take approximately same amout of time
+		numAddEntries := 1000
+
+		startFirst := time.Now()
+		addSameEntries(ctx, g, client, numAddEntries, true)
+		durationFirstBatch := time.Since(startFirst)
+
+		startSecond := time.Now()
+		addSameEntries(ctx, g, client, numAddEntries, false)
+		durationSecondBatch := time.Since(startSecond)
+
+		g.Expect(durationSecondBatch <= durationFirstBatch*2).To(BeTrue())
+
+	})
 
 	// Trying to update an old revision(in compare) should fail
 	t.Run("UpdateOldRevisionFails", func(t *testing.T) {
@@ -122,6 +141,37 @@ func TestUpdate(t *testing.T) {
 		}
 
 	})
+
+}
+
+func addSameEntries(ctx context.Context, g Gomega, client *clientv3.Client, numEntries int, create_first bool) {
+	for i := 0; i < numEntries; i++ {
+		key := "testkey-same"
+		value := fmt.Sprintf("value-%d", i)
+
+		if i != 0 || !create_first {
+			updateEntry(ctx, g, client, key, value)
+		} else {
+			addEntry(ctx, g, client, key, value)
+		}
+	}
+}
+
+func updateEntry(ctx context.Context, g Gomega, client *clientv3.Client, key string, value string) {
+
+	resp, err := client.Get(ctx, key, clientv3.WithRange(""))
+
+	g.Expect(err).To(BeNil())
+	g.Expect(resp.Kvs).To(HaveLen(1))
+
+	resp2, err2 := client.Txn(ctx).
+		If(clientv3.Compare(clientv3.ModRevision(key), "=", resp.Kvs[0].ModRevision)).
+		Then(clientv3.OpPut(key, value)).
+		Else(clientv3.OpGet(key, clientv3.WithRange(""))).
+		Commit()
+
+	g.Expect(err2).To(BeNil())
+	g.Expect(resp2.Succeeded).To(BeTrue())
 
 }
 
