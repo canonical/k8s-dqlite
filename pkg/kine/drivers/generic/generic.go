@@ -218,7 +218,7 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 			SELECT (%s), COUNT(c.theid)
 			FROM (
 				%s
-			) c`, revSQL, fmt.Sprintf(listSQL, "AND kv.id <= ?")), paramCharacter, numbered),
+			) c`, revSQL, fmt.Sprintf(listSQL, "AND mkv.id <= ?")), paramCharacter, numbered),
 
 		AfterSQLPrefix: q(fmt.Sprintf(`
 			SELECT %s
