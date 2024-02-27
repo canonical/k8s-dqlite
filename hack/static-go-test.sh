@@ -6,4 +6,5 @@ DIR="$(realpath `dirname "${0}"`)"
 
 go test \
   -tags dqlite,libsqlite3 \
+  -ldflags '-linkmode "external" -extldflags "-static"' \
   "${@}"
