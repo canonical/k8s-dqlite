@@ -4,8 +4,8 @@ DIR="${DIR:=$(realpath `dirname "${0}"`)}"
 
 . "${DIR}/env.sh"
 
-BUILD_DIR="${DIR}/../build/static"
-INSTALL_DIR="${DIR}/../deps/static"
+BUILD_DIR="${DIR}/.build/static"
+INSTALL_DIR="${DIR}/.deps/static"
 mkdir -p "${BUILD_DIR}" "${INSTALL_DIR}" "${INSTALL_DIR}/lib" "${INSTALL_DIR}/include"
 BUILD_DIR="$(realpath "${BUILD_DIR}")"
 INSTALL_DIR="$(realpath "${INSTALL_DIR}")"

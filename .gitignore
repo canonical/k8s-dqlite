@@ -16,3 +16,5 @@ deps/
 build/
 bin/
 k8s-dqlite
+hack/.build/
+hack/.deps/
