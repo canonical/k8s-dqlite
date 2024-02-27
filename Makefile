@@ -42,7 +42,6 @@ dynamic: bin/dynamic/k8s-dqlite bin/dynamic/dqlite
 bin/dynamic/libdqlite.so:
 	mkdir -p bin/dynamic
 	./hack/dynamic-dqlite.sh
-	echo here
 	cp -rv ./hack/.deps/dynamic/lib/*.so* ./bin/dynamic/
 
 bin/dynamic/k8s-dqlite: bin/dynamic/libdqlite.so $(GO_SOURCES)
