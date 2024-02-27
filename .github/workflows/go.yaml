@@ -2,7 +2,7 @@ name: Go
 
 on:
   push:
-    branches: [dev]
+    branches: [master]
   pull_request:
 
 jobs:
@@ -12,12 +12,12 @@ jobs:
 
     steps:
       - name: Check out code
-        uses: actions/checkout@v4.1.0
+        uses: actions/checkout@v4
 
       - name: Install Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
-          go-version: "1.20"
+          go-version: "1.21"
 
       - name: go mod download
         run: go mod download
@@ -27,16 +27,13 @@ jobs:
 
       - name: check diff
         run: |
-          if ! git diff; then
+          if ! [ -z "$(git diff)" ]; then
             echo "Detected changes that have not been committed to the repository"
+            echo "Please run 'make go.fmt'"
+            echo "git diff:"
+            git diff
             exit 1
           fi
-
-      - name: install dqlite
-        run: |
-          sudo add-apt-repository ppa:dqlite/dev
-          sudo apt update
-          sudo apt install -y libdqlite-dev
 
       - name: go vet
         run: make go.vet
@@ -47,12 +44,12 @@ jobs:
 
     steps:
       - name: Check out Code
-        uses: actions/checkout@v4.1.0
+        uses: actions/checkout@v4
 
       - name: Install Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
-          go-version: "1.20"
+          go-version: "1.21"
 
       - name: go mod download
         run: go mod download
@@ -66,21 +63,15 @@ jobs:
 
     steps:
       - name: Check out Code
-        uses: actions/checkout@v4.1.0
+        uses: actions/checkout@v4
 
       - name: Install Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
-          go-version: "1.20"
+          go-version: "1.21"
 
       - name: go mod download
         run: go mod download
-
-      - name: install dqlite
-        run: |
-          sudo add-apt-repository ppa:dqlite/dev
-          sudo apt update
-          sudo apt install -y libdqlite-dev
 
       - name: Run tests
         run: make go.test.dqlite
@@ -91,12 +82,12 @@ jobs:
 
     steps:
       - name: Check out Code
-        uses: actions/checkout@v4.1.0
+        uses: actions/checkout@v4
 
       - name: Install Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
-          go-version: "1.20"
+          go-version: "1.21"
 
       - name: go mod download
         run: go mod download
@@ -110,21 +101,15 @@ jobs:
 
     steps:
       - name: Check out Code
-        uses: actions/checkout@v4.1.0
+        uses: actions/checkout@v4
 
       - name: Install Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
-          go-version: "1.20"
+          go-version: "1.21"
 
       - name: go mod download
         run: go mod download
-
-      - name: install dqlite
-        run: |
-          sudo add-apt-repository ppa:dqlite/dev
-          sudo apt update
-          sudo apt install -y libdqlite-dev
 
       - name: Run benchmarks
         run: make go.bench.dqlite
@@ -135,12 +120,12 @@ jobs:
 
     steps:
       - name: Check out code
-        uses: actions/checkout@v4.1.0
+        uses: actions/checkout@v4
 
       - name: Install Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
-          go-version: "1.20"
+          go-version: "1.21"
 
       - name: Build static binaries
         run: |
@@ -153,7 +138,7 @@ jobs:
       - name: Build shared binaries
         run: |
           make -j dynamic
-          export LD_LIBRARY_PATH=bin/dynamic/lib
+          export LD_LIBRARY_PATH=bin/dynamic
 
           ./bin/dynamic/k8s-dqlite --help
           ./bin/dynamic/k8s-dqlite migrator --help

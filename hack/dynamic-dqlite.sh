@@ -1,16 +1,16 @@
 #!/bin/bash -xeu
 
-DIR="$(realpath `dirname "${0}"`)"
+DIR="${DIR:=$(realpath `dirname "${0}"`)}"
+
 . "${DIR}/env.sh"
 
-BUILD_DIR="${DIR}/../build/dynamic"
-INSTALL_DIR="${DIR}/../deps/dynamic"
+BUILD_DIR="${DIR}/.build/dynamic"
+INSTALL_DIR="${DIR}/.deps/dynamic"
 mkdir -p "${BUILD_DIR}" "${INSTALL_DIR}" "${INSTALL_DIR}/lib" "${INSTALL_DIR}/include"
 BUILD_DIR="$(realpath "${BUILD_DIR}")"
 INSTALL_DIR="$(realpath "${INSTALL_DIR}")"
 
-# dependencies
-sudo apt install -y build-essential automake libtool gettext autopoint tclsh tcl libsqlite3-dev pkg-config libsqlite3-dev git curl > /dev/null
+"${DIR}/deps.sh"
 
 # build libtirpc
 if [ ! -f "${BUILD_DIR}/libtirpc/src/libtirpc.la" ]; then
@@ -139,7 +139,14 @@ fi
 # collect headers
 (
   cd "${BUILD_DIR}"
+  cp -r libuv/include/* "${INSTALL_DIR}/include"
   cp -r raft/include/* "${INSTALL_DIR}/include"
   cp -r sqlite/*.h "${INSTALL_DIR}/include"
   cp -r dqlite/include/* "${INSTALL_DIR}/include"
 )
+
+export CGO_CFLAGS="-I${INSTALL_DIR}/include"
+export CGO_LDFLAGS="-L${INSTALL_DIR}/lib -ldqlite -lraft -luv -llz4 -lsqlite3"
+export LD_LIBRARY_PATH="${INSTALL_DIR}/lib"
+
+echo "Libraries are in '${INSTALL_DIR}/lib'"

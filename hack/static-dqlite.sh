@@ -1,10 +1,11 @@
 #!/bin/bash -xeu
 
-DIR="$(realpath `dirname "${0}"`)"
+DIR="${DIR:=$(realpath `dirname "${0}"`)}"
+
 . "${DIR}/env.sh"
 
-BUILD_DIR="${DIR}/../build/static"
-INSTALL_DIR="${DIR}/../deps/static"
+BUILD_DIR="${DIR}/.build/static"
+INSTALL_DIR="${DIR}/.deps/static"
 mkdir -p "${BUILD_DIR}" "${INSTALL_DIR}" "${INSTALL_DIR}/lib" "${INSTALL_DIR}/include"
 BUILD_DIR="$(realpath "${BUILD_DIR}")"
 INSTALL_DIR="$(realpath "${INSTALL_DIR}")"
@@ -17,8 +18,7 @@ if [ "${MACHINE_TYPE}" = "ppc64le" ]; then
   export CFLAGS="-mlong-double-64"
 fi
 
-# dependencies
-sudo apt install -y build-essential automake libtool gettext autopoint tclsh tcl libsqlite3-dev pkg-config libsqlite3-dev git curl > /dev/null
+"${DIR}/deps.sh"
 
 # build musl
 if [ ! -f "${INSTALL_DIR}/musl/bin/musl-gcc" ]; then
@@ -32,10 +32,10 @@ if [ ! -f "${INSTALL_DIR}/musl/bin/musl-gcc" ]; then
     make -j install > /dev/null || true
 
     # missing musl header files
-    ln -s /usr/include/${MACHINE_TYPE}-linux-gnu/asm "${INSTALL_DIR}/musl/include/asm" || true
+    ln -s "/usr/include/${MACHINE_TYPE}-linux-gnu/sys/queue.h" "${INSTALL_DIR}/musl/include/sys/queue.h" || true
+    ln -s "/usr/include/${MACHINE_TYPE}-linux-gnu/asm" "${INSTALL_DIR}/musl/include/asm" || true
     ln -s /usr/include/asm-generic "${INSTALL_DIR}/musl/include/asm-generic" || true
     ln -s /usr/include/linux "${INSTALL_DIR}/musl/include/linux" || true
-    curl --silent https://dev.midipix.org/compat/musl-compat/raw/main/f/include/sys/queue.h -o "${INSTALL_DIR}/musl/include/sys/queue.h"
   )
 fi
 
@@ -171,7 +171,11 @@ fi
 # collect headers
 (
   cd "${BUILD_DIR}"
+  cp -r libuv/include/* "${INSTALL_DIR}/include"
   cp -r raft/include/* "${INSTALL_DIR}/include"
   cp -r sqlite/*.h "${INSTALL_DIR}/include"
   cp -r dqlite/include/* "${INSTALL_DIR}/include"
 )
+
+export CGO_CFLAGS="-I${INSTALL_DIR}/include"
+export CGO_LDFLAGS="-L${INSTALL_DIR}/lib -luv -lraft -ldqlite -llz4 -lsqlite3"
