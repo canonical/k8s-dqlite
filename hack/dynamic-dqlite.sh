@@ -116,7 +116,7 @@ if [ ! -f "${BUILD_DIR}/dqlite/libdqlite.la" ]; then
       CFLAGS="-I${BUILD_DIR}/raft/include -I${BUILD_DIR}/sqlite -I${BUILD_DIR}/libuv/include -I${BUILD_DIR}/lz4/lib -Werror=implicit-function-declaration" \
       LDFLAGS="-L${BUILD_DIR}/raft/.libs -L${BUILD_DIR}/libuv/.libs -L${BUILD_DIR}/lz4/lib -L${BUILD_DIR}/libnsl/src" \
       RAFT_CFLAGS="-I${BUILD_DIR}/raft/include" \
-      RAFT_LIBS="-L${BUILD_DIR}/raft/.libs -lraft -llz4" \
+      RAFT_LIBS="-L${BUILD_DIR}/raft/.libs" \
       UV_CFLAGS="-I${BUILD_DIR}/libuv/include" \
       UV_LIBS="-L${BUILD_DIR}/libuv/.libs" \
       SQLITE_CFLAGS="-I${BUILD_DIR}/sqlite" \
