@@ -1,3 +1,4 @@
+DQLITE_BUILD_SCRIPTS_DIR ?= $(shell pwd)/hack
 GO_SOURCES = $(shell find . -name '*.go')
 
 ## Development
@@ -6,53 +7,49 @@ go.fmt:
 	go fmt ./...
 
 go.vet:
-	./hack/static-go-vet.sh ./...
+	$(DQLITE_BUILD_SCRIPTS_DIR)/static-go-vet.sh ./...
 
 go.test:
 	go test -tags=libsqlite3 -v ./test
 
 go.test.dqlite:
-	./hack/static-go-test.sh -v ./test
+	$(DQLITE_BUILD_SCRIPTS_DIR)/static-go-test.sh -v ./test
 
 go.bench:
 	go test -tags=libsqlite3 -v ./test -run "^$$" -bench "Benchmark" -benchmem
 
 go.bench.dqlite:
-	./hack/static-go-test.sh -v ./test -run "^$$" -bench "Benchmark" -benchmem
+	$(DQLITE_BUILD_SCRIPTS_DIR)/static-go-test.sh -v ./test -run "^$$" -bench "Benchmark" -benchmem
 
 ## Static Builds
 static: bin/static/k8s-dqlite bin/static/dqlite
 
-deps/static/lib/libdqlite.a:
-	./hack/static-dqlite.sh
+$(DQLITE_BUILD_SCRIPTS_DIR)/.deps/static/lib/libdqlite.a:
+	$(DQLITE_BUILD_SCRIPTS_DIR)/static-dqlite.sh
 
-bin/static/k8s-dqlite: deps/static/lib/libdqlite.a $(GO_SOURCES)
+bin/static/k8s-dqlite: $(DQLITE_BUILD_SCRIPTS_DIR)/.deps/static/lib/libdqlite.a $(GO_SOURCES)
 	mkdir -p bin/static
-	./hack/static-go-build.sh -o bin/static/k8s-dqlite ./k8s-dqlite.go
+	$(DQLITE_BUILD_SCRIPTS_DIR)/static-go-build.sh -o bin/static/k8s-dqlite ./k8s-dqlite.go
 
-bin/static/dqlite: deps/static/lib/libdqlite.a
+bin/static/dqlite: $(DQLITE_BUILD_SCRIPTS_DIR)/.deps/static/lib/libdqlite.a
 	mkdir -p bin/static
-	rm -rf hack/.build/go-dqlite
-	git clone https://github.com/canonical/go-dqlite --depth 1 -b v1.20.0 hack/.build/go-dqlite
-	cd hack/.build/go-dqlite && ../../../hack/static-go-build.sh -o ../../../bin/static/dqlite ./cmd/dqlite
+	GOBIN=$(shell pwd)/bin/static $(DQLITE_BUILD_SCRIPTS_DIR)/static-go-install.sh github.com/canonical/go-dqlite/cmd/dqlite@v1.20.0
 
 ## Dynamic Builds
 dynamic: bin/dynamic/k8s-dqlite bin/dynamic/dqlite
 
-bin/dynamic/libdqlite.so:
-	mkdir -p bin/dynamic
-	./hack/dynamic-dqlite.sh
-	cp -rv ./hack/.deps/dynamic/lib/*.so* ./bin/dynamic/
+bin/dynamic/lib/libdqlite.so:
+	mkdir -p bin/dynamic/lib
+	$(DQLITE_BUILD_SCRIPTS_DIR)/dynamic-dqlite.sh
+	cp -rv $(DQLITE_BUILD_SCRIPTS_DIR)/.deps/dynamic/lib/*.so* ./bin/dynamic/lib/
 
-bin/dynamic/k8s-dqlite: bin/dynamic/libdqlite.so $(GO_SOURCES)
+bin/dynamic/k8s-dqlite: bin/dynamic/lib/libdqlite.so $(GO_SOURCES)
 	mkdir -p bin/dynamic
-	./hack/dynamic-go-build.sh -o bin/dynamic/k8s-dqlite ./k8s-dqlite.go
+	$(DQLITE_BUILD_SCRIPTS_DIR)/dynamic-go-build.sh -o bin/dynamic/k8s-dqlite ./k8s-dqlite.go
 
-bin/dynamic/dqlite: bin/dynamic/libdqlite.so
+bin/dynamic/dqlite: bin/dynamic/lib/libdqlite.so
 	mkdir -p bin/dynamic
-	rm -rf hack/.build/go-dqlite
-	git clone https://github.com/canonical/go-dqlite --depth 1 -b v1.20.0 hack/.build/go-dqlite
-	cd hack/.build/go-dqlite && ../../../hack/dynamic-go-build.sh -o ../../../bin/dynamic/dqlite ./cmd/dqlite
+	GOBIN=$(shell pwd)/bin/dynamic $(DQLITE_BUILD_SCRIPTS_DIR)/dynamic-go-install.sh github.com/canonical/go-dqlite/cmd/dqlite@v1.20.0
 
 ## Cleanup
 clean:
