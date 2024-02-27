@@ -12,9 +12,9 @@ jobs:
 
     steps:
       - name: Checking out repo
-        uses: actions/checkout@v4.1.0
+        uses: actions/checkout@v5
       - name: Install Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
           go-version: "1.21"
       - name: Build k8s-dqlite
