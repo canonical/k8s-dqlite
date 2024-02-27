@@ -138,7 +138,7 @@ jobs:
       - name: Build shared binaries
         run: |
           make -j dynamic
-          export LD_LIBRARY_PATH=bin/dynamic/lib
+          export LD_LIBRARY_PATH=bin/dynamic
 
           ./bin/dynamic/k8s-dqlite --help
           ./bin/dynamic/k8s-dqlite migrator --help
