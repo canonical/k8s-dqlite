@@ -18,7 +18,7 @@ func TestList(t *testing.T) {
 		g := NewWithT(t)
 
 		// Create some keys
-		keys := []string{"/key/1", "/key/2", "/key/3"}
+		keys := []string{"/key/2", "/key/1", "/key/3"}
 		for _, key := range keys {
 			resp, err := client.Txn(ctx).
 				If(clientv3.Compare(clientv3.ModRevision(key), "=", 0)).
@@ -46,7 +46,7 @@ func TestList(t *testing.T) {
 		t.Run("ListPrefix", func(t *testing.T) {
 			g := NewWithT(t)
 			// Create some keys
-			keys := []string{"key/sub/1", "key/sub/2", "key/other/1"}
+			keys := []string{"key/sub/2", "key/sub/1", "key/other/1"}
 			for _, key := range keys {
 				resp, err := client.Txn(ctx).
 					If(clientv3.Compare(clientv3.ModRevision(key), "=", 0)).
