@@ -31,6 +31,7 @@ func TestList(t *testing.T) {
 		}
 
 		t.Run("ListAll", func(t *testing.T) {
+			g := NewWithT(t)
 			// Get a list of all the keys
 			resp, err := client.Get(ctx, "/key", clientv3.WithPrefix())
 
@@ -43,6 +44,7 @@ func TestList(t *testing.T) {
 		})
 
 		t.Run("ListPrefix", func(t *testing.T) {
+			g := NewWithT(t)
 			// Create some keys
 			keys := []string{"key/sub/1", "key/sub/2", "key/other/1"}
 			for _, key := range keys {
@@ -85,6 +87,8 @@ func TestList(t *testing.T) {
 		})
 
 		t.Run("ListRange", func(t *testing.T) {
+			g := NewWithT(t)
+
 			// Get a list of with key/1, as only key/1 falls within the specified range.
 			resp, err := client.Get(ctx, "/key/1", clientv3.WithRange(""))
 
@@ -96,6 +100,8 @@ func TestList(t *testing.T) {
 
 		t.Run("ListRevision", func(t *testing.T) {
 			t.Run("Create", func(t *testing.T) {
+				g := NewWithT(t)
+
 				// Create some keys
 				keys := []string{"/revkey/1"}
 				for _, key := range keys {
