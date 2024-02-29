@@ -28,7 +28,7 @@ func New(d Dialect) *SQLLog {
 }
 
 type Dialect interface {
-	ListCurrent(ctx context.Context, prefix string, limit int64, includeDeleted bool) (*sql.Rows, error)
+	ListCurrent(ctx context.Context, prefix, startKey string, limit int64, includeDeleted bool) (*sql.Rows, error)
 	List(ctx context.Context, prefix, startKey string, limit, revision int64, includeDeleted bool) (*sql.Rows, error)
 	CountCurrent(ctx context.Context, prefix string) (int64, int64, error)
 	Count(ctx context.Context, prefix string, revision int64) (int64, int64, error)
@@ -262,7 +262,7 @@ func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revis
 	}
 
 	if revision == 0 {
-		rows, err = s.d.ListCurrent(ctx, prefix, limit, includeDeleted)
+		rows, err = s.d.ListCurrent(ctx, prefix, startKey, limit, includeDeleted)
 	} else {
 		rows, err = s.d.List(ctx, prefix, startKey, limit, revision, includeDeleted)
 	}

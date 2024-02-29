@@ -44,6 +44,51 @@ func TestList(t *testing.T) {
 			g.Expect(resp.Kvs[3].Key).To(Equal([]byte("/key/4")))
 			g.Expect(resp.Kvs[4].Key).To(Equal([]byte("/key/5")))
 		})
+
+		t.Run("ListAllLimit", func(t *testing.T) {
+			t.Run("FirstPage", func(t *testing.T) {
+				g := NewWithT(t)
+
+				resp, err := client.Get(ctx, "/key", clientv3.WithPrefix(), clientv3.WithLimit(2))
+
+				g.Expect(err).To(BeNil())
+				g.Expect(resp.Kvs).To(HaveLen(2))
+				g.Expect(resp.More).To(BeTrue())
+				g.Expect(resp.Count).To(Equal(int64(5)))
+				g.Expect(resp.Header.Revision).ToNot(BeZero())
+				g.Expect(resp.Kvs[0].Key).To(Equal([]byte("/key/1")))
+				g.Expect(resp.Kvs[1].Key).To(Equal([]byte("/key/2")))
+			})
+
+			t.Run("SecondPage", func(t *testing.T) {
+				g := NewWithT(t)
+
+				// Inspired from https://github.com/kubernetes/kubernetes/blob/3f4d3b67682335db510f85deb65b322127a3a0a1/staging/src/k8s.io/apiserver/pkg/storage/etcd3/store.go#L788-L793
+				// Key is "last_key" + "\x00", and we use the prefix range end
+				resp, err := client.Get(ctx, "/key/2\x00", clientv3.WithRange(clientv3.GetPrefixRangeEnd("/key")), clientv3.WithLimit(2))
+
+				g.Expect(err).To(BeNil())
+				g.Expect(resp.Kvs).To(HaveLen(2))
+				g.Expect(resp.More).To(BeTrue())
+				g.Expect(resp.Count).To(Equal(int64(5)))
+				g.Expect(resp.Header.Revision).ToNot(BeZero())
+				g.Expect(resp.Kvs[0].Key).To(Equal([]byte("/key/3")))
+				g.Expect(resp.Kvs[1].Key).To(Equal([]byte("/key/4")))
+			})
+
+			t.Run("ThirdPage", func(t *testing.T) {
+				g := NewWithT(t)
+
+				// Get a list of all the keys
+				resp, err := client.Get(ctx, "/key/4\x00", clientv3.WithRange(clientv3.GetPrefixRangeEnd("/key")), clientv3.WithLimit(2))
+
+				g.Expect(err).To(BeNil())
+				g.Expect(resp.Kvs).To(HaveLen(1))
+				g.Expect(resp.More).To(BeFalse())
+				g.Expect(resp.Count).To(Equal(int64(1)))
+				g.Expect(resp.Header.Revision).ToNot(BeZero())
+				g.Expect(resp.Kvs[0].Key).To(Equal([]byte("/key/5")))
+			})
 		})
 
 		t.Run("ListPrefix", func(t *testing.T) {

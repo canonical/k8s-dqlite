@@ -502,11 +502,16 @@ func (d *Generic) DeleteRevision(ctx context.Context, revision int64) error {
 	return err
 }
 
-func (d *Generic) ListCurrent(ctx context.Context, prefix string, limit int64, includeDeleted bool) (*sql.Rows, error) {
+func (d *Generic) ListCurrent(ctx context.Context, prefix, startKey string, limit int64, includeDeleted bool) (*sql.Rows, error) {
 	sql := d.GetCurrentSQL
 	start, end := getPrefixRange(prefix)
 	if limit > 0 {
 		sql = fmt.Sprintf("%s LIMIT %d", sql, limit)
+	}
+
+	// NOTE(neoaggelos): don't ignore startKey if set
+	if startKey != "" {
+		start = startKey + "\x01"
 	}
 
 	return d.query(ctx, "get_current_sql", sql, start, end, includeDeleted)
