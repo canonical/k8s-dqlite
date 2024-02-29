@@ -18,7 +18,7 @@ func TestList(t *testing.T) {
 		g := NewWithT(t)
 
 		// Create some keys
-		keys := []string{"/key/2", "/key/1", "/key/3"}
+		keys := []string{"/key/2", "/key/1", "/key/3", "/key/4", "/key/5"}
 		for _, key := range keys {
 			resp, err := client.Txn(ctx).
 				If(clientv3.Compare(clientv3.ModRevision(key), "=", 0)).
@@ -36,11 +36,14 @@ func TestList(t *testing.T) {
 			resp, err := client.Get(ctx, "/key", clientv3.WithPrefix())
 
 			g.Expect(err).To(BeNil())
-			g.Expect(resp.Kvs).To(HaveLen(3))
+			g.Expect(resp.Kvs).To(HaveLen(5))
 			g.Expect(resp.Header.Revision).ToNot(BeZero())
 			g.Expect(resp.Kvs[0].Key).To(Equal([]byte("/key/1")))
 			g.Expect(resp.Kvs[1].Key).To(Equal([]byte("/key/2")))
 			g.Expect(resp.Kvs[2].Key).To(Equal([]byte("/key/3")))
+			g.Expect(resp.Kvs[3].Key).To(Equal([]byte("/key/4")))
+			g.Expect(resp.Kvs[4].Key).To(Equal([]byte("/key/5")))
+		})
 		})
 
 		t.Run("ListPrefix", func(t *testing.T) {
@@ -62,11 +65,13 @@ func TestList(t *testing.T) {
 			resp, err := client.Get(ctx, "/key", clientv3.WithPrefix())
 
 			g.Expect(err).To(BeNil())
-			g.Expect(resp.Kvs).To(HaveLen(3))
+			g.Expect(resp.Kvs).To(HaveLen(5))
 			g.Expect(resp.Header.Revision).ToNot(BeZero())
 			g.Expect(resp.Kvs[0].Key).To(Equal([]byte("/key/1")))
 			g.Expect(resp.Kvs[1].Key).To(Equal([]byte("/key/2")))
 			g.Expect(resp.Kvs[2].Key).To(Equal([]byte("/key/3")))
+			g.Expect(resp.Kvs[3].Key).To(Equal([]byte("/key/4")))
+			g.Expect(resp.Kvs[4].Key).To(Equal([]byte("/key/5")))
 
 			// Get a list of all the keys sice they have '/key/sub' prefix
 			resp, err = client.Get(ctx, "key/sub", clientv3.WithPrefix())
@@ -119,7 +124,7 @@ func TestList(t *testing.T) {
 			t.Run("Update", func(t *testing.T) {
 				g := NewWithT(t)
 				var rev int64
-				for rev < 30 {
+				for rev < 50 {
 					get, err := client.Get(ctx, "/revkey/1", clientv3.WithRange(""))
 					g.Expect(err).To(BeNil())
 					g.Expect(get.Kvs).To(HaveLen(1))
@@ -142,15 +147,16 @@ func TestList(t *testing.T) {
 					resp, err := client.Get(ctx, "/revkey/", clientv3.WithPrefix())
 					g.Expect(err).To(BeNil())
 					g.Expect(resp.Kvs).To(HaveLen(1))
-					g.Expect(resp.Kvs[0].ModRevision).To(Equal(int64(31)))
+					g.Expect(resp.Kvs[0].ModRevision).To(Equal(int64(51)))
 					g.Expect(resp.Count).To(Equal(int64(1)))
 				})
+
 				t.Run("OldRevision", func(t *testing.T) {
 					g := NewWithT(t)
-					resp, err := client.Get(ctx, "/revkey/", clientv3.WithPrefix(), clientv3.WithRev(10))
+					resp, err := client.Get(ctx, "/revkey/", clientv3.WithPrefix(), clientv3.WithRev(30))
 					g.Expect(err).To(BeNil())
 					g.Expect(resp.Kvs).To(HaveLen(1))
-					g.Expect(resp.Kvs[0].ModRevision).To(Equal(int64(10)))
+					g.Expect(resp.Kvs[0].ModRevision).To(Equal(int64(30)))
 					g.Expect(resp.Count).To(Equal(int64(1)))
 				})
 				t.Run("LaterRevision", func(t *testing.T) {
@@ -158,7 +164,7 @@ func TestList(t *testing.T) {
 					resp, err := client.Get(ctx, "/revkey/", clientv3.WithPrefix(), clientv3.WithRev(100))
 					g.Expect(err).To(BeNil())
 					g.Expect(resp.Kvs).To(HaveLen(1))
-					g.Expect(resp.Kvs[0].ModRevision).To(Equal(int64(31)))
+					g.Expect(resp.Kvs[0].ModRevision).To(Equal(int64(51)))
 					g.Expect(resp.Count).To(Equal(int64(1)))
 				})
 			})
