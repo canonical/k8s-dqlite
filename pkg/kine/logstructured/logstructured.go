@@ -15,7 +15,7 @@ type Log interface {
 	List(ctx context.Context, prefix, startKey string, limit, revision int64, includeDeletes bool) (int64, []*server.Event, error)
 	After(ctx context.Context, prefix string, revision, limit int64) (int64, []*server.Event, error)
 	Watch(ctx context.Context, prefix string) <-chan []*server.Event
-	Count(ctx context.Context, prefix string, revision int64) (int64, int64, error)
+	Count(ctx context.Context, prefix, startKey string, revision int64) (int64, int64, error)
 	Append(ctx context.Context, event *server.Event) (int64, error)
 	DbSize(ctx context.Context) (int64, error)
 	DoCompact() error
@@ -189,11 +189,11 @@ func (l *LogStructured) List(ctx context.Context, prefix, startKey string, limit
 	return rev, kvs, nil
 }
 
-func (l *LogStructured) Count(ctx context.Context, prefix string, revision int64) (revRet int64, count int64, err error) {
+func (l *LogStructured) Count(ctx context.Context, prefix, startKey string, revision int64) (revRet int64, count int64, err error) {
 	defer func() {
-		logrus.Debugf("COUNT %s => rev=%d, count=%d, err=%v", prefix, revRet, count, err)
+		logrus.Debugf("COUNT prefix=%s startKey=%s => rev=%d, count=%d, err=%v", prefix, startKey, revRet, count, err)
 	}()
-	rev, count, err := l.log.Count(ctx, prefix, revision)
+	rev, count, err := l.log.Count(ctx, prefix, startKey, revision)
 	if err != nil {
 		return 0, 0, err
 	}

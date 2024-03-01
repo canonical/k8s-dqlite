@@ -30,8 +30,8 @@ func New(d Dialect) *SQLLog {
 type Dialect interface {
 	ListCurrent(ctx context.Context, prefix, startKey string, limit int64, includeDeleted bool) (*sql.Rows, error)
 	List(ctx context.Context, prefix, startKey string, limit, revision int64, includeDeleted bool) (*sql.Rows, error)
-	CountCurrent(ctx context.Context, prefix string) (int64, int64, error)
-	Count(ctx context.Context, prefix string, revision int64) (int64, int64, error)
+	CountCurrent(ctx context.Context, prefix, startKey string) (int64, int64, error)
+	Count(ctx context.Context, prefix, startKey string, revision int64) (int64, int64, error)
 	CurrentRevision(ctx context.Context) (int64, error)
 	AfterPrefix(ctx context.Context, prefix string, rev, limit int64) (*sql.Rows, error)
 	After(ctx context.Context, rev, limit int64) (*sql.Rows, error)
@@ -471,12 +471,12 @@ func canSkipRevision(rev, skip int64, skipTime time.Time) bool {
 	return rev == skip && time.Now().Sub(skipTime) > time.Second
 }
 
-func (s *SQLLog) Count(ctx context.Context, prefix string, revision int64) (int64, int64, error) {
+func (s *SQLLog) Count(ctx context.Context, prefix, startKey string, revision int64) (int64, int64, error) {
 	if revision == 0 {
-		return s.d.CountCurrent(ctx, prefix)
+		return s.d.CountCurrent(ctx, prefix, startKey)
 	}
 
-	return s.d.Count(ctx, prefix, revision)
+	return s.d.Count(ctx, prefix, startKey, revision)
 }
 
 func (s *SQLLog) Append(ctx context.Context, event *server.Event) (int64, error) {

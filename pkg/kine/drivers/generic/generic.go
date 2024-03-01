@@ -379,25 +379,31 @@ func (d *Generic) queryPrepared(ctx context.Context, txName, sql string, prepare
 	return r, err
 }
 
-func (d *Generic) CountCurrent(ctx context.Context, prefix string) (int64, int64, error) {
+func (d *Generic) CountCurrent(ctx context.Context, prefix string, startKey string) (int64, int64, error) {
 	var (
 		rev sql.NullInt64
 		id  int64
 	)
 
 	start, end := getPrefixRange(prefix)
+	if startKey != "" {
+		start = startKey + "\x01"
+	}
 	row := d.queryRowPrepared(ctx, "count_current", d.CountCurrentSQL, d.countCurrentSQLPrepared, start, end, false)
 	err := row.Scan(&rev, &id)
 	return rev.Int64, id, err
 }
 
-func (d *Generic) Count(ctx context.Context, prefix string, revision int64) (int64, int64, error) {
+func (d *Generic) Count(ctx context.Context, prefix, startKey string, revision int64) (int64, int64, error) {
 	var (
 		rev sql.NullInt64
 		id  int64
 	)
 
 	start, end := getPrefixRange(prefix)
+	if startKey != "" {
+		start = startKey + "\x01"
+	}
 	row := d.queryRowPrepared(ctx, "count_revision", d.CountRevisionSQL, d.countRevisionSQLPrepared, start, end, revision, false)
 	err := row.Scan(&rev, &id)
 	return rev.Int64, id, err

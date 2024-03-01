@@ -70,7 +70,7 @@ func TestList(t *testing.T) {
 				g.Expect(err).To(BeNil())
 				g.Expect(resp.Kvs).To(HaveLen(2))
 				g.Expect(resp.More).To(BeTrue())
-				g.Expect(resp.Count).To(Equal(int64(5)))
+				g.Expect(resp.Count).To(Equal(int64(3)))
 				g.Expect(resp.Header.Revision).ToNot(BeZero())
 				g.Expect(resp.Kvs[0].Key).To(Equal([]byte("/key/3")))
 				g.Expect(resp.Kvs[1].Key).To(Equal([]byte("/key/4")))
