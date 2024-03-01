@@ -126,8 +126,14 @@ func (s *SQLLog) compactor(nextEnd int64) (int64, error) {
 
 	end := nextEnd
 	nextEnd = currentRev
-	// leave the last 1000
-	end = end - 1000
+
+	// NOTE(neoaggelos): Ignoring the last 1000 revisions causes the following CNCF conformance test to fail.
+	// This is because of low activity, where the created list is part of the last 1000 revisions and is not compacted.
+	// Link to failing test: https://github.com/kubernetes/kubernetes/blob/f2cfbf44b1fb482671aedbfff820ae2af256a389/test/e2e/apimachinery/chunking.go#L144
+	// To address this, we only ignore the last 250 revisions instead
+
+	// end = end - 1000
+	end = end - 250
 
 	savedCursor := cursor
 	// Purposefully start at the current and redo the current as
