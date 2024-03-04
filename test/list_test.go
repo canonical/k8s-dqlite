@@ -3,6 +3,7 @@ package test
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -18,7 +19,7 @@ func TestList(t *testing.T) {
 		g := NewWithT(t)
 
 		// Create some keys
-		keys := []string{"/key/2", "/key/1", "/key/3", "/key/4", "/key/5"}
+		keys := shuffleList([]string{"/key/1", "/key/2", "/key/3", "/key/4", "/key/5"})
 		for _, key := range keys {
 			resp, err := client.Txn(ctx).
 				If(clientv3.Compare(clientv3.ModRevision(key), "=", 0)).
@@ -46,6 +47,7 @@ func TestList(t *testing.T) {
 		})
 
 		t.Run("ListAllLimit", func(t *testing.T) {
+			var revision int64
 			t.Run("FirstPage", func(t *testing.T) {
 				g := NewWithT(t)
 
@@ -58,6 +60,8 @@ func TestList(t *testing.T) {
 				g.Expect(resp.Header.Revision).ToNot(BeZero())
 				g.Expect(resp.Kvs[0].Key).To(Equal([]byte("/key/1")))
 				g.Expect(resp.Kvs[1].Key).To(Equal([]byte("/key/2")))
+
+				revision = resp.Header.Revision
 			})
 
 			t.Run("SecondPage", func(t *testing.T) {
@@ -65,7 +69,7 @@ func TestList(t *testing.T) {
 
 				// Inspired from https://github.com/kubernetes/kubernetes/blob/3f4d3b67682335db510f85deb65b322127a3a0a1/staging/src/k8s.io/apiserver/pkg/storage/etcd3/store.go#L788-L793
 				// Key is "last_key" + "\x00", and we use the prefix range end
-				resp, err := client.Get(ctx, "/key/2\x00", clientv3.WithRange(clientv3.GetPrefixRangeEnd("/key")), clientv3.WithLimit(2))
+				resp, err := client.Get(ctx, "/key/2\x00", clientv3.WithRange(clientv3.GetPrefixRangeEnd("/key")), clientv3.WithLimit(2), clientv3.WithRev(revision))
 
 				g.Expect(err).To(BeNil())
 				g.Expect(resp.Kvs).To(HaveLen(2))
@@ -74,13 +78,15 @@ func TestList(t *testing.T) {
 				g.Expect(resp.Header.Revision).ToNot(BeZero())
 				g.Expect(resp.Kvs[0].Key).To(Equal([]byte("/key/3")))
 				g.Expect(resp.Kvs[1].Key).To(Equal([]byte("/key/4")))
+
+				revision = resp.Header.Revision
 			})
 
 			t.Run("ThirdPage", func(t *testing.T) {
 				g := NewWithT(t)
 
 				// Get a list of all the keys
-				resp, err := client.Get(ctx, "/key/4\x00", clientv3.WithRange(clientv3.GetPrefixRangeEnd("/key")), clientv3.WithLimit(2))
+				resp, err := client.Get(ctx, "/key/4\x00", clientv3.WithRange(clientv3.GetPrefixRangeEnd("/key")), clientv3.WithLimit(2), clientv3.WithRev(revision))
 
 				g.Expect(err).To(BeNil())
 				g.Expect(resp.Kvs).To(HaveLen(1))
@@ -246,4 +252,18 @@ func BenchmarkList(b *testing.B) {
 			g.Expect(resp.Kvs).To(HaveLen(numItems))
 		}
 	})
+}
+
+func shuffleList[T any](vals []T) []T {
+	if len(vals) == 0 {
+		return vals
+	}
+
+	perm := rand.Perm(len(vals))
+	shuffled := make([]T, 0, len(vals))
+	for _, i := range perm {
+		shuffled = append(shuffled, vals[perm[i]])
+	}
+
+	return shuffled
 }

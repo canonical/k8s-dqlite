@@ -38,34 +38,24 @@ var (
 		ORDER BY kv.name ASC, kv.id ASC
 	`, columns)
 
-	// FIXME this query doesn't seem sound.
 	revisionAfterSQL = fmt.Sprintf(`
-			SELECT *
-			FROM (
-				SELECT %s
-				FROM kine AS kv
-				JOIN (
-					SELECT MAX(mkv.id) AS id
-					FROM kine AS mkv
-					WHERE mkv.name >= ? AND mkv.name < ?
-						AND mkv.id <= ?
-						AND mkv.id > (
-							SELECT ikv.id
-							FROM kine AS ikv
-							WHERE
-								ikv.name = ? AND
-								ikv.id <= ?
-							ORDER BY ikv.id DESC
-							LIMIT 1
-						)
-					GROUP BY mkv.name
-				) AS maxkv
-					ON maxkv.id = kv.id
-				WHERE
-					? OR kv.deleted = 0
-			) AS lkv
-			ORDER BY lkv.theid ASC
-		`, columns)
+		SELECT *
+		FROM (
+			SELECT %s
+			FROM kine AS kv
+			JOIN (
+				SELECT MAX(mkv.id) AS id
+				FROM kine AS mkv
+				WHERE mkv.name >= ? AND mkv.name < ?
+					AND mkv.id <= ?
+				GROUP BY mkv.name
+			) AS maxkv
+				ON maxkv.id = kv.id
+			WHERE
+				? OR kv.deleted = 0
+		) AS lkv
+		ORDER BY lkv.name ASC, lkv.theid ASC
+	`, columns)
 
 	revisionIntervalSQL = `
 		SELECT (
@@ -537,7 +527,7 @@ func (d *Generic) List(ctx context.Context, prefix, startKey string, limit, revi
 	if limit > 0 {
 		sql = fmt.Sprintf("%s LIMIT %d", sql, limit)
 	}
-	return d.query(ctx, "get_revision_after_sql", sql, start, end, revision, startKey, revision, includeDeleted)
+	return d.query(ctx, "get_revision_after_sql", sql, startKey+"\x01", end, revision, includeDeleted)
 }
 
 func (d *Generic) CurrentRevision(ctx context.Context) (int64, error) {
