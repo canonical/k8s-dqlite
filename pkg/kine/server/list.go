@@ -23,7 +23,7 @@ func (l *LimitedServer) list(ctx context.Context, r *etcdserverpb.RangeRequest) 
 	revision := r.Revision
 
 	if r.CountOnly {
-		rev, count, err := l.backend.Count(ctx, prefix, revision)
+		rev, count, err := l.backend.Count(ctx, prefix, start, revision)
 		if err != nil {
 			return nil, err
 		}
@@ -60,7 +60,7 @@ func (l *LimitedServer) list(ctx context.Context, r *etcdserverpb.RangeRequest) 
 		}
 
 		// count the actual number of results if there are more items in the db.
-		rev, resp.Count, err = l.backend.Count(ctx, prefix, revision)
+		rev, resp.Count, err = l.backend.Count(ctx, prefix, start, revision)
 		if err != nil {
 			return nil, err
 		}

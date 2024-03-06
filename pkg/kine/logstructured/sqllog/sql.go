@@ -28,10 +28,10 @@ func New(d Dialect) *SQLLog {
 }
 
 type Dialect interface {
-	ListCurrent(ctx context.Context, prefix string, limit int64, includeDeleted bool) (*sql.Rows, error)
+	ListCurrent(ctx context.Context, prefix, startKey string, limit int64, includeDeleted bool) (*sql.Rows, error)
 	List(ctx context.Context, prefix, startKey string, limit, revision int64, includeDeleted bool) (*sql.Rows, error)
-	CountCurrent(ctx context.Context, prefix string) (int64, int64, error)
-	Count(ctx context.Context, prefix string, revision int64) (int64, int64, error)
+	CountCurrent(ctx context.Context, prefix, startKey string) (int64, int64, error)
+	Count(ctx context.Context, prefix, startKey string, revision int64) (int64, int64, error)
 	CurrentRevision(ctx context.Context) (int64, error)
 	AfterPrefix(ctx context.Context, prefix string, rev, limit int64) (*sql.Rows, error)
 	After(ctx context.Context, rev, limit int64) (*sql.Rows, error)
@@ -126,8 +126,14 @@ func (s *SQLLog) compactor(nextEnd int64) (int64, error) {
 
 	end := nextEnd
 	nextEnd = currentRev
-	// leave the last 1000
-	end = end - 1000
+
+	// NOTE(neoaggelos): Ignoring the last 1000 revisions causes the following CNCF conformance test to fail.
+	// This is because of low activity, where the created list is part of the last 1000 revisions and is not compacted.
+	// Link to failing test: https://github.com/kubernetes/kubernetes/blob/f2cfbf44b1fb482671aedbfff820ae2af256a389/test/e2e/apimachinery/chunking.go#L144
+	// To address this, we only ignore the last 100 revisions instead
+
+	// end = end - 1000
+	end = end - 100
 
 	savedCursor := cursor
 	// Purposefully start at the current and redo the current as
@@ -262,7 +268,7 @@ func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revis
 	}
 
 	if revision == 0 {
-		rows, err = s.d.ListCurrent(ctx, prefix, limit, includeDeleted)
+		rows, err = s.d.ListCurrent(ctx, prefix, startKey, limit, includeDeleted)
 	} else {
 		rows, err = s.d.List(ctx, prefix, startKey, limit, revision, includeDeleted)
 	}
@@ -471,12 +477,12 @@ func canSkipRevision(rev, skip int64, skipTime time.Time) bool {
 	return rev == skip && time.Now().Sub(skipTime) > time.Second
 }
 
-func (s *SQLLog) Count(ctx context.Context, prefix string, revision int64) (int64, int64, error) {
+func (s *SQLLog) Count(ctx context.Context, prefix, startKey string, revision int64) (int64, int64, error) {
 	if revision == 0 {
-		return s.d.CountCurrent(ctx, prefix)
+		return s.d.CountCurrent(ctx, prefix, startKey)
 	}
 
-	return s.d.Count(ctx, prefix, revision)
+	return s.d.Count(ctx, prefix, startKey, revision)
 }
 
 func (s *SQLLog) Append(ctx context.Context, event *server.Event) (int64, error) {

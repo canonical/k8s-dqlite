@@ -35,37 +35,27 @@ var (
 	    	ON maxkv.id = kv.id
 		WHERE
 			  (kv.deleted = 0 OR ?)
-		ORDER BY kv.id ASC
+		ORDER BY kv.name ASC, kv.id ASC
 	`, columns)
 
-	// FIXME this query doesn't seem sound.
 	revisionAfterSQL = fmt.Sprintf(`
-			SELECT *
-			FROM (
-				SELECT %s
-				FROM kine AS kv
-				JOIN (
-					SELECT MAX(mkv.id) AS id
-					FROM kine AS mkv
-					WHERE mkv.name >= ? AND mkv.name < ?
-						AND mkv.id <= ?
-						AND mkv.id > (
-							SELECT ikv.id
-							FROM kine AS ikv
-							WHERE
-								ikv.name = ? AND
-								ikv.id <= ?
-							ORDER BY ikv.id DESC
-							LIMIT 1
-						)
-					GROUP BY mkv.name
-				) AS maxkv
-					ON maxkv.id = kv.id
-				WHERE
-					? OR kv.deleted = 0
-			) AS lkv
-			ORDER BY lkv.theid ASC
-		`, columns)
+		SELECT *
+		FROM (
+			SELECT %s
+			FROM kine AS kv
+			JOIN (
+				SELECT MAX(mkv.id) AS id
+				FROM kine AS mkv
+				WHERE mkv.name >= ? AND mkv.name < ?
+					AND mkv.id <= ?
+				GROUP BY mkv.name
+			) AS maxkv
+				ON maxkv.id = kv.id
+			WHERE
+				? OR kv.deleted = 0
+		) AS lkv
+		ORDER BY lkv.name ASC, lkv.theid ASC
+	`, columns)
 
 	revisionIntervalSQL = `
 		SELECT (
@@ -379,25 +369,31 @@ func (d *Generic) queryPrepared(ctx context.Context, txName, sql string, prepare
 	return r, err
 }
 
-func (d *Generic) CountCurrent(ctx context.Context, prefix string) (int64, int64, error) {
+func (d *Generic) CountCurrent(ctx context.Context, prefix string, startKey string) (int64, int64, error) {
 	var (
 		rev sql.NullInt64
 		id  int64
 	)
 
 	start, end := getPrefixRange(prefix)
+	if startKey != "" {
+		start = startKey + "\x01"
+	}
 	row := d.queryRowPrepared(ctx, "count_current", d.CountCurrentSQL, d.countCurrentSQLPrepared, start, end, false)
 	err := row.Scan(&rev, &id)
 	return rev.Int64, id, err
 }
 
-func (d *Generic) Count(ctx context.Context, prefix string, revision int64) (int64, int64, error) {
+func (d *Generic) Count(ctx context.Context, prefix, startKey string, revision int64) (int64, int64, error) {
 	var (
 		rev sql.NullInt64
 		id  int64
 	)
 
 	start, end := getPrefixRange(prefix)
+	if startKey != "" {
+		start = startKey + "\x01"
+	}
 	row := d.queryRowPrepared(ctx, "count_revision", d.CountRevisionSQL, d.countRevisionSQLPrepared, start, end, revision, false)
 	err := row.Scan(&rev, &id)
 	return rev.Int64, id, err
@@ -502,11 +498,16 @@ func (d *Generic) DeleteRevision(ctx context.Context, revision int64) error {
 	return err
 }
 
-func (d *Generic) ListCurrent(ctx context.Context, prefix string, limit int64, includeDeleted bool) (*sql.Rows, error) {
+func (d *Generic) ListCurrent(ctx context.Context, prefix, startKey string, limit int64, includeDeleted bool) (*sql.Rows, error) {
 	sql := d.GetCurrentSQL
 	start, end := getPrefixRange(prefix)
 	if limit > 0 {
 		sql = fmt.Sprintf("%s LIMIT %d", sql, limit)
+	}
+
+	// NOTE(neoaggelos): don't ignore startKey if set
+	if startKey != "" {
+		start = startKey + "\x01"
 	}
 
 	return d.query(ctx, "get_current_sql", sql, start, end, includeDeleted)
@@ -526,7 +527,7 @@ func (d *Generic) List(ctx context.Context, prefix, startKey string, limit, revi
 	if limit > 0 {
 		sql = fmt.Sprintf("%s LIMIT %d", sql, limit)
 	}
-	return d.query(ctx, "get_revision_after_sql", sql, start, end, revision, startKey, revision, includeDeleted)
+	return d.query(ctx, "get_revision_after_sql", sql, startKey+"\x01", end, revision, includeDeleted)
 }
 
 func (d *Generic) CurrentRevision(ctx context.Context) (int64, error) {
