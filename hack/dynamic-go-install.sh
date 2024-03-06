@@ -6,5 +6,5 @@ DIR="$(realpath `dirname "${0}"`)"
 
 go install \
   -tags dqlite,libsqlite3 \
-  -ldflags '-s -w' \
+  -ldflags '-s -w -extldflags "-Wl,-rpath,$ORIGIN/lib -Wl,-rpath,$ORIGIN/../lib"' \
   "${@}"
