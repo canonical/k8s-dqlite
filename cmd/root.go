@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"time"
 
+	"github.com/canonical/k8s-dqlite/pkg/embedded"
 	"github.com/canonical/k8s-dqlite/pkg/server"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
@@ -37,6 +38,8 @@ var (
 		admissionControlPolicy   string
 		acpLimitMaxConcurrentTxn int64
 		acpOnlyWriteQueries      bool
+
+		embeddedMode bool
 	}
 
 	rootCmd = &cobra.Command{
@@ -66,26 +69,35 @@ var (
 				}()
 			}
 
-			server, err := server.New(
-				rootCmdOpts.dir,
-				rootCmdOpts.listen,
-				rootCmdOpts.tls,
-				rootCmdOpts.diskMode,
-				rootCmdOpts.clientSessionCacheSize,
-				rootCmdOpts.minTLSVersion,
-				rootCmdOpts.watchAvailableStorageInterval,
-				rootCmdOpts.watchAvailableStorageMinBytes,
-				rootCmdOpts.lowAvailableStorageAction,
-				rootCmdOpts.admissionControlPolicy,
-				rootCmdOpts.acpLimitMaxConcurrentTxn,
-				rootCmdOpts.acpOnlyWriteQueries,
+			var (
+				instance server.Instance
+				err      error
 			)
-			if err != nil {
-				logrus.WithError(err).Fatal("Failed to create server")
+			if rootCmdOpts.embeddedMode {
+				if instance, err = embedded.New(rootCmdOpts.dir); err != nil {
+					logrus.WithError(err).Fatal("Failed to create embedded server")
+				}
+			} else {
+				if instance, err = server.New(
+					rootCmdOpts.dir,
+					rootCmdOpts.listen,
+					rootCmdOpts.tls,
+					rootCmdOpts.diskMode,
+					rootCmdOpts.clientSessionCacheSize,
+					rootCmdOpts.minTLSVersion,
+					rootCmdOpts.watchAvailableStorageInterval,
+					rootCmdOpts.watchAvailableStorageMinBytes,
+					rootCmdOpts.lowAvailableStorageAction,
+					rootCmdOpts.admissionControlPolicy,
+					rootCmdOpts.acpLimitMaxConcurrentTxn,
+					rootCmdOpts.acpOnlyWriteQueries,
+				); err != nil {
+					logrus.WithError(err).Fatal("Failed to create server")
+				}
 			}
 
 			ctx, cancel := context.WithCancel(cmd.Context())
-			if err := server.Start(ctx); err != nil {
+			if err := instance.Start(ctx); err != nil {
 				logrus.WithError(err).Fatal("Server failed to start")
 			}
 
@@ -98,7 +110,7 @@ var (
 
 			select {
 			case <-ch:
-			case <-server.MustStop():
+			case <-instance.MustStop():
 			}
 			cancel()
 
@@ -106,7 +118,7 @@ var (
 			stopCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 
-			if err := server.Shutdown(stopCtx); err != nil {
+			if err := instance.Shutdown(stopCtx); err != nil {
 				logrus.WithError(err).Fatal("Failed to shutdown server")
 			}
 		},
@@ -141,4 +153,5 @@ func init() {
 	// TODO(MK-1408): This value is highly dependend on underlying hardware, thus making the default value a bit useless. The linked card will implement a dynamic way to set this value.
 	rootCmd.Flags().Int64Var(&rootCmdOpts.acpLimitMaxConcurrentTxn, "admission-control-policy-limit-max-concurrent-transactions", 300, "Maximum number of transactions that are allowed to run concurrently. Transactions will not be admitted after the limit is reached.")
 	rootCmd.Flags().BoolVar(&rootCmdOpts.acpOnlyWriteQueries, "admission-control-only-for-write-queries", false, "If set, admission control will only be applied to write queries.")
+	rootCmd.Flags().BoolVar(&rootCmdOpts.embeddedMode, "embedded", false, "Run in embedded mode")
 }

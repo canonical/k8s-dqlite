@@ -357,3 +357,5 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	close(s.mustStopCh)
 	return nil
 }
+
+var _ Instance = &Server{}
