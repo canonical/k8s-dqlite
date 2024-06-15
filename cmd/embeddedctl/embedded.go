@@ -2,6 +2,7 @@ package embeddedctl
 
 import (
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 )
@@ -15,7 +16,17 @@ var (
 )
 
 func init() {
-	Command.PersistentFlags().StringVar(&flagStorageDir, "storage-dir", os.Getenv("EMBEDDED_DIR"), "k8s-dqlite storage directory")
+	// convenient default
+	defaultStorageDir := os.Getenv("EMBEDDED_DIR")
+	if defaultStorageDir == "" {
+		snapCommon := os.Getenv("SNAP_COMMON")
+		if snapCommon == "" {
+			snapCommon = "/var/snap/k8s/common"
+		}
+		defaultStorageDir = filepath.Join(snapCommon, "var", "lib", "k8s-dqlite")
+	}
+
+	Command.PersistentFlags().StringVar(&flagStorageDir, "storage-dir", os.Getenv("EMBEDDED_DIR"), "k8s-dqlite state directory")
 
 	Command.AddCommand(memberCmd)
 	Command.AddCommand(snapshotCmd)
