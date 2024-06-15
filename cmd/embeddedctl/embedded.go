@@ -26,7 +26,7 @@ func init() {
 		defaultStorageDir = filepath.Join(snapCommon, "var", "lib", "k8s-dqlite")
 	}
 
-	Command.PersistentFlags().StringVar(&flagStorageDir, "storage-dir", os.Getenv("EMBEDDED_DIR"), "k8s-dqlite state directory")
+	Command.PersistentFlags().StringVar(&flagStorageDir, "storage-dir", defaultStorageDir, "k8s-dqlite state directory")
 
 	Command.AddCommand(memberCmd)
 	Command.AddCommand(snapshotCmd)
