@@ -27,13 +27,13 @@ func jsonOutput(i any) error {
 	return nil
 }
 
-func newCommand(f func(context.Context, *clientv3.Client) (any, error)) func(cmd *cobra.Command, args []string) error {
+func newCommand(f func(context.Context, *clientv3.Client, []string) (any, error)) func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		client, err := newEmbeddedClient(flagStorageDir)
 		if err != nil {
 			return fmt.Errorf("failed to initialize embedded client: %w", err)
 		}
-		resp, err := f(cmd.Context(), client)
+		resp, err := f(cmd.Context(), client, args)
 		return jsonOutput(resp)
 	}
 }
