@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"time"
 
+	"github.com/canonical/k8s-dqlite/cmd/embeddedctl"
 	"github.com/canonical/k8s-dqlite/pkg/embedded"
 	"github.com/canonical/k8s-dqlite/pkg/server"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -154,4 +155,6 @@ func init() {
 	rootCmd.Flags().Int64Var(&rootCmdOpts.acpLimitMaxConcurrentTxn, "admission-control-policy-limit-max-concurrent-transactions", 300, "Maximum number of transactions that are allowed to run concurrently. Transactions will not be admitted after the limit is reached.")
 	rootCmd.Flags().BoolVar(&rootCmdOpts.acpOnlyWriteQueries, "admission-control-only-for-write-queries", false, "If set, admission control will only be applied to write queries.")
 	rootCmd.Flags().BoolVar(&rootCmdOpts.embeddedMode, "embedded", false, "Run in embedded mode")
+
+	rootCmd.AddCommand(embeddedctl.Command)
 }
