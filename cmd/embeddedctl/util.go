@@ -15,7 +15,7 @@ func newEmbeddedClient(storageDir string) (*clientv3.Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize instance: %w", err)
 	}
-	return instance.NewClient()
+	return instance.NewLocalClient()
 }
 
 func jsonOutput(i any) error {
