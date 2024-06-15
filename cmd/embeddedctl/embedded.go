@@ -18,4 +18,5 @@ func init() {
 	Command.PersistentFlags().StringVar(&flagStorageDir, "storage-dir", os.Getenv("EMBEDDED_DIR"), "k8s-dqlite storage directory")
 
 	Command.AddCommand(memberCmd)
+	Command.AddCommand(snapshotCmd)
 }
