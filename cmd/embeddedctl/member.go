@@ -33,7 +33,7 @@ var (
 	}
 
 	memberRemoveCmd = &cobra.Command{
-		Use:  "add",
+		Use:  "remove",
 		Args: cobra.ExactArgs(1),
 		RunE: newCommand(func(ctx context.Context, client *clientv3.Client, args []string) (any, error) {
 			id, err := strconv.ParseUint(args[0], 10, 64)
