@@ -66,16 +66,14 @@ func (e *embedded) ensurePeerInCluster(ctx context.Context) (string, error) {
 	}()
 
 	initialClusterParts := make([]string, 0, len(members.Members))
-
-nextMember:
 	for _, member := range members.Members {
 		name := member.GetName()
 		for _, url := range member.GetPeerURLs() {
 			if url == e.peerURL {
 				name = e.config.Name
 			}
-			initialClusterParts = append(initialClusterParts, fmt.Sprintf("%s=%s", name, member.GetPeerURLs()[0]))
-			continue nextMember
+			initialClusterParts = append(initialClusterParts, fmt.Sprintf("%s=%s", name, url))
+			break
 		}
 	}
 
