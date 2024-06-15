@@ -27,7 +27,7 @@ func jsonOutput(i any) error {
 	return nil
 }
 
-func newCommand(f func(context.Context, *clientv3.Client, []string) (any, error)) func(cmd *cobra.Command, args []string) error {
+func command(f func(context.Context, *clientv3.Client, []string) (any, error)) func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		client, err := newEmbeddedClient(flagStorageDir)
 		if err != nil {
