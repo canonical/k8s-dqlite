@@ -34,6 +34,9 @@ func newCommand(f func(context.Context, *clientv3.Client, []string) (any, error)
 			return fmt.Errorf("failed to initialize embedded client: %w", err)
 		}
 		resp, err := f(cmd.Context(), client, args)
+		if err != nil {
+			return fmt.Errorf("command failed: %w", err)
+		}
 		return jsonOutput(resp)
 	}
 }
