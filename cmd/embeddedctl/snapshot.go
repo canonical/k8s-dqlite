@@ -30,7 +30,7 @@ var (
 				return nil, fmt.Errorf("failed to retrieve snapshot: %w", err)
 			}
 			if err := os.WriteFile(args[0], b, 0600); err != nil {
-				return nil, fmt.Errorf("failed to write snapshot to %q: %w", err)
+				return nil, fmt.Errorf("failed to write snapshot to %q: %w", args[0], err)
 			}
 			return map[string]any{"size": len(b), "file": args[0]}, nil
 		}),

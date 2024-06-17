@@ -61,7 +61,7 @@ func (e *embedded) ensurePeerInCluster(ctx context.Context) (string, error) {
 
 	defer func() {
 		if err := e.createSentinel(); err != nil {
-			panic(fmt.Sprintf("failed to create sentinel file: %w", err.Error()))
+			panic(fmt.Sprintf("failed to create sentinel file: %v", err.Error()))
 		}
 	}()
 
