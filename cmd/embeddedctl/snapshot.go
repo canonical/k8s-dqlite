@@ -17,9 +17,10 @@ var (
 	}
 
 	snapshotSaveCmd = &cobra.Command{
-		Use:   "save [backup.db]",
-		Args:  cobra.ExactArgs(1),
-		Short: "Save a snapshot of the cluster",
+		Use:          "save [backup.db]",
+		Short:        "Save a snapshot of the cluster",
+		SilenceUsage: true,
+		Args:         cobra.ExactArgs(1),
 		RunE: command(func(ctx context.Context, client *clientv3.Client, args []string) (any, error) {
 			reader, err := client.Snapshot(ctx)
 			if err != nil {

@@ -11,7 +11,8 @@ var (
 	flagStorageDir string
 
 	Command = &cobra.Command{
-		Use: "embeddedctl",
+		Use:   "embeddedctl",
+		Short: "Interact with the embedded datastore",
 	}
 )
 

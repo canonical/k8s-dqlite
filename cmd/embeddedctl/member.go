@@ -18,26 +18,29 @@ var (
 	}
 
 	memberListCmd = &cobra.Command{
-		Use:   "list",
-		Short: "List cluster members",
+		Use:          "list",
+		Short:        "List cluster members",
+		SilenceUsage: true,
 		RunE: command(func(ctx context.Context, client *clientv3.Client, args []string) (any, error) {
 			return client.MemberList(ctx)
 		}),
 	}
 
 	memberAddCmd = &cobra.Command{
-		Use:   "add [peerURL ...]",
-		Short: "Add a new cluster member",
-		Args:  cobra.MinimumNArgs(1),
+		Use:          "add [peerURL ...]",
+		Short:        "Add a new cluster member",
+		SilenceUsage: true,
+		Args:         cobra.MinimumNArgs(1),
 		RunE: command(func(ctx context.Context, client *clientv3.Client, args []string) (any, error) {
 			return client.MemberAdd(ctx, args)
 		}),
 	}
 
 	memberRemoveCmd = &cobra.Command{
-		Use:   "remove [memberID]",
-		Short: "Remove a cluster member",
-		Args:  cobra.MaximumNArgs(1),
+		Use:          "remove [memberID]",
+		Short:        "Remove a cluster member",
+		SilenceUsage: true,
+		Args:         cobra.MaximumNArgs(1),
 		RunE: command(func(ctx context.Context, client *clientv3.Client, args []string) (any, error) {
 			switch {
 			case flagPeerURL == "" && len(args) == 0:
