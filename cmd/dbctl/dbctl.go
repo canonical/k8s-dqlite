@@ -1,4 +1,4 @@
-package embeddedctl
+package dbctl
 
 import (
 	"os"
@@ -11,14 +11,14 @@ var (
 	flagStorageDir string
 
 	Command = &cobra.Command{
-		Use:   "embeddedctl",
+		Use:   "dbctl",
 		Short: "Interact with the embedded datastore",
 	}
 )
 
 func init() {
 	// convenient default
-	defaultStorageDir := os.Getenv("EMBEDDED_DIR")
+	defaultStorageDir := os.Getenv("STORAGE_DIR")
 	if defaultStorageDir == "" {
 		snapCommon := os.Getenv("SNAP_COMMON")
 		if snapCommon == "" {

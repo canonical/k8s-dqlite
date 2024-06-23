@@ -1,4 +1,4 @@
-package embeddedctl
+package dbctl
 
 import (
 	"context"

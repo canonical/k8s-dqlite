@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/canonical/k8s-dqlite/cmd/embeddedctl"
+	"github.com/canonical/k8s-dqlite/cmd/dbctl"
 	"github.com/canonical/k8s-dqlite/pkg/etcd"
 	"github.com/canonical/k8s-dqlite/pkg/server"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -154,5 +154,5 @@ func init() {
 	rootCmd.Flags().BoolVar(&rootCmdOpts.acpOnlyWriteQueries, "admission-control-only-for-write-queries", false, "If set, admission control will only be applied to write queries.")
 	rootCmd.Flags().BoolVar(&rootCmdOpts.etcdMode, "etcd-mode", false, "Run in etcd mode")
 
-	rootCmd.AddCommand(embeddedctl.Command)
+	rootCmd.AddCommand(dbctl.Command)
 }
