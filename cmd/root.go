@@ -73,7 +73,7 @@ var (
 				instance server.Instance
 				err      error
 			)
-			if rootCmdOpts.embeddedMode {
+			if rootCmdOpts.etcdMode {
 				if instance, err = etcd.New(rootCmdOpts.dir); err != nil {
 					logrus.WithError(err).Fatal("Failed to create etcd server")
 				}
