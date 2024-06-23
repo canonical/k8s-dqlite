@@ -1,4 +1,4 @@
-package embedded
+package etcd
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
-func (e *embedded) hasValidSentinelFile() (bool, error) {
+func (e *etcd) hasValidSentinelFile() (bool, error) {
 	b, err := os.ReadFile(e.sentinelFile)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -20,11 +20,11 @@ func (e *embedded) hasValidSentinelFile() (bool, error) {
 	return strings.TrimSpace(string(b)) == e.peerURL, nil
 }
 
-func (e *embedded) createSentinel() error {
+func (e *etcd) createSentinel() error {
 	return os.WriteFile(e.sentinelFile, []byte(e.peerURL), 0600)
 }
 
-func (e *embedded) ensurePeerInCluster(ctx context.Context) (string, error) {
+func (e *etcd) ensurePeerInCluster(ctx context.Context) (string, error) {
 	if e.config.ClusterState == "new" {
 		return "", nil
 	}

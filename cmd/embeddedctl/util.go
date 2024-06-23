@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/canonical/k8s-dqlite/pkg/embedded"
+	"github.com/canonical/k8s-dqlite/pkg/etcd"
 	"github.com/spf13/cobra"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 func newEmbeddedClient(storageDir string) (*clientv3.Client, error) {
-	instance, err := embedded.New(storageDir)
+	instance, err := etcd.New(storageDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize instance: %w", err)
 	}

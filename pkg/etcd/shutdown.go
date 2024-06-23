@@ -1,11 +1,11 @@
-package embedded
+package etcd
 
 import (
 	"context"
 	"fmt"
 )
 
-func (e *embedded) Shutdown(ctx context.Context) error {
+func (e *etcd) Shutdown(ctx context.Context) error {
 	if e.instance == nil {
 		return nil
 	}

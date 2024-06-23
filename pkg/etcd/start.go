@@ -1,4 +1,4 @@
-package embedded
+package etcd
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func (e *embedded) Start(ctx context.Context) error {
+func (e *etcd) Start(ctx context.Context) error {
 	if initialCluster, err := e.ensurePeerInCluster(ctx); err != nil {
 		return fmt.Errorf("failed to initialize node: %w", err)
 	} else if initialCluster != "" {
