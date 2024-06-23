@@ -10,7 +10,7 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
-func newEmbeddedClient(storageDir string) (*clientv3.Client, error) {
+func newEtcdClient(storageDir string) (*clientv3.Client, error) {
 	instance, err := etcd.New(storageDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize instance: %w", err)
@@ -29,9 +29,9 @@ func jsonOutput(i any) error {
 
 func command(f func(context.Context, *clientv3.Client, []string) (any, error)) func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) error {
-		client, err := newEmbeddedClient(flagStorageDir)
+		client, err := newEtcdClient(flagStorageDir)
 		if err != nil {
-			return fmt.Errorf("failed to initialize embedded client: %w", err)
+			return fmt.Errorf("failed to initialize etcd client: %w", err)
 		}
 		resp, err := f(cmd.Context(), client, args)
 		if err != nil {
