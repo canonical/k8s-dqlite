@@ -24,10 +24,10 @@ func init() {
 		if snapCommon == "" {
 			snapCommon = "/var/snap/k8s/common"
 		}
-		defaultStorageDir = filepath.Join(snapCommon, "var", "lib", "k8s-dqlite")
+		defaultStorageDir = filepath.Join(snapCommon, "var", "lib", "etcd")
 	}
 
-	Command.PersistentFlags().StringVar(&flagStorageDir, "storage-dir", defaultStorageDir, "k8s-dqlite state directory")
+	Command.PersistentFlags().StringVar(&flagStorageDir, "storage-dir", defaultStorageDir, "etcd state directory")
 
 	Command.AddCommand(memberCmd)
 	Command.AddCommand(snapshotCmd)
