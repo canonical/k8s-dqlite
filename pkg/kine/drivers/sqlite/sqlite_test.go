@@ -7,8 +7,11 @@ import (
 	"path"
 	"testing"
 
+	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/generic"
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/sqlite"
 	"github.com/canonical/k8s-dqlite/pkg/kine/logstructured/sqllog"
+	"github.com/canonical/k8s-dqlite/pkg/kine/server"
+	. "github.com/onsi/gomega"
 	"github.com/sirupsen/logrus"
 )
 
@@ -74,13 +77,63 @@ WHERE type = 'index'
 	}
 }
 
+func TestCompaction(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("SmallDatabaseDeleteEntry", func(t *testing.T) {
+		g := NewWithT(t)
+		backend, dialect, err := newBackend(ctx, t)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer dialect.DB.Close()
+
+		addEntries(ctx, dialect, 2)
+		deleteEntries(ctx, dialect, 1)
+
+		initialSize, err := backend.DbSize(ctx)
+		g.Expect(err).To(BeNil())
+
+		err = backend.DoCompact(ctx)
+		g.Expect(err).To(BeNil())
+
+		finalSize, err := backend.DbSize(ctx)
+		g.Expect(err).To(BeNil())
+
+		// Expecting no compaction
+		g.Expect(finalSize).To(BeNumerically("==", initialSize))
+	})
+
+	t.Run("LargeDatabaseDeleteFivePercent", func(t *testing.T) {
+		g := NewWithT(t)
+		backend, dialect, err := newBackend(ctx, t)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer dialect.DB.Close()
+
+		addEntries(ctx, dialect, 10_000)
+		deleteEntries(ctx, dialect, 500)
+
+		initialSize, err := backend.DbSize(ctx)
+		g.Expect(err).To(BeNil())
+
+		err = backend.DoCompact(ctx)
+		g.Expect(err).To(BeNil())
+
+		finalSize, err := backend.DbSize(ctx)
+		g.Expect(err).To(BeNil())
+
+		// Expecting compaction
+		g.Expect(finalSize).To(BeNumerically("<", initialSize))
+	})
+}
+
 func BenchmarkCompaction(b *testing.B) {
 	b.StopTimer()
 	ctx := context.Background()
 
-	dir := b.TempDir()
-	dataSource := path.Join(dir, "k8s.sqlite")
-	backend, dialect, err := sqlite.NewVariant(ctx, "sqlite3", dataSource)
+	backend, dialect, err := newBackend(ctx, b)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -94,8 +147,29 @@ func BenchmarkCompaction(b *testing.B) {
 	// that the deleted rows are about 5% of the total.
 	addCount := delCount * 20
 
-	// Insert addCount entries
-	_, err = dialect.DB.ExecContext(ctx, `
+	if err := addEntries(ctx, dialect, addCount); err != nil {
+		b.Fatal(err)
+	}
+	if err := deleteEntries(ctx, dialect, delCount); err != nil {
+		b.Fatal(err)
+	}
+
+	b.StartTimer()
+	err = backend.DoCompact(ctx)
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.StopTimer()
+}
+
+func newBackend(ctx context.Context, tb testing.TB) (server.Backend, *generic.Generic, error) {
+	dir := tb.TempDir()
+	dataSource := path.Join(dir, "k8s.sqlite")
+	return sqlite.NewVariant(ctx, "sqlite3", dataSource)
+}
+
+func addEntries(ctx context.Context, dialect *generic.Generic, count int) error {
+	_, err := dialect.DB.ExecContext(ctx, `
 WITH RECURSIVE gen_id AS(
 	SELECT COALESCE(MAX(id), 0)+1 AS id FROM kine
 
@@ -107,13 +181,12 @@ WITH RECURSIVE gen_id AS(
 )
 INSERT INTO kine
 SELECT id, 'testkey-'||id, 1, 0, id, 0, 0, 'value-'||id, NULL FROM gen_id;
-	`, addCount)
-	if err != nil {
-		b.Fatal(err)
-	}
+	`, count)
+	return err
+}
 
-	// Delete 5% of the entries
-	_, err = dialect.DB.ExecContext(ctx, fmt.Sprintf(`
+func deleteEntries(ctx context.Context, dialect *generic.Generic, count int) error {
+	_, err := dialect.DB.ExecContext(ctx, fmt.Sprintf(`
 INSERT INTO kine(
 	name, created, deleted, create_revision, prev_revision, lease, value, old_value
 )
@@ -127,15 +200,6 @@ JOIN (
 ) maxkv ON maxkv.id = kv.id
 WHERE kv.deleted = 0
 ORDER BY kv.name
-LIMIT %d`, delCount))
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	b.StartTimer()
-	err = backend.DoCompact(ctx)
-	if err != nil {
-		b.Fatal(err)
-	}
-	b.StopTimer()
+LIMIT %d`, count))
+	return err
 }
