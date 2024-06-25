@@ -72,10 +72,12 @@ func TestLease(t *testing.T) {
 
 // BenchmarkLease is a benchmark for the lease operation.
 func BenchmarkLease(b *testing.B) {
+	b.StopTimer()
 	ctx := context.Background()
 	client, _ := newKine(ctx, b)
 
 	g := NewWithT(b)
+	b.StartTimer()
 	for i := 0; i < b.N; i++ {
 		var ttl int64 = int64(i + 1)
 		resp, err := client.Lease.Grant(ctx, ttl)

@@ -225,33 +225,23 @@ func TestList(t *testing.T) {
 
 // BenchmarkList is a benchmark for the Get operation.
 func BenchmarkList(b *testing.B) {
+	b.StopTimer()
 	ctx := context.Background()
 	client, _ := newKine(ctx, b)
 	g := NewWithT(b)
 
-	numItems := b.N
-
-	for i := 0; i < numItems; i++ {
+	for i := 0; i < b.N; i++ {
 		key := fmt.Sprintf("key/%d", i)
-		resp, err := client.Txn(ctx).
-			If(clientv3.Compare(clientv3.ModRevision(key), "=", 0)).
-			Then(clientv3.OpPut(key, "benchValue")).
-			Else(clientv3.OpGet(key, clientv3.WithRange(""))).
-			Commit()
-
-		g.Expect(err).To(BeNil())
-		g.Expect(resp.Succeeded).To(BeTrue())
+		createKey(ctx, g, client, key, "benchValue")
 	}
 
-	b.Run("List", func(b *testing.B) {
-		g := NewWithT(b)
-		for i := 0; i < b.N; i++ {
-			resp, err := client.Get(ctx, "key/", clientv3.WithPrefix())
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		resp, err := client.Get(ctx, "key/", clientv3.WithPrefix())
 
-			g.Expect(err).To(BeNil())
-			g.Expect(resp.Kvs).To(HaveLen(numItems))
-		}
-	})
+		g.Expect(err).To(BeNil())
+		g.Expect(resp.Kvs).To(HaveLen(b.N))
+	}
 }
 
 func shuffleList[T any](vals []T) []T {

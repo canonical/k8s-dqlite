@@ -158,21 +158,25 @@ func addSameEntries(ctx context.Context, g Gomega, client *clientv3.Client, numE
 }
 
 func updateEntry(ctx context.Context, g Gomega, client *clientv3.Client, key string, value string) {
-
 	resp, err := client.Get(ctx, key, clientv3.WithRange(""))
 
 	g.Expect(err).To(BeNil())
 	g.Expect(resp.Kvs).To(HaveLen(1))
 
-	resp2, err2 := client.Txn(ctx).
-		If(clientv3.Compare(clientv3.ModRevision(key), "=", resp.Kvs[0].ModRevision)).
+	updateRevision(ctx, g, client, key, resp.Kvs[0].ModRevision, value)
+}
+
+func updateRevision(ctx context.Context, g Gomega, client *clientv3.Client, key string, revision int64, value string) int64 {
+	resp, err := client.Txn(ctx).
+		If(clientv3.Compare(clientv3.ModRevision(key), "=", revision)).
 		Then(clientv3.OpPut(key, value)).
 		Else(clientv3.OpGet(key, clientv3.WithRange(""))).
 		Commit()
 
-	g.Expect(err2).To(BeNil())
-	g.Expect(resp2.Succeeded).To(BeTrue())
+	g.Expect(err).To(BeNil())
+	g.Expect(resp.Succeeded).To(BeTrue())
 
+	return resp.Responses[0].GetResponsePut().Header.Revision
 }
 
 func addEntry(ctx context.Context, g Gomega, client *clientv3.Client, key string, value string) {
@@ -187,24 +191,16 @@ func addEntry(ctx context.Context, g Gomega, client *clientv3.Client, key string
 
 // BenchmarkUpdate is a benchmark for the Update operation.
 func BenchmarkUpdate(b *testing.B) {
+	b.StopTimer()
 	ctx := context.Background()
 	client, _ := newKine(ctx, b)
 
 	g := NewWithT(b)
 
+	b.StartTimer()
 	var lastModRev int64 = 0
-
 	for i := 0; i < b.N; i++ {
 		value := fmt.Sprintf("value-%d", i)
-		resp, err := client.Txn(ctx).
-			If(clientv3.Compare(clientv3.ModRevision("benchKey"), "=", lastModRev)).
-			Then(clientv3.OpPut("benchKey", value)).
-			Else(clientv3.OpGet("benchKey", clientv3.WithRange(""))).
-			Commit()
-
-		g.Expect(err).To(BeNil())
-		g.Expect(resp.Succeeded).To(BeTrue())
-		lastModRev = resp.Responses[0].GetResponsePut().Header.Revision
-
+		lastModRev = updateRevision(ctx, g, client, "benchKey", lastModRev, value)
 	}
 }
