@@ -14,11 +14,11 @@ import (
 )
 
 func TestDqliteCompaction(t *testing.T) {
-	testCompaction(t, newSqliteBackend)
+	testCompaction(t, newDqliteBackend)
 }
 
 func BenchmarkDqliteCompaction(b *testing.B) {
-	benchmarkCompaction(b, newSqliteBackend)
+	benchmarkCompaction(b, newDqliteBackend)
 }
 
 var (
