@@ -3,25 +3,29 @@ package sqlite_test
 import (
 	"context"
 	"database/sql"
-	"os"
 	"path"
 	"testing"
 
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/sqlite"
+	"github.com/sirupsen/logrus"
 )
 
-func setupV0(db *sql.DB) error {
+func init() {
+	logrus.SetLevel(logrus.ErrorLevel)
+}
 
+func setupV0(db *sql.DB) error {
 	// Create the very old key_value table
 	if _, err := db.Exec(`
 CREATE TABLE IF NOT EXISTS kine
-(
-	id INTEGER primary key autoincrement,
-	name INTEGER,
+(c
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	name TEXT NOT NULL,
 	created INTEGER,
 	deleted INTEGER,
+	create_revision INTEGER NOT NULL,
 	prev_revision INTEGER,
-	ttl INTEGER,
+	lease INTEGER,
 	value BLOB,
 	old_value BLOB
 )`); err != nil {
@@ -34,18 +38,13 @@ CREATE TABLE IF NOT EXISTS kine
 func TestMigration(t *testing.T) {
 	const driver = "sqlite3"
 
-	folder, err := os.MkdirTemp("", "kine_test-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(folder)
-
+	folder := t.TempDir()
 	dbPath := path.Join(folder, "db.sqlite")
 	db, err := sql.Open(driver, dbPath)
-	defer db.Close()
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer db.Close()
 
 	setupV0(db)
 
