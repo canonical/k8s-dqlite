@@ -72,7 +72,7 @@ var (
 		) AS high`
 )
 
-var RetryCount = 500
+const retryCount = 500
 
 type Stripped string
 
@@ -335,7 +335,7 @@ func (d *Generic) query(ctx context.Context, txName, sql string, args ...interfa
 	}()
 
 	strippedSQL := Stripped(sql)
-	for ; i < RetryCount; i++ {
+	for ; i < retryCount; i++ {
 		if i > 2 {
 			logrus.Debugf("QUERY (try: %d) %v : %s", i, args, strippedSQL)
 		} else {
@@ -440,7 +440,7 @@ func (d *Generic) executePrepared(ctx context.Context, txName, sql string, prepa
 	}
 
 	strippedSQL := Stripped(sql)
-	for ; i < RetryCount; i++ {
+	for ; i < retryCount; i++ {
 		if i > 2 {
 			logrus.Debugf("EXEC (try: %d) %v : %s", i, args, strippedSQL)
 		} else {
@@ -476,7 +476,7 @@ func (d *Generic) GetCompactRevision(ctx context.Context) (int64, int64, error) 
 		return 0, 0, fmt.Errorf("denied: %w", err)
 	}
 
-	for i := 0; i < RetryCount; i++ {
+	for i := 0; i < retryCount; i++ {
 		if i > 2 {
 			logrus.Debugf("EXEC (try: %d): %s", i, revisionIntervalSQL)
 		} else {
