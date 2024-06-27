@@ -155,4 +155,9 @@ func init() {
 	rootCmd.Flags().BoolVar(&rootCmdOpts.etcdMode, "etcd-mode", false, "Run in etcd mode")
 
 	rootCmd.AddCommand(dbctl.Command)
+
+	rootCmd.AddCommand(&cobra.Command{
+		Use:  "version",
+		RunE: func(cmd *cobra.Command, args []string) error { return printVersions() },
+	})
 }
