@@ -18,7 +18,7 @@ func setupV0(db *sql.DB) error {
 	// Create the very old key_value table
 	if _, err := db.Exec(`
 CREATE TABLE IF NOT EXISTS kine
-(c
+(
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	name TEXT NOT NULL,
 	created INTEGER,
@@ -46,7 +46,9 @@ func TestMigration(t *testing.T) {
 	}
 	defer db.Close()
 
-	setupV0(db)
+	if err := setupV0(db); err != nil {
+		t.Fatal(err)
+	}
 
 	ctx := context.Background()
 	if _, err := sqlite.New(ctx, dbPath); err != nil {
