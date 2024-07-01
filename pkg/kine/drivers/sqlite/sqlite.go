@@ -103,6 +103,15 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 		opts.admissionControlPolicyLimitMaxConcurrentTxn,
 	)
 
+	if driverName == "sqlite3" {
+		dialect.Retry = func(err error) bool {
+			if err, ok := err.(sqlite3.Error); ok {
+				return err.Code == sqlite3.ErrBusy
+			}
+			return false
+		}
+	}
+
 	return logstructured.New(sqllog.New(dialect)), dialect, nil
 }
 
