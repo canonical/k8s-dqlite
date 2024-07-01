@@ -11,14 +11,15 @@ jobs:
     strategy:
       matrix:
         branch: [master]
-
+    permissions:
+      security-events: write
     steps:
       - name: Checking out repo
         uses: actions/checkout@v4
         with:
           ref: ${{ matrix.branch }}
       - name: Run Trivy vulnerability scanner in repo mode
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.23.0
         with:
           scan-type: "fs"
           ignore-unfixed: true
