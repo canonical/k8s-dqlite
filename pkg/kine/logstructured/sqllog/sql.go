@@ -12,7 +12,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-const supersededCount = 100
+const SupersededCount = 100
 
 type SQLLog struct {
 	d           Dialect
@@ -133,7 +133,7 @@ func (s *SQLLog) compactor(ctx context.Context, nextEnd int64) (int64, error) {
 	// This is because of low activity, where the created list is part of the last 1000 revisions and is not compacted.
 	// Link to failing test: https://github.com/kubernetes/kubernetes/blob/f2cfbf44b1fb482671aedbfff820ae2af256a389/test/e2e/apimachinery/chunking.go#L144
 	// To address this, we only ignore the last 100 revisions instead
-	end = end - supersededCount
+	end = end - SupersededCount
 
 	savedCursor := cursor
 	// Purposefully start at the current and redo the current as
