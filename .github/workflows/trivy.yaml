@@ -13,6 +13,7 @@ jobs:
         branch: [master]
     permissions:
       security-events: write
+      actions: read
     steps:
       - name: Checking out repo
         uses: actions/checkout@v4
