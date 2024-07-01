@@ -28,7 +28,7 @@ func TestCompaction(t *testing.T) {
 		initialSize, err := backend.DbSize(ctx)
 		g.Expect(err).To(BeNil())
 
-		err = backend.DoCompact()
+		err = backend.DoCompact(ctx)
 		g.Expect(err).To(BeNil())
 
 		finalSize, err := backend.DbSize(ctx)
@@ -56,7 +56,7 @@ func TestCompaction(t *testing.T) {
 		initialSize, err := backend.DbSize(ctx)
 		g.Expect(err).To(BeNil())
 
-		err = backend.DoCompact()
+		err = backend.DoCompact(ctx)
 		g.Expect(err).To(BeNil())
 
 		finalSize, err := backend.DbSize(ctx)
@@ -120,7 +120,7 @@ func BenchmarkCompaction(b *testing.B) {
 		initialSize, err := backend.DbSize(ctx)
 		g.Expect(err).To(BeNil())
 
-		err = backend.DoCompact()
+		err = backend.DoCompact(ctx)
 		g.Expect(err).To(BeNil())
 
 		finalSize, err := backend.DbSize(ctx)

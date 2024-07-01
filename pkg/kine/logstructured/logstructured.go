@@ -18,7 +18,7 @@ type Log interface {
 	Count(ctx context.Context, prefix, startKey string, revision int64) (int64, int64, error)
 	Append(ctx context.Context, event *server.Event) (int64, error)
 	DbSize(ctx context.Context) (int64, error)
-	DoCompact() error
+	DoCompact(ctx context.Context) error
 }
 
 type LogStructured struct {
@@ -31,8 +31,8 @@ func New(log Log) *LogStructured {
 	}
 }
 
-func (l *LogStructured) DoCompact() error {
-	return l.log.DoCompact()
+func (l *LogStructured) DoCompact(ctx context.Context) error {
+	return l.log.DoCompact(ctx)
 }
 
 func (l *LogStructured) Start(ctx context.Context) error {
