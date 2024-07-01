@@ -11,7 +11,7 @@ jobs:
     strategy:
       matrix:
         branch: [master]
-
+    permissions: write-all
     steps:
       - name: Checking out repo
         uses: actions/checkout@v4
