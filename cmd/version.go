@@ -1,10 +1,10 @@
+//go:build dqlite
+
 package cmd
 
 import (
 	"fmt"
 	"runtime"
-
-	"github.com/spf13/cobra"
 )
 
 /*
@@ -48,18 +48,8 @@ void print_dqlite_library_versions() {
 */
 import "C"
 
-var (
-	versionCmd = &cobra.Command{
-		Use: "version",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Println("go:", runtime.Version())
-			C.print_dqlite_library_versions()
-
-			return nil
-		},
-	}
-)
-
-func init() {
-	rootCmd.AddCommand(versionCmd)
+func printVersions() error {
+	fmt.Println("go:", runtime.Version())
+	C.print_dqlite_library_versions()
+	return nil
 }
