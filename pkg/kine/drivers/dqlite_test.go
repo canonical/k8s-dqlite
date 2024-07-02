@@ -1,5 +1,3 @@
-//go:build dqlite
-
 package drivers_test
 
 import (
@@ -31,10 +29,10 @@ func newDqliteBackend(ctx context.Context, tb testing.TB) (server.Backend, *gene
 	dir := tb.TempDir()
 	app, err := app.New(dir, app.WithAddress(fmt.Sprintf("127.0.0.1:%d", 59090+nextIdx)))
 	if err != nil {
-		panic(fmt.Errorf("failed to create dqlite app: %w", err))
+		tb.Fatal(fmt.Errorf("failed to create dqlite app: %w", err))
 	}
 	if err := app.Ready(ctx); err != nil {
-		panic(fmt.Errorf("failed to initialize dqlite: %w", err))
+		tb.Fatal(fmt.Errorf("failed to initialize dqlite: %w", err))
 	}
 	tb.Cleanup(func() {
 		app.Close()

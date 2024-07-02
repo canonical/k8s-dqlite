@@ -4,124 +4,132 @@ import (
 	"context"
 	"testing"
 
+	"github.com/canonical/k8s-dqlite/pkg/kine/endpoint"
 	. "github.com/onsi/gomega"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 // TestGet is unit testing for the Get operation.
 func TestGet(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	for _, backendType := range []string{endpoint.SQLiteBackend, endpoint.DQLiteBackend} {
+		t.Run(backendType, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 
-	client, _ := newKine(ctx, t)
+			client := newKine(ctx, t, backendType)
 
-	t.Run("FailNotFound", func(t *testing.T) {
-		g := NewWithT(t)
-		key := "testKeyFailNotFound"
+			t.Run("FailNotFound", func(t *testing.T) {
+				g := NewWithT(t)
+				key := "testKeyFailNotFound"
 
-		// Get non-existent key
-		resp, err := client.Get(ctx, key, clientv3.WithRange(""))
-		g.Expect(err).To(BeNil())
-		g.Expect(resp.Kvs).To(BeEmpty())
-	})
+				// Get non-existent key
+				resp, err := client.Get(ctx, key, clientv3.WithRange(""))
+				g.Expect(err).To(BeNil())
+				g.Expect(resp.Kvs).To(BeEmpty())
+			})
 
-	t.Run("FailEmptyKey", func(t *testing.T) {
-		g := NewWithT(t)
+			t.Run("FailEmptyKey", func(t *testing.T) {
+				g := NewWithT(t)
 
-		// Get empty key
-		resp, err := client.Get(ctx, "", clientv3.WithRange(""))
-		g.Expect(err).To(BeNil())
-		g.Expect(resp.Kvs).To(HaveLen(0))
-	})
+				// Get empty key
+				resp, err := client.Get(ctx, "", clientv3.WithRange(""))
+				g.Expect(err).To(BeNil())
+				g.Expect(resp.Kvs).To(HaveLen(0))
+			})
 
-	t.Run("FailRange", func(t *testing.T) {
-		g := NewWithT(t)
-		key := "testKeyFailRange"
+			t.Run("FailRange", func(t *testing.T) {
+				g := NewWithT(t)
+				key := "testKeyFailRange"
 
-		// Get range with a non-existing key
-		resp, err := client.Get(ctx, key, clientv3.WithRange("thisIsNotAKey"))
-		g.Expect(err).To(BeNil())
-		g.Expect(resp.Kvs).To(BeEmpty())
-	})
+				// Get range with a non-existing key
+				resp, err := client.Get(ctx, key, clientv3.WithRange("thisIsNotAKey"))
+				g.Expect(err).To(BeNil())
+				g.Expect(resp.Kvs).To(BeEmpty())
+			})
 
-	t.Run("Success", func(t *testing.T) {
-		g := NewWithT(t)
-		key := "testKeySuccess"
+			t.Run("Success", func(t *testing.T) {
+				g := NewWithT(t)
+				key := "testKeySuccess"
 
-		createKey(ctx, g, client, key, "testValue")
+				createKey(ctx, g, client, key, "testValue")
 
-		resp, err := client.Get(ctx, key, clientv3.WithRange(""))
-		g.Expect(err).To(BeNil())
-		g.Expect(resp.Kvs).To(HaveLen(1))
-		g.Expect(resp.Kvs[0].Key).To(Equal([]byte(key)))
-		g.Expect(resp.Kvs[0].Value).To(Equal([]byte("testValue")))
-	})
+				resp, err := client.Get(ctx, key, clientv3.WithRange(""))
+				g.Expect(err).To(BeNil())
+				g.Expect(resp.Kvs).To(HaveLen(1))
+				g.Expect(resp.Kvs[0].Key).To(Equal([]byte(key)))
+				g.Expect(resp.Kvs[0].Value).To(Equal([]byte("testValue")))
+			})
 
-	t.Run("KeyRevision", func(t *testing.T) {
-		g := NewWithT(t)
-		key := "testKeyRevision"
-		lastModRev := createKey(ctx, g, client, key, "testValue")
+			t.Run("KeyRevision", func(t *testing.T) {
+				g := NewWithT(t)
+				key := "testKeyRevision"
+				lastModRev := createKey(ctx, g, client, key, "testValue")
 
-		// Get the key's version
-		resp, err := client.Get(ctx, key, clientv3.WithCountOnly())
-		g.Expect(err).To(BeNil())
-		g.Expect(resp.Count).To(Equal(int64(0)))
+				// Get the key's version
+				resp, err := client.Get(ctx, key, clientv3.WithCountOnly())
+				g.Expect(err).To(BeNil())
+				g.Expect(resp.Count).To(Equal(int64(0)))
 
-		updateRev(ctx, g, client, key, lastModRev, "testValue2")
+				updateRev(ctx, g, client, key, lastModRev, "testValue2")
 
-		// Get the updated key
-		resp, err = client.Get(ctx, key, clientv3.WithCountOnly())
-		g.Expect(err).To(BeNil())
-		g.Expect(resp.Kvs[0].Value).To(Equal([]byte("testValue2")))
-		g.Expect(resp.Kvs[0].ModRevision).To(BeNumerically(">", resp.Kvs[0].CreateRevision))
-	})
+				// Get the updated key
+				resp, err = client.Get(ctx, key, clientv3.WithCountOnly())
+				g.Expect(err).To(BeNil())
+				g.Expect(resp.Kvs[0].Value).To(Equal([]byte("testValue2")))
+				g.Expect(resp.Kvs[0].ModRevision).To(BeNumerically(">", resp.Kvs[0].CreateRevision))
+			})
 
-	t.Run("SuccessWithPrefix", func(t *testing.T) {
-		g := NewWithT(t)
+			t.Run("SuccessWithPrefix", func(t *testing.T) {
+				g := NewWithT(t)
 
-		// Create keys with prefix
-		createKey(ctx, g, client, "prefix/testKey1", "testValue1")
-		createKey(ctx, g, client, "prefix/testKey2", "testValue2")
+				// Create keys with prefix
+				createKey(ctx, g, client, "prefix/testKey1", "testValue1")
+				createKey(ctx, g, client, "prefix/testKey2", "testValue2")
 
-		resp, err := client.Get(ctx, "prefix", clientv3.WithPrefix())
+				resp, err := client.Get(ctx, "prefix", clientv3.WithPrefix())
 
-		g.Expect(err).To(BeNil())
-		g.Expect(resp.Kvs).To(HaveLen(2))
-		g.Expect(resp.Kvs[0].Key).To(Equal([]byte("prefix/testKey1")))
-		g.Expect(resp.Kvs[1].Key).To(Equal([]byte("prefix/testKey2")))
-	})
+				g.Expect(err).To(BeNil())
+				g.Expect(resp.Kvs).To(HaveLen(2))
+				g.Expect(resp.Kvs[0].Key).To(Equal([]byte("prefix/testKey1")))
+				g.Expect(resp.Kvs[1].Key).To(Equal([]byte("prefix/testKey2")))
+			})
 
-	t.Run("FailNotFound", func(t *testing.T) {
-		g := NewWithT(t)
-		key := "testKeyFailNotFound"
+			t.Run("FailNotFound", func(t *testing.T) {
+				g := NewWithT(t)
+				key := "testKeyFailNotFound"
 
-		// Delete key
-		deleteKey(ctx, g, client, key)
+				// Delete key
+				deleteKey(ctx, g, client, key)
 
-		// Get key
-		resp, err := client.Get(ctx, key, clientv3.WithRange(""))
-		g.Expect(err).To(BeNil())
-		g.Expect(resp.Kvs).To(BeEmpty())
-	})
+				// Get key
+				resp, err := client.Get(ctx, key, clientv3.WithRange(""))
+				g.Expect(err).To(BeNil())
+				g.Expect(resp.Kvs).To(BeEmpty())
+			})
+		})
+	}
 }
 
 // BenchmarkGet is a benchmark for the Get operation.
 func BenchmarkGet(b *testing.B) {
-	b.StopTimer()
-	g := NewWithT(b)
+	for _, backendType := range []string{endpoint.SQLiteBackend, endpoint.DQLiteBackend} {
+		b.Run(backendType, func(b *testing.B) {
+			b.StopTimer()
+			g := NewWithT(b)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 
-	client, _ := newKine(ctx, b)
+			client := newKine(ctx, b, backendType)
 
-	// create a kv
-	createKey(ctx, g, client, "testKey", "testValue")
+			createKey(ctx, g, client, "testKey", "testValue")
 
-	b.StartTimer()
-	for i := 0; i < b.N; i++ {
-		resp, err := client.Get(ctx, "testKey", clientv3.WithRange(""))
-		g.Expect(err).To(BeNil())
-		g.Expect(resp.Kvs).To(HaveLen(1))
+			b.StartTimer()
+			for i := 0; i < b.N; i++ {
+				resp, err := client.Get(ctx, "testKey", clientv3.WithRange(""))
+				g.Expect(err).To(BeNil())
+				g.Expect(resp.Kvs).To(HaveLen(1))
+			}
+		})
 	}
 }
