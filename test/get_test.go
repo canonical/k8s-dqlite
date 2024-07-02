@@ -169,26 +169,18 @@ func TestGet(t *testing.T) {
 
 // BenchmarkGet is a benchmark for the Get operation.
 func BenchmarkGet(b *testing.B) {
+	b.StopTimer()
 	ctx := context.Background()
 	client, _ := newKine(ctx, b)
 	g := NewWithT(b)
 
 	// create a kv
-	{
-		resp, err := client.Txn(ctx).
-			If(clientv3.Compare(clientv3.ModRevision("testKey"), "=", 0)).
-			Then(clientv3.OpPut("testKey", "testValue")).
-			Commit()
-		g.Expect(err).To(BeNil())
-		g.Expect(resp.Succeeded).To(BeTrue())
-	}
+	createKey(ctx, g, client, "testKey", "testValue")
 
-	b.Run("LatestRevision", func(b *testing.B) {
-		g := NewWithT(b)
-		for i := 0; i < b.N; i++ {
-			resp, err := client.Get(ctx, "testKey", clientv3.WithRange(""))
-			g.Expect(err).To(BeNil())
-			g.Expect(resp.Kvs).To(HaveLen(1))
-		}
-	})
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		resp, err := client.Get(ctx, "testKey", clientv3.WithRange(""))
+		g.Expect(err).To(BeNil())
+		g.Expect(resp.Kvs).To(HaveLen(1))
+	}
 }

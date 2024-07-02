@@ -39,19 +39,25 @@ func TestCreate(t *testing.T) {
 
 // BenchmarkCreate is a benchmark for the Create operation.
 func BenchmarkCreate(b *testing.B) {
+	b.StopTimer()
 	ctx := context.Background()
 	client, _ := newKine(ctx, b)
 
+	b.StartTimer()
 	g := NewWithT(b)
 	for i := 0; i < b.N; i++ {
 		key := fmt.Sprintf("key-%d", i)
 		value := fmt.Sprintf("value-%d", i)
-		resp, err := client.Txn(ctx).
-			If(clientv3.Compare(clientv3.ModRevision(key), "=", 0)).
-			Then(clientv3.OpPut(key, value)).
-			Commit()
-
-		g.Expect(err).To(BeNil())
-		g.Expect(resp.Succeeded).To(BeTrue())
+		createKey(ctx, g, client, key, value)
 	}
+}
+
+func createKey(ctx context.Context, g Gomega, client *clientv3.Client, key string, value string) {
+	resp, err := client.Txn(ctx).
+		If(clientv3.Compare(clientv3.ModRevision(key), "=", 0)).
+		Then(clientv3.OpPut(key, value)).
+		Commit()
+
+	g.Expect(err).To(BeNil())
+	g.Expect(resp.Succeeded).To(BeTrue())
 }
