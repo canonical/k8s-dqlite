@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/canonical/k8s-dqlite/pkg/kine/broadcaster"
@@ -19,6 +20,7 @@ type SQLLog struct {
 	broadcaster broadcaster.Broadcaster
 	ctx         context.Context
 	notify      chan int64
+	wg          sync.WaitGroup
 }
 
 func New(d Dialect) *SQLLog {
@@ -51,7 +53,11 @@ type Dialect interface {
 
 func (s *SQLLog) Start(ctx context.Context) (err error) {
 	s.ctx = ctx
-	return
+	return s.broadcaster.Start(s.startWatch)
+}
+
+func (s *SQLLog) Wait() {
+	s.wg.Wait()
 }
 
 func (s *SQLLog) compactStart(ctx context.Context) error {
@@ -315,15 +321,18 @@ func RowsToEvents(rows *sql.Rows) ([]*server.Event, error) {
 
 func (s *SQLLog) Watch(ctx context.Context, prefix string) <-chan []*server.Event {
 	res := make(chan []*server.Event, 100)
-	values, err := s.broadcaster.Subscribe(ctx, s.startWatch)
+	values, err := s.broadcaster.Subscribe(ctx)
 	if err != nil {
 		return nil
 	}
 
 	checkPrefix := strings.HasSuffix(prefix, "/")
 
+	s.wg.Add(1)
 	go func() {
+		defer s.wg.Done()
 		defer close(res)
+
 		for i := range values {
 			events, ok := filter(i, checkPrefix, prefix)
 			if ok {
@@ -361,8 +370,18 @@ func (s *SQLLog) startWatch() (chan interface{}, error) {
 	c := make(chan interface{})
 	// start compaction and polling at the same time to watch starts
 	// at the oldest revision, but compaction doesn't create gaps
-	go s.compact()
-	go s.poll(c, pollStart)
+	s.wg.Add(2)
+
+	go func() {
+		defer s.wg.Done()
+		s.compact()
+	}()
+
+	go func() {
+		defer s.wg.Done()
+		s.poll(c, pollStart)
+	}()
+
 	return c, nil
 }
 
@@ -474,7 +493,7 @@ func (s *SQLLog) poll(result chan interface{}, pollStart int64) {
 }
 
 func canSkipRevision(rev, skip int64, skipTime time.Time) bool {
-	return rev == skip && time.Now().Sub(skipTime) > time.Second
+	return rev == skip && time.Since(skipTime) > time.Second
 }
 
 func (s *SQLLog) Count(ctx context.Context, prefix, startKey string, revision int64) (int64, int64, error) {
