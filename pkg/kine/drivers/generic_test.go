@@ -14,7 +14,6 @@ import (
 type makeBackendFunc func(ctx context.Context, tb testing.TB) (server.Backend, *generic.Generic, error)
 
 func testCompaction(t *testing.T, makeBackend makeBackendFunc) {
-
 	t.Run("SmallDatabaseDeleteEntry", func(t *testing.T) {
 		g := NewWithT(t)
 		ctx, cancel := context.WithCancel(context.Background())
@@ -23,8 +22,10 @@ func testCompaction(t *testing.T, makeBackend makeBackendFunc) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer backend.Wait()
-		defer dialect.DB.Close()
+		t.Cleanup(func() {
+			backend.Wait()
+			dialect.Close()
+		})
 
 		addEntries(ctx, dialect, 2)
 		deleteEntries(ctx, dialect, 1)
@@ -50,8 +51,10 @@ func testCompaction(t *testing.T, makeBackend makeBackendFunc) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer backend.Wait()
-		defer dialect.DB.Close()
+		t.Cleanup(func() {
+			backend.Wait()
+			dialect.Close()
+		})
 
 		addEntries(ctx, dialect, 10_000)
 		deleteEntries(ctx, dialect, 500)
@@ -79,8 +82,10 @@ func benchmarkCompaction(b *testing.B, makeBackend makeBackendFunc) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	defer backend.Wait()
-	defer dialect.DB.Close()
+	b.Cleanup(func() {
+		backend.Wait()
+		dialect.Close()
+	})
 
 	// Make sure there's enough rows deleted to have
 	// b.N rows to compact.
