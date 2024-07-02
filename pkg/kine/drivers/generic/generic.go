@@ -306,6 +306,23 @@ func (d *Generic) Prepare() error {
 	return nil
 }
 
+func (d *Generic) Close() {
+	d.getRevisionSQLPrepared.Close()
+	d.countCurrentSQLPrepared.Close()
+	d.countRevisionSQLPrepared.Close()
+	d.afterSQLPrefixPrepared.Close()
+	d.deleteSQLPrepared.Close()
+	d.updateCompactSQLPrepared.Close()
+	if d.LastInsertID {
+		d.insertLastInsertIDSQLPrepared.Close()
+	} else {
+		d.insertSQLPrepared.Close()
+	}
+	d.fillSQLPrepared.Close()
+	d.getSizeSQLPrepared.Close()
+	d.DB.Close()
+}
+
 func getPrefixRange(prefix string) (start, end string) {
 	start = prefix
 	if strings.HasSuffix(prefix, "/") {

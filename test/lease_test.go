@@ -12,12 +12,14 @@ import (
 
 // TestLease is unit testing for the lease operation.
 func TestLease(t *testing.T) {
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	client, _ := newKine(ctx, t)
 
 	t.Run("LeaseGrant", func(t *testing.T) {
 		g := NewWithT(t)
-		var ttl int64 = 300
+		ttl := int64(300)
 		resp, err := client.Lease.Grant(ctx, ttl)
 
 		g.Expect(err).To(BeNil())
@@ -26,12 +28,12 @@ func TestLease(t *testing.T) {
 	})
 
 	t.Run("UseLease", func(t *testing.T) {
-		var ttl int64 = 1
+		ttl := int64(1)
 		t.Run("CreateWithLease", func(t *testing.T) {
 			g := NewWithT(t)
+
 			{
 				resp, err := client.Lease.Grant(ctx, ttl)
-
 				g.Expect(err).To(BeNil())
 				g.Expect(resp.ID).To(Equal(clientv3.LeaseID(ttl)))
 				g.Expect(resp.TTL).To(Equal(ttl))
@@ -42,7 +44,6 @@ func TestLease(t *testing.T) {
 					If(clientv3.Compare(clientv3.ModRevision("/leaseTestKey"), "=", 0)).
 					Then(clientv3.OpPut("/leaseTestKey", "testValue", clientv3.WithLease(clientv3.LeaseID(ttl)))).
 					Commit()
-
 				g.Expect(err).To(BeNil())
 				g.Expect(resp.Succeeded).To(BeTrue())
 			}
@@ -66,17 +67,19 @@ func TestLease(t *testing.T) {
 				return resp.Kvs
 			}, time.Duration(ttl*2)*time.Second, testExpirePollPeriod, ctx).Should(BeEmpty())
 		})
-
 	})
 }
 
 // BenchmarkLease is a benchmark for the lease operation.
 func BenchmarkLease(b *testing.B) {
 	b.StopTimer()
-	ctx := context.Background()
+	g := NewWithT(b)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	client, _ := newKine(ctx, b)
 
-	g := NewWithT(b)
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
 		var ttl int64 = int64(i + 1)

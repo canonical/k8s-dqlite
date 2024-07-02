@@ -13,6 +13,7 @@ var (
 
 type Backend interface {
 	Start(ctx context.Context) error
+	Wait()
 	Get(ctx context.Context, key, rangeEnd string, limit, revision int64) (int64, *KeyValue, error)
 	Create(ctx context.Context, key string, value []byte, lease int64) (int64, error)
 	Delete(ctx context.Context, key string, revision int64) (int64, *KeyValue, bool, error)
