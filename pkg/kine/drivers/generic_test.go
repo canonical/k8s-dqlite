@@ -14,14 +14,16 @@ import (
 type makeBackendFunc func(ctx context.Context, tb testing.TB) (server.Backend, *generic.Generic, error)
 
 func testCompaction(t *testing.T, makeBackend makeBackendFunc) {
-	ctx := context.Background()
 
 	t.Run("SmallDatabaseDeleteEntry", func(t *testing.T) {
 		g := NewWithT(t)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 		backend, dialect, err := makeBackend(ctx, t)
 		if err != nil {
 			t.Fatal(err)
 		}
+		defer backend.Wait()
 		defer dialect.DB.Close()
 
 		addEntries(ctx, dialect, 2)
@@ -42,10 +44,13 @@ func testCompaction(t *testing.T, makeBackend makeBackendFunc) {
 
 	t.Run("LargeDatabaseDeleteFivePercent", func(t *testing.T) {
 		g := NewWithT(t)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 		backend, dialect, err := makeBackend(ctx, t)
 		if err != nil {
 			t.Fatal(err)
 		}
+		defer backend.Wait()
 		defer dialect.DB.Close()
 
 		addEntries(ctx, dialect, 10_000)
@@ -67,12 +72,14 @@ func testCompaction(t *testing.T, makeBackend makeBackendFunc) {
 
 func benchmarkCompaction(b *testing.B, makeBackend makeBackendFunc) {
 	b.StopTimer()
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	backend, dialect, err := makeBackend(ctx, b)
 	if err != nil {
 		b.Fatal(err)
 	}
+	defer backend.Wait()
 	defer dialect.DB.Close()
 
 	// Make sure there's enough rows deleted to have
