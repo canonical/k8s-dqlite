@@ -13,43 +13,35 @@ type Broadcaster struct {
 	subs    map[chan interface{}]struct{}
 }
 
-func (b *Broadcaster) Subscribe(ctx context.Context, connect ConnectFunc) (<-chan interface{}, error) {
+func (b *Broadcaster) Subscribe(ctx context.Context) (<-chan interface{}, error) {
 	b.Lock()
 	defer b.Unlock()
-
-	if !b.running {
-		if err := b.start(connect); err != nil {
-			return nil, err
-		}
-	}
 
 	sub := make(chan interface{}, 100)
 	if b.subs == nil {
 		b.subs = map[chan interface{}]struct{}{}
 	}
 	b.subs[sub] = struct{}{}
-	go func() {
-		<-ctx.Done()
-		b.unsub(sub, true)
-	}()
+	context.AfterFunc(ctx, func() {
+		b.Lock()
+		defer b.Unlock()
+		b.unsub(sub)
+	})
 
 	return sub, nil
 }
 
-func (b *Broadcaster) unsub(sub chan interface{}, lock bool) {
-	if lock {
-		b.Lock()
-	}
+func (b *Broadcaster) unsub(sub chan interface{}) {
 	if _, ok := b.subs[sub]; ok {
 		close(sub)
 		delete(b.subs, sub)
 	}
-	if lock {
-		b.Unlock()
-	}
 }
 
-func (b *Broadcaster) start(connect ConnectFunc) error {
+func (b *Broadcaster) Start(connect ConnectFunc) error {
+	b.Lock()
+	defer b.Unlock()
+
 	c, err := connect()
 	if err != nil {
 		return err
@@ -60,24 +52,29 @@ func (b *Broadcaster) start(connect ConnectFunc) error {
 	return nil
 }
 
-func (b *Broadcaster) stream(input chan interface{}) {
-	for item := range input {
-		b.Lock()
-		for sub := range b.subs {
-			select {
-			case sub <- item:
-			default:
-				// Slow consumer, drop
-				go b.unsub(sub, true)
-			}
-		}
-		b.Unlock()
+func (b *Broadcaster) stream(ch chan interface{}) {
+	for item := range ch {
+		b.publish(item)
 	}
 
 	b.Lock()
+	defer b.Unlock()
 	for sub := range b.subs {
-		b.unsub(sub, false)
+		b.unsub(sub)
 	}
 	b.running = false
-	b.Unlock()
+}
+
+func (b *Broadcaster) publish(item interface{}) {
+	b.Lock()
+	defer b.Unlock()
+
+	for sub := range b.subs {
+		select {
+		case sub <- item:
+		default:
+			// Slow consumer, drop
+			b.unsub(sub)
+		}
+	}
 }

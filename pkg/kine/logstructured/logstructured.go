@@ -3,6 +3,7 @@ package logstructured
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/canonical/k8s-dqlite/pkg/kine/server"
@@ -11,6 +12,7 @@ import (
 
 type Log interface {
 	Start(ctx context.Context) error
+	Wait()
 	CurrentRevision(ctx context.Context) (int64, error)
 	List(ctx context.Context, prefix, startKey string, limit, revision int64, includeDeletes bool) (int64, []*server.Event, error)
 	After(ctx context.Context, prefix string, revision, limit int64) (int64, []*server.Event, error)
@@ -23,6 +25,7 @@ type Log interface {
 
 type LogStructured struct {
 	log Log
+	wg  sync.WaitGroup
 }
 
 func New(log Log) *LogStructured {
@@ -40,8 +43,17 @@ func (l *LogStructured) Start(ctx context.Context) error {
 		return err
 	}
 	l.Create(ctx, "/registry/health", []byte(`{"health":"true"}`), 0)
-	go l.ttl(ctx)
+
+	l.wg.Add(1)
+	go func() {
+		defer l.wg.Done()
+		l.ttl(ctx)
+	}()
 	return nil
+}
+
+func (l *LogStructured) Wait() {
+	l.wg.Wait()
 }
 
 func (l *LogStructured) Get(ctx context.Context, key, rangeEnd string, limit, revision int64) (revRet int64, kvRet *server.KeyValue, errRet error) {
@@ -258,20 +270,16 @@ func (l *LogStructured) Update(ctx context.Context, key string, value []byte, re
 
 func (l *LogStructured) ttlEvents(ctx context.Context) chan *server.Event {
 	result := make(chan *server.Event)
-	wg := sync.WaitGroup{}
-	wg.Add(2)
+	var shouldClose atomic.Bool
 
+	l.wg.Add(2)
 	go func() {
-		wg.Wait()
-		close(result)
-	}()
+		defer l.wg.Done()
 
-	go func() {
-		defer wg.Done()
 		rev, events, err := l.log.List(ctx, "/", "", 1000, 0, false)
 		for len(events) > 0 {
 			if err != nil {
-				logrus.Errorf("failed to read old events for ttl")
+				logrus.Errorf("failed to read old events for ttl: %v", err)
 				return
 			}
 
@@ -283,10 +291,15 @@ func (l *LogStructured) ttlEvents(ctx context.Context) chan *server.Event {
 
 			_, events, err = l.log.List(ctx, "/", events[len(events)-1].KV.Key, 1000, rev, false)
 		}
+
+		if !shouldClose.CompareAndSwap(false, true) {
+			close(result)
+		}
 	}()
 
 	go func() {
-		defer wg.Done()
+		defer l.wg.Done()
+
 		for events := range l.log.Watch(ctx, "/") {
 			for _, event := range events {
 				if event.KV.Lease > 0 {
@@ -294,13 +307,17 @@ func (l *LogStructured) ttlEvents(ctx context.Context) chan *server.Event {
 				}
 			}
 		}
+
+		if !shouldClose.CompareAndSwap(false, true) {
+			close(result)
+		}
 	}()
 
 	return result
 }
 
 func (l *LogStructured) ttl(ctx context.Context) {
-	// vary naive TTL support
+	// very naive TTL support
 	mutex := &sync.Mutex{}
 	for event := range l.ttlEvents(ctx) {
 		go func(event *server.Event) {
@@ -338,7 +355,10 @@ func (l *LogStructured) Watch(ctx context.Context, prefix string, revision int64
 
 	logrus.Debugf("WATCH LIST key=%s rev=%d => rev=%d kvs=%d", prefix, revision, rev, len(kvs))
 
+	l.wg.Add(1)
 	go func() {
+		defer l.wg.Done()
+
 		lastRevision := revision
 		if len(kvs) > 0 {
 			lastRevision = rev

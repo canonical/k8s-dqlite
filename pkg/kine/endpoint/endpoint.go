@@ -76,9 +76,8 @@ func Listen(ctx context.Context, config Config) (ETCDConfig, error) {
 		if err := grpcServer.Serve(listener); err != nil {
 			logrus.Errorf("Kine server shutdown: %v", err)
 		}
-		<-ctx.Done()
-		grpcServer.Stop()
 		listener.Close()
+		grpcServer.Stop()
 	}()
 
 	return ETCDConfig{
@@ -143,9 +142,8 @@ func ListenAndReturnBackend(ctx context.Context, config Config) (ETCDConfig, ser
 		if err := grpcServer.Serve(listener); err != nil {
 			logrus.Errorf("Kine server shutdown: %v", err)
 		}
-		<-ctx.Done()
-		grpcServer.Stop()
 		listener.Close()
+		grpcServer.Stop()
 	}()
 
 	return ETCDConfig{

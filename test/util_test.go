@@ -45,11 +45,14 @@ func newKine(ctx context.Context, tb testing.TB, qs ...string) (*clientv3.Client
 	}
 	config, backend, err := endpoint.ListenAndReturnBackend(ctx, endpointConfig)
 	if err != nil {
-		panic(err)
+		tb.Fatal(err)
 	}
+	tb.Cleanup(func() {
+		backend.Wait()
+	})
 	tlsConfig, err := config.TLSConfig.ClientConfig()
 	if err != nil {
-		panic(err)
+		tb.Fatal(err)
 	}
 	client, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{endpointConfig.Listener},
@@ -57,7 +60,7 @@ func newKine(ctx context.Context, tb testing.TB, qs ...string) (*clientv3.Client
 		TLS:         tlsConfig,
 	})
 	if err != nil {
-		panic(err)
+		tb.Fatal(err)
 	}
 	return client, backend
 }
