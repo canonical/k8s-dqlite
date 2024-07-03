@@ -73,13 +73,15 @@ type Dialect interface {
 	GetSize(ctx context.Context) (int64, error)
 	GetCompactInterval() time.Duration
 	GetPollInterval() time.Duration
-	Close()
+	Close() error
 }
 
 func (s *SQLLog) Start(ctx context.Context) (err error) {
 	s.ctx = ctx
 	context.AfterFunc(ctx, func() {
-		s.d.Close()
+		if err := s.d.Close(); err != nil {
+			logrus.Errorf("cannot close database: %v", err)
+		}
 	})
 	return s.broadcaster.Start(s.startWatch)
 }
