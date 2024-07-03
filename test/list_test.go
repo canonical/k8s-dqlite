@@ -143,35 +143,16 @@ func TestList(t *testing.T) {
 		})
 
 		t.Run("ListRevision", func(t *testing.T) {
-			t.Run("Create", func(t *testing.T) {
-				g := NewWithT(t)
+			g := NewWithT(t)
 
-				// Create some keys
-				keys := []string{"/revkey/1"}
-				for _, key := range keys {
-					createKey(ctx, g, client, key, "value")
-				}
-			})
+			// Create some keys
+			const key = "/revkey/1"
+			initialRevision := createKey(ctx, g, client, key, "value")
 
-			t.Run("Update", func(t *testing.T) {
-				g := NewWithT(t)
-				var rev int64
-				for rev < 50 {
-					get, err := client.Get(ctx, "/revkey/1", clientv3.WithRange(""))
-					g.Expect(err).To(BeNil())
-					g.Expect(get.Kvs).To(HaveLen(1))
-					rev = get.Kvs[0].ModRevision
-
-					update, err := client.Txn(ctx).
-						If(clientv3.Compare(clientv3.ModRevision("/revkey/1"), "=", rev)).
-						Then(clientv3.OpPut("/revkey/1", fmt.Sprintf("val-%d", rev))).
-						Else(clientv3.OpGet("/revkey/1", clientv3.WithRange(""))).
-						Commit()
-
-					g.Expect(err).To(BeNil())
-					g.Expect(update.Succeeded).To(BeTrue())
-				}
-			})
+			const updates = 50
+			for i := 0; i < updates; i++ {
+				updateKey(ctx, g, client, key, fmt.Sprintf("val-%d", i))
+			}
 
 			t.Run("List", func(t *testing.T) {
 				t.Run("NoRevision", func(t *testing.T) {
@@ -179,24 +160,24 @@ func TestList(t *testing.T) {
 					resp, err := client.Get(ctx, "/revkey/", clientv3.WithPrefix())
 					g.Expect(err).To(BeNil())
 					g.Expect(resp.Kvs).To(HaveLen(1))
-					g.Expect(resp.Kvs[0].ModRevision).To(Equal(int64(51)))
+					g.Expect(resp.Kvs[0].ModRevision).To(Equal(int64(initialRevision + updates)))
 					g.Expect(resp.Count).To(Equal(int64(1)))
 				})
 
 				t.Run("OldRevision", func(t *testing.T) {
 					g := NewWithT(t)
-					resp, err := client.Get(ctx, "/revkey/", clientv3.WithPrefix(), clientv3.WithRev(30))
+					resp, err := client.Get(ctx, "/revkey/", clientv3.WithPrefix(), clientv3.WithRev(initialRevision+30))
 					g.Expect(err).To(BeNil())
 					g.Expect(resp.Kvs).To(HaveLen(1))
-					g.Expect(resp.Kvs[0].ModRevision).To(Equal(int64(30)))
+					g.Expect(resp.Kvs[0].ModRevision).To(Equal(int64(initialRevision + 30)))
 					g.Expect(resp.Count).To(Equal(int64(1)))
 				})
 				t.Run("LaterRevision", func(t *testing.T) {
 					g := NewWithT(t)
-					resp, err := client.Get(ctx, "/revkey/", clientv3.WithPrefix(), clientv3.WithRev(100))
+					resp, err := client.Get(ctx, "/revkey/", clientv3.WithPrefix(), clientv3.WithRev(initialRevision+100))
 					g.Expect(err).To(BeNil())
 					g.Expect(resp.Kvs).To(HaveLen(1))
-					g.Expect(resp.Kvs[0].ModRevision).To(Equal(int64(51)))
+					g.Expect(resp.Kvs[0].ModRevision).To(Equal(int64(initialRevision + updates)))
 					g.Expect(resp.Count).To(Equal(int64(1)))
 				})
 			})
