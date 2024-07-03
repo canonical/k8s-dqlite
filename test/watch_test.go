@@ -10,7 +10,9 @@ import (
 
 // TestWatch is unit testing for the Watch operation.
 func TestWatch(t *testing.T) {
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	client, _ := newKine(ctx, t)
 
 	var (
@@ -35,15 +37,7 @@ func TestWatch(t *testing.T) {
 		g := NewWithT(t)
 
 		// create a key
-		{
-			resp, err := client.Txn(ctx).
-				If(clientv3.Compare(clientv3.ModRevision(key), "=", 0)).
-				Then(clientv3.OpPut(key, value)).
-				Commit()
-
-			g.Expect(err).To(BeNil())
-			g.Expect(resp.Succeeded).To(BeTrue())
-		}
+		createKey(ctx, g, client, key, value)
 
 		// receive event
 		t.Run("Receive", func(t *testing.T) {

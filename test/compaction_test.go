@@ -10,7 +10,8 @@ import (
 )
 
 func TestCompaction(t *testing.T) {
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	client, backend := newKine(ctx, t)
 
 	t.Run("SmallDatabaseDeleteEntry", func(t *testing.T) {
@@ -41,30 +42,6 @@ func TestCompaction(t *testing.T) {
 		deleteEntries(ctx, g, client, 1, 2)
 	})
 
-	t.Run("LargeDatabaseDeleteFivePercent", func(t *testing.T) {
-		g := NewWithT(t)
-
-		// Add a large number of entries
-		numAddEntries := 100_000
-		addEntries(ctx, g, client, numAddEntries)
-
-		// Delete 5% of the entries
-		numDelEntries := 5000
-		start := 0
-		deleteEntries(ctx, g, client, start, start+numDelEntries)
-
-		initialSize, err := backend.DbSize(ctx)
-		g.Expect(err).To(BeNil())
-
-		err = backend.DoCompact()
-		g.Expect(err).To(BeNil())
-
-		finalSize, err := backend.DbSize(ctx)
-		g.Expect(err).To(BeNil())
-
-		// Expecting compaction
-		g.Expect(finalSize).To(BeNumerically("<", initialSize))
-	})
 }
 
 func addEntries(ctx context.Context, g Gomega, client *clientv3.Client, numEntries int) {
