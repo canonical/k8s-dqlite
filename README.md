@@ -165,41 +165,7 @@ Steps:
 
 7. While developing and making changes to `k8s-dqlite`, just restart k8s-dqlite
 
-## Develop k8s-dqlite against an active Canonical Kubernetes instance
+Note: When develop k8s-dqlite against Canonical Kubernetes use the following flags:
 
-Follow steps 1 and 2 from the previous section.
-
-3. Install Canonical Kubernetes on the machine & bootstrap it:
-
-    ```bash
-    sudo snap install k8s --classic --channel=latest/edge
-    sudo k8s bootstrap
-    ```
-  
-4. Wait for Canonical Kubernetes to come up:
-
-    ```bash
-    sudo k8s status --wait-ready
-    ```
-
-5. Stop k8s-dqlite included in the snap:
-
-    ```bash
-    sudo snap stop k8s.k8s-dqlite --disable
-    ```
-
-6. Run k8s-dqlite from this repository:
-
-    ```bash
-    cd k8s-dqlite
-    make static
-    sudo ./bin/static/k8s-dqlite \
-      --storage-dir /var/snap/k8s/common/var/lib/k8s-dqlite \
-      --listen unix:///var/snap/k8s/common/var/lib/k8s-dqlite/k8s-dqlite.sock:12379
-    ```
-
-7. Iteration:
-   While developing and making changes to `k8s-dqlite`, just restart k8s-dqlite
-
-Note: As an alternative to step 5-7, while developing build your k8s-dqlite binary and copy it to `/snap/k8s/current/bin/k8s-dqlite`.
-Then proceed to restart k8s-dqlite.
+- `--storage-dir /var/snap/k8s/common/var/lib/k8s-dqlite`
+- `--listen unix:///var/snap/k8s/common/var/lib/k8s-dqlite/k8s-dqlite.sock`
