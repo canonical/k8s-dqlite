@@ -67,7 +67,7 @@ func TestGet(t *testing.T) {
 		g.Expect(err).To(BeNil())
 		g.Expect(resp.Count).To(Equal(int64(0)))
 
-		updateRevision(ctx, g, client, key, lastModRev, "testValue2")
+		updateRev(ctx, g, client, key, lastModRev, "testValue2")
 
 		// Get the updated key
 		resp, err = client.Get(ctx, key, clientv3.WithCountOnly())
