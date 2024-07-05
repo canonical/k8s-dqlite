@@ -8,8 +8,6 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/canonical/k8s-dqlite/cmd/dbctl"
-	"github.com/canonical/k8s-dqlite/pkg/etcd"
 	"github.com/canonical/k8s-dqlite/pkg/server"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
@@ -69,31 +67,22 @@ var (
 				}()
 			}
 
-			var (
-				instance server.Instance
-				err      error
+			instance, err := server.New(
+				rootCmdOpts.dir,
+				rootCmdOpts.listen,
+				rootCmdOpts.tls,
+				rootCmdOpts.diskMode,
+				rootCmdOpts.clientSessionCacheSize,
+				rootCmdOpts.minTLSVersion,
+				rootCmdOpts.watchAvailableStorageInterval,
+				rootCmdOpts.watchAvailableStorageMinBytes,
+				rootCmdOpts.lowAvailableStorageAction,
+				rootCmdOpts.admissionControlPolicy,
+				rootCmdOpts.acpLimitMaxConcurrentTxn,
+				rootCmdOpts.acpOnlyWriteQueries,
 			)
-			if rootCmdOpts.etcdMode {
-				if instance, err = etcd.New(rootCmdOpts.dir); err != nil {
-					logrus.WithError(err).Fatal("Failed to create etcd server")
-				}
-			} else {
-				if instance, err = server.New(
-					rootCmdOpts.dir,
-					rootCmdOpts.listen,
-					rootCmdOpts.tls,
-					rootCmdOpts.diskMode,
-					rootCmdOpts.clientSessionCacheSize,
-					rootCmdOpts.minTLSVersion,
-					rootCmdOpts.watchAvailableStorageInterval,
-					rootCmdOpts.watchAvailableStorageMinBytes,
-					rootCmdOpts.lowAvailableStorageAction,
-					rootCmdOpts.admissionControlPolicy,
-					rootCmdOpts.acpLimitMaxConcurrentTxn,
-					rootCmdOpts.acpOnlyWriteQueries,
-				); err != nil {
-					logrus.WithError(err).Fatal("Failed to create server")
-				}
+			if err != nil {
+				logrus.WithError(err).Fatal("Failed to create server")
 			}
 
 			ctx, cancel := context.WithCancel(cmd.Context())
@@ -152,7 +141,4 @@ func init() {
 	// TODO(MK-1408): This value is highly dependend on underlying hardware, thus making the default value a bit useless. The linked card will implement a dynamic way to set this value.
 	rootCmd.Flags().Int64Var(&rootCmdOpts.acpLimitMaxConcurrentTxn, "admission-control-policy-limit-max-concurrent-transactions", 300, "Maximum number of transactions that are allowed to run concurrently. Transactions will not be admitted after the limit is reached.")
 	rootCmd.Flags().BoolVar(&rootCmdOpts.acpOnlyWriteQueries, "admission-control-only-for-write-queries", false, "If set, admission control will only be applied to write queries.")
-	rootCmd.Flags().BoolVar(&rootCmdOpts.etcdMode, "etcd-mode", false, "Run in etcd mode")
-
-	rootCmd.AddCommand(dbctl.Command)
 }
