@@ -1,4 +1,4 @@
-### Thank you for making Canonical Kubernetes distributions better
+### Thank you for making K8s-dqlite better
 
 Please reference the issue this PR is fixing, or provide a description of the problem addressed.
 
