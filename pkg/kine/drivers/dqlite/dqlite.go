@@ -10,6 +10,7 @@ import (
 
 	"github.com/canonical/go-dqlite"
 	"github.com/canonical/go-dqlite/driver"
+	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/generic"
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/sqlite"
 	"github.com/canonical/k8s-dqlite/pkg/kine/server"
 	"github.com/canonical/k8s-dqlite/pkg/kine/tls"
@@ -26,15 +27,20 @@ func init() {
 }
 
 func New(ctx context.Context, datasourceName string, tlsInfo tls.Config) (server.Backend, error) {
+	backend, _, err := NewVariant(ctx, datasourceName)
+	return backend, err
+}
+
+func NewVariant(ctx context.Context, datasourceName string) (server.Backend, *generic.Generic, error) {
 	logrus.Printf("New kine for dqlite")
 
 	// Driver name will be extracted from query parameters
 	backend, generic, err := sqlite.NewVariant(ctx, "", datasourceName)
 	if err != nil {
-		return nil, errors.Wrap(err, "sqlite client")
+		return nil, nil, errors.Wrap(err, "sqlite client")
 	}
 	if err := migrate(ctx, generic.DB); err != nil {
-		return nil, errors.Wrap(err, "failed to migrate DB from sqlite")
+		return nil, nil, errors.Wrap(err, "failed to migrate DB from sqlite")
 	}
 	generic.LockWrites = true
 	generic.Retry = func(err error) bool {
@@ -74,7 +80,7 @@ func New(ctx context.Context, datasourceName string, tlsInfo tls.Config) (server
 		return err
 	}
 
-	return backend, nil
+	return backend, generic, nil
 }
 
 func migrate(ctx context.Context, newDB *sql.DB) (exitErr error) {

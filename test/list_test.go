@@ -12,7 +12,9 @@ import (
 
 // TestList is the unit test for List operation.
 func TestList(t *testing.T) {
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	client, _ := newKine(ctx, t)
 
 	t.Run("ListSuccess", func(t *testing.T) {
@@ -21,14 +23,7 @@ func TestList(t *testing.T) {
 		// Create some keys
 		keys := shuffleList([]string{"/key/1", "/key/2", "/key/3", "/key/4", "/key/5"})
 		for _, key := range keys {
-			resp, err := client.Txn(ctx).
-				If(clientv3.Compare(clientv3.ModRevision(key), "=", 0)).
-				Then(clientv3.OpPut(key, "value")).
-				Commit()
-
-			g.Expect(err).To(BeNil())
-			g.Expect(resp.Succeeded).To(BeTrue())
-			g.Expect(resp.Header.Revision).ToNot(BeZero())
+			createKey(ctx, g, client, key, "value")
 		}
 
 		t.Run("ListAll", func(t *testing.T) {
@@ -102,14 +97,7 @@ func TestList(t *testing.T) {
 			// Create some keys
 			keys := []string{"key/sub/2", "key/sub/1", "key/other/1"}
 			for _, key := range keys {
-				resp, err := client.Txn(ctx).
-					If(clientv3.Compare(clientv3.ModRevision(key), "=", 0)).
-					Then(clientv3.OpPut(key, "value")).
-					Commit()
-
-				g.Expect(err).To(BeNil())
-				g.Expect(resp.Succeeded).To(BeTrue())
-				g.Expect(resp.Header.Revision).ToNot(BeZero())
+				createKey(ctx, g, client, key, "value")
 			}
 
 			// Get a list of all the keys sice they have '/key' prefix
@@ -161,14 +149,7 @@ func TestList(t *testing.T) {
 				// Create some keys
 				keys := []string{"/revkey/1"}
 				for _, key := range keys {
-					resp, err := client.Txn(ctx).
-						If(clientv3.Compare(clientv3.ModRevision(key), "=", 0)).
-						Then(clientv3.OpPut(key, "value")).
-						Commit()
-
-					g.Expect(err).To(BeNil())
-					g.Expect(resp.Succeeded).To(BeTrue())
-					g.Expect(resp.Header.Revision).ToNot(BeZero())
+					createKey(ctx, g, client, key, "value")
 				}
 			})
 
@@ -225,33 +206,26 @@ func TestList(t *testing.T) {
 
 // BenchmarkList is a benchmark for the Get operation.
 func BenchmarkList(b *testing.B) {
-	ctx := context.Background()
-	client, _ := newKine(ctx, b)
+	b.StopTimer()
 	g := NewWithT(b)
 
-	numItems := b.N
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	for i := 0; i < numItems; i++ {
+	client, _ := newKine(ctx, b)
+
+	for i := 0; i < b.N; i++ {
 		key := fmt.Sprintf("key/%d", i)
-		resp, err := client.Txn(ctx).
-			If(clientv3.Compare(clientv3.ModRevision(key), "=", 0)).
-			Then(clientv3.OpPut(key, "benchValue")).
-			Else(clientv3.OpGet(key, clientv3.WithRange(""))).
-			Commit()
-
-		g.Expect(err).To(BeNil())
-		g.Expect(resp.Succeeded).To(BeTrue())
+		createKey(ctx, g, client, key, "benchValue")
 	}
 
-	b.Run("List", func(b *testing.B) {
-		g := NewWithT(b)
-		for i := 0; i < b.N; i++ {
-			resp, err := client.Get(ctx, "key/", clientv3.WithPrefix())
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		resp, err := client.Get(ctx, "key/", clientv3.WithPrefix())
 
-			g.Expect(err).To(BeNil())
-			g.Expect(resp.Kvs).To(HaveLen(numItems))
-		}
-	})
+		g.Expect(err).To(BeNil())
+		g.Expect(resp.Kvs).To(HaveLen(b.N))
+	}
 }
 
 func shuffleList[T any](vals []T) []T {

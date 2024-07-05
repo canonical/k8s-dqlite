@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/canonical/k8s-dqlite/pkg/kine/broadcaster"
@@ -12,11 +13,14 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+const SupersededCount = 100
+
 type SQLLog struct {
 	d           Dialect
 	broadcaster broadcaster.Broadcaster
 	ctx         context.Context
 	notify      chan int64
+	wg          sync.WaitGroup
 }
 
 func New(d Dialect) *SQLLog {
@@ -45,11 +49,19 @@ type Dialect interface {
 	GetSize(ctx context.Context) (int64, error)
 	GetCompactInterval() time.Duration
 	GetPollInterval() time.Duration
+	Close()
 }
 
 func (s *SQLLog) Start(ctx context.Context) (err error) {
 	s.ctx = ctx
-	return
+	context.AfterFunc(ctx, func() {
+		s.d.Close()
+	})
+	return s.broadcaster.Start(s.startWatch)
+}
+
+func (s *SQLLog) Wait() {
+	s.wg.Wait()
 }
 
 func (s *SQLLog) compactStart(ctx context.Context) error {
@@ -100,25 +112,25 @@ func (s *SQLLog) compactStart(ctx context.Context) error {
 
 // DoCompact makes a single compaction run when called. It is intended to be called
 // from test functions that have access to the backend.
-func (s *SQLLog) DoCompact() error {
-	if err := s.compactStart(s.ctx); err != nil {
+func (s *SQLLog) DoCompact(ctx context.Context) error {
+	if err := s.compactStart(ctx); err != nil {
 		return fmt.Errorf("failed to initialise compaction: %v", err)
 	}
 
-	nextEnd, _ := s.d.CurrentRevision(s.ctx)
-	_, err := s.compactor(nextEnd)
+	nextEnd, _ := s.d.CurrentRevision(ctx)
+	_, err := s.compactor(ctx, nextEnd)
 
 	return err
 }
 
-func (s *SQLLog) compactor(nextEnd int64) (int64, error) {
-	currentRev, err := s.d.CurrentRevision(s.ctx)
+func (s *SQLLog) compactor(ctx context.Context, nextEnd int64) (int64, error) {
+	currentRev, err := s.d.CurrentRevision(ctx)
 	if err != nil {
 		logrus.Errorf("failed to get current revision: %v", err)
 		return nextEnd, fmt.Errorf("failed to get current revision: %v", err)
 	}
 
-	cursor, _, err := s.d.GetCompactRevision(s.ctx)
+	cursor, _, err := s.d.GetCompactRevision(ctx)
 	if err != nil {
 		logrus.Errorf("failed to get compact revision: %v", err)
 		return nextEnd, fmt.Errorf("failed to get compact revision: %v", err)
@@ -131,15 +143,13 @@ func (s *SQLLog) compactor(nextEnd int64) (int64, error) {
 	// This is because of low activity, where the created list is part of the last 1000 revisions and is not compacted.
 	// Link to failing test: https://github.com/kubernetes/kubernetes/blob/f2cfbf44b1fb482671aedbfff820ae2af256a389/test/e2e/apimachinery/chunking.go#L144
 	// To address this, we only ignore the last 100 revisions instead
-
-	// end = end - 1000
-	end = end - 100
+	end = end - SupersededCount
 
 	savedCursor := cursor
 	// Purposefully start at the current and redo the current as
 	// it could have failed before actually compacting
 	for ; cursor <= end; cursor++ {
-		rows, err := s.d.GetRevision(s.ctx, cursor)
+		rows, err := s.d.GetRevision(ctx, cursor)
 		if err != nil {
 			logrus.Errorf("failed to get revision %d: %v", cursor, err)
 			return nextEnd, fmt.Errorf("failed to get revision %d: %v", cursor, err)
@@ -165,7 +175,7 @@ func (s *SQLLog) compactor(nextEnd int64) (int64, error) {
 		setRev := false
 		if event.PrevKV != nil && event.PrevKV.ModRevision != 0 {
 			if savedCursor != cursor {
-				if err := s.d.SetCompactRevision(s.ctx, cursor); err != nil {
+				if err := s.d.SetCompactRevision(ctx, cursor); err != nil {
 					logrus.Errorf("failed to record compact revision: %v", err)
 					return nextEnd, fmt.Errorf("failed to record compact revision: %v", err)
 				}
@@ -173,7 +183,7 @@ func (s *SQLLog) compactor(nextEnd int64) (int64, error) {
 				setRev = true
 			}
 
-			if err := s.d.DeleteRevision(s.ctx, event.PrevKV.ModRevision); err != nil {
+			if err := s.d.DeleteRevision(ctx, event.PrevKV.ModRevision); err != nil {
 				logrus.Errorf("failed to delete revision %d: %v", event.PrevKV.ModRevision, err)
 				return nextEnd, fmt.Errorf("failed to delete revision %d: %v", event.PrevKV.ModRevision, err)
 			}
@@ -181,14 +191,14 @@ func (s *SQLLog) compactor(nextEnd int64) (int64, error) {
 
 		if event.Delete {
 			if !setRev && savedCursor != cursor {
-				if err := s.d.SetCompactRevision(s.ctx, cursor); err != nil {
+				if err := s.d.SetCompactRevision(ctx, cursor); err != nil {
 					logrus.Errorf("failed to record compact revision: %v", err)
 					return nextEnd, fmt.Errorf("failed to record compact revision: %v", err)
 				}
 				savedCursor = cursor
 			}
 
-			if err := s.d.DeleteRevision(s.ctx, cursor); err != nil {
+			if err := s.d.DeleteRevision(ctx, cursor); err != nil {
 				logrus.Errorf("failed to delete current revision %d: %v", cursor, err)
 				return nextEnd, fmt.Errorf("failed to delete current revision %d: %v", cursor, err)
 			}
@@ -196,7 +206,7 @@ func (s *SQLLog) compactor(nextEnd int64) (int64, error) {
 	}
 
 	if savedCursor != cursor {
-		if err := s.d.SetCompactRevision(s.ctx, cursor); err != nil {
+		if err := s.d.SetCompactRevision(ctx, cursor); err != nil {
 			logrus.Errorf("failed to record compact revision: %v", err)
 			return nextEnd, fmt.Errorf("failed to record compact revision: %v", err)
 		}
@@ -218,7 +228,7 @@ func (s *SQLLog) compact() {
 		case <-t.C:
 		}
 
-		nextEnd, _ = s.compactor(nextEnd)
+		nextEnd, _ = s.compactor(s.ctx, nextEnd)
 	}
 }
 
@@ -315,15 +325,18 @@ func RowsToEvents(rows *sql.Rows) ([]*server.Event, error) {
 
 func (s *SQLLog) Watch(ctx context.Context, prefix string) <-chan []*server.Event {
 	res := make(chan []*server.Event, 100)
-	values, err := s.broadcaster.Subscribe(ctx, s.startWatch)
+	values, err := s.broadcaster.Subscribe(ctx)
 	if err != nil {
 		return nil
 	}
 
 	checkPrefix := strings.HasSuffix(prefix, "/")
 
+	s.wg.Add(1)
 	go func() {
+		defer s.wg.Done()
 		defer close(res)
+
 		for i := range values {
 			events, ok := filter(i, checkPrefix, prefix)
 			if ok {
@@ -361,8 +374,18 @@ func (s *SQLLog) startWatch() (chan interface{}, error) {
 	c := make(chan interface{})
 	// start compaction and polling at the same time to watch starts
 	// at the oldest revision, but compaction doesn't create gaps
-	go s.compact()
-	go s.poll(c, pollStart)
+	s.wg.Add(2)
+
+	go func() {
+		defer s.wg.Done()
+		s.compact()
+	}()
+
+	go func() {
+		defer s.wg.Done()
+		s.poll(c, pollStart)
+	}()
+
 	return c, nil
 }
 
@@ -474,7 +497,7 @@ func (s *SQLLog) poll(result chan interface{}, pollStart int64) {
 }
 
 func canSkipRevision(rev, skip int64, skipTime time.Time) bool {
-	return rev == skip && time.Now().Sub(skipTime) > time.Second
+	return rev == skip && time.Since(skipTime) > time.Second
 }
 
 func (s *SQLLog) Count(ctx context.Context, prefix, startKey string, revision int64) (int64, int64, error) {

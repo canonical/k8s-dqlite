@@ -1,3 +1,5 @@
+//go:build dqlite
+
 package server
 
 import (
@@ -14,6 +16,7 @@ import (
 	"github.com/canonical/go-dqlite/app"
 	"github.com/canonical/go-dqlite/client"
 	"github.com/canonical/k8s-dqlite/pkg/kine/endpoint"
+	"github.com/canonical/k8s-dqlite/pkg/kine/server"
 	kine_tls "github.com/canonical/k8s-dqlite/pkg/kine/tls"
 	"github.com/sirupsen/logrus"
 )
@@ -22,6 +25,8 @@ import (
 type Server struct {
 	// app is the dqlite application driving the server.
 	app *app.App
+
+	backend server.Backend
 
 	// kineConfig is the configuration to use for starting kine against the dqlite application.
 	kineConfig endpoint.Config
@@ -334,10 +339,13 @@ func (s *Server) Start(ctx context.Context) error {
 	logrus.WithFields(logrus.Fields{"id": s.app.ID(), "address": s.app.Address()}).Print("Started dqlite")
 
 	logrus.WithField("config", s.kineConfig).Debug("Starting kine")
-	if _, err := endpoint.Listen(ctx, s.kineConfig); err != nil {
+	_, backend, err := endpoint.ListenAndReturnBackend(ctx, s.kineConfig)
+	if err != nil {
 		return fmt.Errorf("failed to start kine: %w", err)
 	}
 	logrus.WithFields(logrus.Fields{"address": s.kineConfig.Listener, "database": s.kineConfig.Endpoint}).Print("Started kine")
+
+	s.backend = backend
 
 	go s.watchAvailableStorageSize(ctx)
 
@@ -355,6 +363,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		return fmt.Errorf("failed to close dqlite app: %w", err)
 	}
 	close(s.mustStopCh)
+	s.backend.Wait()
 	return nil
 }
 
