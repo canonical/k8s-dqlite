@@ -34,6 +34,7 @@ Prepare a directory containing:
   - `cluster.crt` and `cluster.key` pair.
 
 Here is a script to build you can use:
+
 ```
 mkdir -p /var/data/
 IP="127.0.0.1"
@@ -52,6 +53,7 @@ chmod -R o-rwX /var/data
 ```
 
 You are now ready to start `k8s-dqlite` with:
+
 ```
 k8s-dqlite --storage-dir=/var/data/
 ```
@@ -60,6 +62,7 @@ The `--listen` option allows you to set the endpoint where dqlite should listen 
 By default `k8s-dqlite` will be listening for connections at `tcp://127.0.0.1:12379`.
 
 The snap package takes care of this installation step so you may want to use the snap you build above:
+
 ```
 sudo snap install ./k8s-dqlite_latest_amd64.snap --classic --dangerous
 ```
@@ -67,6 +70,7 @@ sudo snap install ./k8s-dqlite_latest_amd64.snap --classic --dangerous
 ## Configuring the API server
 
 To point the API server to `k8s-dqlite` use the following arguments:
+
 ```
 # Endpoint k8s-dqlite listens at
 --etcd-servers="http://<IP>:<PORT>"
@@ -80,6 +84,7 @@ To point the API server to `k8s-dqlite` use the following arguments:
 #--etcd-certfile=/var/snap/k8s-dqlite/current/var/data/cluster.crt
 #--etcd-keyfile=/var/snap/k8s-dqlite/current/var/data/cluster.key
 ```
+
 ## Highly Available Dqlite
 
 The following steps allows one to setup a highly available dqlite backend.
@@ -99,6 +104,7 @@ Steps:
   - <the ip of the main node>:29001
   Address: <ip of the joining node>:29001
   ```
+
 6. Start `k8s-dqlite` process
 
   ```shell
@@ -157,4 +163,9 @@ Steps:
       --listen unix:///var/snap/microk8s/current/var/kubernetes/backend/kine.sock:12379
     ```
 
-7.  While developing and making changes to `k8s-dqlite`, just restart k8s-dqlite
+7. While developing and making changes to `k8s-dqlite`, just restart k8s-dqlite
+
+Note: When develop k8s-dqlite against Canonical Kubernetes use the following flags:
+
+- `--storage-dir /var/snap/k8s/common/var/lib/k8s-dqlite`
+- `--listen unix:///var/snap/k8s/common/var/lib/k8s-dqlite/k8s-dqlite.sock`
