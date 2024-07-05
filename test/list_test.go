@@ -3,7 +3,6 @@ package test
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -19,14 +18,14 @@ func TestList(t *testing.T) {
 
 	client, _ := newKine(ctx, t)
 
-	keys := shuffleList([]string{"/key/1", "/key/2", "/key/3", "/key/4", "/key/5"})
+	keys := []string{"/key/5", "/key/4", "/key/3", "/key/2", "/key/1"}
 	for _, key := range keys {
 		createKey(ctx, g, client, key, "value")
 	}
 
 	t.Run("ListAll", func(t *testing.T) {
 		g := NewWithT(t)
-		// Get a list of all the keys
+
 		resp, err := client.Get(ctx, "/key", clientv3.WithPrefix())
 
 		g.Expect(err).To(BeNil())
@@ -86,13 +85,12 @@ func TestList(t *testing.T) {
 
 	t.Run("ListPrefix", func(t *testing.T) {
 		g := NewWithT(t)
-		// Create some keys
+
 		keys := []string{"key/sub/2", "key/sub/1", "key/other/1"}
 		for _, key := range keys {
 			createKey(ctx, g, client, key, "value")
 		}
 
-		// Get a list of all the keys sice they have '/key' prefix
 		resp, err := client.Get(ctx, "/key", clientv3.WithPrefix())
 
 		g.Expect(err).To(BeNil())
@@ -104,7 +102,6 @@ func TestList(t *testing.T) {
 		g.Expect(resp.Kvs[3].Key).To(Equal([]byte("/key/4")))
 		g.Expect(resp.Kvs[4].Key).To(Equal([]byte("/key/5")))
 
-		// Get a list of all the keys sice they have '/key/sub' prefix
 		resp, err = client.Get(ctx, "key/sub", clientv3.WithPrefix())
 
 		g.Expect(err).To(BeNil())
@@ -113,7 +110,6 @@ func TestList(t *testing.T) {
 		g.Expect(resp.Kvs[0].Key).To(Equal([]byte("key/sub/1")))
 		g.Expect(resp.Kvs[1].Key).To(Equal([]byte("key/sub/2")))
 
-		// Get a list of all the keys sice they have '/key/other' prefix
 		resp, err = client.Get(ctx, "key/other", clientv3.WithPrefix())
 
 		g.Expect(err).To(BeNil())
@@ -125,7 +121,6 @@ func TestList(t *testing.T) {
 	t.Run("ListRange", func(t *testing.T) {
 		g := NewWithT(t)
 
-		// Get a list of with key/1, as only key/1 falls within the specified range.
 		resp, err := client.Get(ctx, "/key/1", clientv3.WithRange(""))
 
 		g.Expect(err).To(BeNil())
@@ -199,18 +194,4 @@ func BenchmarkList(b *testing.B) {
 		g.Expect(err).To(BeNil())
 		g.Expect(resp.Kvs).To(HaveLen(b.N))
 	}
-}
-
-func shuffleList[T any](vals []T) []T {
-	if len(vals) == 0 {
-		return vals
-	}
-
-	perm := rand.Perm(len(vals))
-	shuffled := make([]T, 0, len(vals))
-	for _, i := range perm {
-		shuffled = append(shuffled, vals[perm[i]])
-	}
-
-	return shuffled
 }
