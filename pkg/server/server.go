@@ -336,6 +336,15 @@ func (s *Server) Start(ctx context.Context) error {
 	if err := s.app.Ready(ctx); err != nil {
 		return fmt.Errorf("failed to start dqlite app: %w", err)
 	}
+
+	// otel setup
+	otelShutdown, err := setupOTelSDK(ctx)
+	if err != nil {
+		return err
+	}
+
+	defer otelShutdown(ctx)
+
 	logrus.WithFields(logrus.Fields{"id": s.app.ID(), "address": s.app.Address()}).Print("Started dqlite")
 
 	logrus.WithField("config", s.kineConfig).Debug("Starting kine")
