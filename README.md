@@ -5,10 +5,10 @@ This project is a drop in replacement for etcd on Kubernetes.
 If you are looking for an in-memory database to replace etcd in your
 K8s cluster dqlite might be just right for you. Here is what you are getting:
 
- - distributed sqlite
- - in-memory
- - high availability
- - almost zero ops
+- distributed sqlite
+- in-memory
+- high availability
+- almost zero ops
 
 ## Building
 
@@ -30,8 +30,8 @@ make dynamic
 
 Prepare a directory containing:
 
-  - `init.yaml` with `Address: <host_IP>:<port_used_by_dqlite>`
-  - `cluster.crt` and `cluster.key` pair.
+- `init.yaml` with `Address: <host_IP>:<port_used_by_dqlite>`
+- `cluster.crt` and `cluster.key` pair.
 
 Here is a script to build you can use:
 
@@ -121,7 +121,7 @@ Steps:
 
 ## Develop k8s-dqlite against an active MicroK8s instance
 
-1.  Install development tools:
+1. Install development tools:
 
     ```bash
     sudo snap install go --classic
@@ -129,38 +129,38 @@ Steps:
     sudo apt install build-essential -y
     ```
 
-2.  Clone k8s-dqlite repository:
+2. Clone k8s-dqlite repository:
 
     ```bash
     git clone https://github.com/canonical/k8s-dqlite
     ```
 
-3.  Install MicroK8s on the machine:
+3. Install MicroK8s on the machine:
 
     ```bash
     sudo snap install microk8s --classic
     ```
 
-4.  Wait for MicroK8s to come up:
+4. Wait for MicroK8s to come up:
 
     ```bash
     sudo microk8s status --wait-ready
     ```
 
-5.  Stop k8s-dqlite included in the snap:
+5. Stop k8s-dqlite included in the snap:
 
     ```bash
     sudo snap stop microk8s.daemon-k8s-dqlite --disable
     ```
 
-6.  Run k8s-dqlite from this repository:
+6. Run k8s-dqlite from this repository:
 
     ```bash
     cd k8s-dqlite
     make static
     sudo ./bin/static/k8s-dqlite \
       --storage-dir /var/snap/microk8s/current/var/kubernetes/backend \
-      --listen unix:///var/snap/microk8s/current/var/kubernetes/backend/kine.sock:12379
+      --listen unix:///var/snap/microk8s/current/var/kubernetes/backend/kine.sock
     ```
 
 7. While developing and making changes to `k8s-dqlite`, just restart k8s-dqlite
