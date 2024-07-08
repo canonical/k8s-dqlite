@@ -1,5 +1,6 @@
 DQLITE_BUILD_SCRIPTS_DIR ?= $(shell pwd)/hack
 GO_SOURCES = $(shell find . -name '*.go')
+BENCH_COUNT ?= 7
 
 ## Development
 go.fmt:
@@ -13,7 +14,7 @@ go.test:
 	$(DQLITE_BUILD_SCRIPTS_DIR)/static-go-test.sh -v -p 1 ./...
 
 go.bench:
-	$(DQLITE_BUILD_SCRIPTS_DIR)/static-go-test.sh -v -p 1 ./... -run "^$$" -bench "Benchmark" -benchmem
+	$(DQLITE_BUILD_SCRIPTS_DIR)/static-go-test.sh -v -p 1 ./... -run "^$$" -bench "Benchmark" -benchmem -count $(BENCH_COUNT)
 
 ## Static Builds
 static: bin/static/k8s-dqlite bin/static/dqlite
