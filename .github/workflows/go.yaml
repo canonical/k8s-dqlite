@@ -11,8 +11,8 @@ concurrency:
 
 env:
   BASE_SHA: ${{ github.before || github.event.pull_request.base.sha }}
+  BASE_BRANCH: ${{ github.base_ref || github.ref }}
   TARGET_SHA: ${{ github.sha }}
-  TARGET_BRANCH: ${{ github.ref }}
   BENCH_COUNT: 7
 
 jobs:
