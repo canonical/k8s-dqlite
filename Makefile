@@ -51,6 +51,19 @@ bin/dynamic/dqlite: bin/dynamic/lib/libdqlite.so
 	mkdir -p bin/dynamic
 	GOBIN=$(shell pwd)/bin/dynamic $(DQLITE_BUILD_SCRIPTS_DIR)/dynamic-go-install.sh github.com/canonical/go-dqlite/cmd/dqlite@v1.20.0
 
+# Tracing logs export to local jaeger instance
+# 4317	HTTP (OTLP) over gRPC
+# 4318	HTTP (OTLP) over HTTP
+# connect http://localhost:16686
+jaeger:
+	docker run --name jaeger \
+		-e COLLECTOR_OTLP_ENABLED=true \
+		-p 16686:16686 \
+		-p 4317:4317 \
+		-p 4318:4318 \
+		jaegertracing/all-in-one:1.35
+
+
 ## Cleanup
 clean:
 	rm -rf bin hack/.build hack/.deps
