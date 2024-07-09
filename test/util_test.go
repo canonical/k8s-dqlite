@@ -3,14 +3,21 @@ package test
 import (
 	"context"
 	"fmt"
+	"io"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/canonical/go-dqlite/app"
 	"github.com/canonical/k8s-dqlite/pkg/kine/endpoint"
+	"github.com/sirupsen/logrus"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
+
+func init() {
+	logrus.SetOutput(io.Discard)
+	logrus.SetLevel(logrus.FatalLevel)
+}
 
 // newKine spins up a new instance of kine.
 //
