@@ -68,6 +68,9 @@ jobs:
         run: make go.test
 
   benchmarks:
+    permissions:
+      contents: read  # for actions/checkout to fetch code
+      pull-requests: write  # for marocchino/sticky-pull-request-comment to create or update PR comment
     name: Run Benchmarks
     runs-on: ubuntu-latest
 
@@ -115,7 +118,7 @@ jobs:
       - name: Run benchmark for base code
         if: steps.bench-cache.outputs.cache-hit != 'true'
         run: |
-          git fetch origin $TARGET_BRANCH
+          git fetch origin $BASE_BRANCH
           git reset --hard $BASE_SHA
           go test                           \
               -tags libsqlite3 -v -p 1 ./...  \
