@@ -39,10 +39,22 @@ func (l *LimitedServer) list(ctx context.Context, r *etcdserverpb.RangeRequest) 
 		limit++
 	}
 
+	ctx, span := tracer.Start(
+		ctx,
+		"backend.list",
+	)
+
+	defer span.End()
+
+	span.SetAttributes()
+
 	rev, kvs, err := l.backend.List(ctx, prefix, start, limit, revision)
 	if err != nil {
+		span.RecordError(err)
 		return nil, err
 	}
+	listCnt.Add(ctx, 1)
+	span.End()
 
 	resp := &RangeResponse{
 		Header: txnHeader(rev),
