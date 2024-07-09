@@ -117,7 +117,11 @@ jobs:
         run: |
           git fetch origin $TARGET_BRANCH
           git reset --hard $BASE_SHA
-          make go.bench BENCH_COUNT=$BENCH_COUNT  | tee bench-$BASE_SHA.txt
+          go test                           \
+              -tags libsqlite3 -v -p 1 ./...  \
+              -benchmem -count $BENCH_COUNT   \
+              -run "^$$" -bench .             \
+            | tee bench-$BASE_SHA.txt
           git reset --hard $TARGET_SHA
 
       - name: Benchmark stats
