@@ -14,7 +14,9 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -41,12 +43,20 @@ func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 		err = errors.Join(inErr, shutdown(ctx))
 	}
 
+	// Set up resource.
+	res, err := resource.New(ctx,
+		resource.WithAttributes(
+			// The service name used to display traces in backends
+			semconv.ServiceNameKey.String("k8s-dqlite-service"),
+		),
+	)
+
 	// Set up propagator.
 	prop := newPropagator()
 	otel.SetTextMapPropagator(prop)
 
 	// Set up trace provider.
-	tracerProvider, err := newTraceProvider(ctx)
+	tracerProvider, err := newTraceProvider(ctx, res)
 	if err != nil {
 		handleErr(err)
 		return
@@ -75,7 +85,7 @@ func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 	return
 }
 
-func newPropagator() propagation.TextMapPropagator {
+func newPropagator() propagation.TextMapPropagator { //TODO: is this needed
 	return propagation.NewCompositeTextMapPropagator(
 		propagation.TraceContext{},
 		propagation.Baggage{},
@@ -108,7 +118,7 @@ func newExporter(ctx context.Context) (trace.SpanExporter, error) {
 	return traceExporter, nil
 }
 
-func newTraceProvider(ctx context.Context) (*trace.TracerProvider, error) {
+func newTraceProvider(ctx context.Context, res *resource.Resource) (*trace.TracerProvider, error) {
 	// TODO: Replace with exporter such as Jaeger
 	// traceExporter, err := stdouttrace.New(
 	// 	stdouttrace.WithPrettyPrint())
@@ -120,7 +130,9 @@ func newTraceProvider(ctx context.Context) (*trace.TracerProvider, error) {
 	traceProvider := trace.NewTracerProvider(
 		trace.WithBatcher(traceExporter,
 			// Default is 5s. Set to 1s for demonstrative purposes.
-			trace.WithBatchTimeout(time.Second)),
+			trace.WithBatchTimeout(time.Second),
+		),
+		trace.WithResource(res),
 	)
 	return traceProvider, nil
 }
@@ -134,7 +146,7 @@ func newMeterProvider() (*metric.MeterProvider, error) {
 	meterProvider := metric.NewMeterProvider(
 		metric.WithReader(metric.NewPeriodicReader(metricExporter,
 			// Default is 1m. Set to 3s for demonstrative purposes.
-			metric.WithInterval(3*time.Second))),
+			metric.WithInterval(30*time.Second))),
 	)
 	return meterProvider, nil
 }
