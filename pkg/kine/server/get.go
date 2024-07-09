@@ -25,7 +25,7 @@ func (l *LimitedServer) get(ctx context.Context, r *etcdserverpb.RangeRequest) (
 	)
 
 	defer span.End()
-	getCnt.Add(ctx, 1)
+	backendGetCnt.Add(ctx, 1)
 
 	rev, kv, err := l.backend.Get(ctx, string(r.Key), string(r.RangeEnd), r.Limit, r.Revision)
 	if err != nil {

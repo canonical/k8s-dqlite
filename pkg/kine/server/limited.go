@@ -13,8 +13,12 @@ type LimitedServer struct {
 
 func (l *LimitedServer) Range(ctx context.Context, r *etcdserverpb.RangeRequest) (*RangeResponse, error) {
 	if len(r.RangeEnd) == 0 {
+		ctx, span := tracer.Start(ctx, "limited.get")
+		defer span.End()
 		return l.get(ctx, r)
 	}
+	ctx, span := tracer.Start(ctx, "limited.list")
+	defer span.End()
 	return l.list(ctx, r)
 }
 

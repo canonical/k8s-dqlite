@@ -53,7 +53,7 @@ func (l *LimitedServer) list(ctx context.Context, r *etcdserverpb.RangeRequest) 
 		span.RecordError(err)
 		return nil, err
 	}
-	listCnt.Add(ctx, 1)
+	backendListCnt.Add(ctx, 1)
 	span.End()
 
 	resp := &RangeResponse{

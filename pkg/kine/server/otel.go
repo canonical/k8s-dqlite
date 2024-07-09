@@ -13,11 +13,11 @@ import (
 const name = "kine"
 
 var (
-	tracer  = otel.Tracer(name)
-	meter   = otel.Meter(name)
-	logger  = otelslog.NewLogger(name)
-	getCnt  metric.Int64Counter
-	listCnt metric.Int64Counter
+	tracer         = otel.Tracer(name)
+	meter          = otel.Meter(name)
+	logger         = otelslog.NewLogger(name)
+	backendGetCnt  metric.Int64Counter
+	backendListCnt metric.Int64Counter
 )
 
 func init() {
@@ -27,6 +27,6 @@ func init() {
 
 	//TODO: handle shutdown
 
-	listCnt, _ = meter.Int64Counter(fmt.Sprintf("%s.list", name), metric.WithDescription("Number of list requests"))
-	getCnt, _ = meter.Int64Counter(fmt.Sprintf("%s.get", name), metric.WithDescription("Number of get requests"))
+	backendListCnt, _ = meter.Int64Counter(fmt.Sprintf("%s.list", name), metric.WithDescription("Number of list requests"))
+	backendGetCnt, _ = meter.Int64Counter(fmt.Sprintf("%s.get", name), metric.WithDescription("Number of get requests"))
 }
