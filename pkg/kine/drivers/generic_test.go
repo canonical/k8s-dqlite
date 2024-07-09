@@ -3,13 +3,20 @@ package drivers_test
 import (
 	"context"
 	"fmt"
+	"io"
 	"testing"
 
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/generic"
 	"github.com/canonical/k8s-dqlite/pkg/kine/logstructured/sqllog"
 	"github.com/canonical/k8s-dqlite/pkg/kine/server"
 	. "github.com/onsi/gomega"
+	"github.com/sirupsen/logrus"
 )
+
+func init() {
+	logrus.SetOutput(io.Discard)
+	logrus.SetLevel(logrus.FatalLevel)
+}
 
 type makeBackendFunc func(ctx context.Context, tb testing.TB) (server.Backend, *generic.Generic, error)
 
