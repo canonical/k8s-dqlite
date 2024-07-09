@@ -10,16 +10,10 @@ go.vet:
 	$(DQLITE_BUILD_SCRIPTS_DIR)/static-go-vet.sh ./...
 
 go.test:
-	go test -v -p 1 ./...
-
-go.test.dqlite:
-	$(DQLITE_BUILD_SCRIPTS_DIR)/static-go-test.sh -v ./...
+	$(DQLITE_BUILD_SCRIPTS_DIR)/static-go-test.sh -v -p 1 ./...
 
 go.bench:
-	go test -tags=libsqlite3 -v ./... -run "^$$" -bench "Benchmark" -benchmem
-
-go.bench.dqlite:
-	$(DQLITE_BUILD_SCRIPTS_DIR)/static-go-test.sh -v ./... -run "^$$" -bench "Benchmark" -benchmem
+	$(DQLITE_BUILD_SCRIPTS_DIR)/static-go-test.sh -v -p 1 ./... -run "^$$" -bench "Benchmark" -benchmem
 
 ## Static Builds
 static: bin/static/k8s-dqlite bin/static/dqlite

@@ -1,5 +1,3 @@
-//go:build dqlite
-
 package server
 
 import (
