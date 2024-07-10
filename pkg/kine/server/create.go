@@ -35,8 +35,6 @@ func (l *LimitedServer) create(ctx context.Context, put *etcdserverpb.PutRequest
 	span.SetAttributes(
 
 		attribute.String("key", string(put.Key)),
-		//TODO: get key and value in utf-8 string
-		// attribute.String("value", string(put.Value)),
 		attribute.Int64("lease", put.Lease),
 	)
 	backendCreateCnt.Add(ctx, 1)

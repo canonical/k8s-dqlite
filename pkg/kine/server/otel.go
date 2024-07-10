@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 )
@@ -15,7 +14,6 @@ const name = "k8s-dqlite"
 var (
 	tracer            = otel.Tracer(name)
 	meter             = otel.Meter(name)
-	logger            = otelslog.NewLogger(name)
 	backendGetCnt     metric.Int64Counter
 	backendListCnt    metric.Int64Counter
 	backendCountCnt   metric.Int64Counter
@@ -27,10 +25,9 @@ var (
 
 func init() {
 	ctx := context.Background()
-	// otel setup
-	setupOTelSDK(ctx)
 
-	//TODO: handle shutdown setupOTelSDK
+	setupOTelSDK(ctx)
+	//TODO: move this and handle shutdown setupOTelSDK
 
 	backendListCnt, _ = meter.Int64Counter(fmt.Sprintf("%s.list", name), metric.WithDescription("Number of list requests"))
 	backendGetCnt, _ = meter.Int64Counter(fmt.Sprintf("%s.get", name), metric.WithDescription("Number of get requests"))
