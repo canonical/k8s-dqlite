@@ -33,7 +33,6 @@ func (l *LimitedServer) create(ctx context.Context, put *etcdserverpb.PutRequest
 	defer span.End()
 
 	span.SetAttributes(
-
 		attribute.String("key", string(put.Key)),
 		attribute.Int64("lease", put.Lease),
 	)

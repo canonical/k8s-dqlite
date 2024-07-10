@@ -43,7 +43,7 @@ func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 	res, err := resource.New(ctx,
 		resource.WithAttributes(
 			// The service name used to display traces in backends
-			semconv.ServiceNameKey.String("k8s-dqlite"),
+			semconv.ServiceNameKey.String(name),
 		),
 	)
 

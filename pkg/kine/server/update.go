@@ -38,11 +38,12 @@ func (l *LimitedServer) update(ctx context.Context, rev int64, key string, value
 			attribute.String("key", key),
 			attribute.Int64("lease", lease),
 		)
+		createCnt.Add(ctx, 1)
+
 		rev, err = l.backend.Create(ctx, key, value, lease)
 		//TODO: why are here no error checks?
 		ok = true
 		span.SetAttributes(attribute.Bool("ok", ok))
-		createCnt.Add(ctx, 1)
 	} else {
 		ctx, span := tracer.Start(ctx, "backend.update")
 		defer span.End()
@@ -51,9 +52,10 @@ func (l *LimitedServer) update(ctx context.Context, rev int64, key string, value
 			attribute.Int64("revision", rev),
 			attribute.Int64("lease", lease),
 		)
+		updateCnt.Add(ctx, 1)
+
 		rev, kv, ok, err = l.backend.Update(ctx, key, value, rev, lease)
 		span.SetAttributes(attribute.Bool("ok", ok))
-		updateCnt.Add(ctx, 1)
 	}
 	if err != nil {
 		return nil, err
