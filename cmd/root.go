@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -60,6 +61,16 @@ var (
 
 			if rootCmdOpts.metrics {
 				go func() {
+					otelShutdown, err := setupOTelSDK(cmd.Context())
+					if err != nil {
+						logrus.WithError(err).Warning("Failed to setup OpenTelemetry SDK")
+					}
+					defer func() {
+						err = errors.Join(err, otelShutdown(cmd.Context()))
+						if err != nil {
+							logrus.WithError(err).Warning("Failed to shutdown OpenTelemetry SDK")
+						}
+					}()
 					logrus.WithField("address", rootCmdOpts.metricsAddress).Print("Enable metrics endpoint")
 					mux := http.NewServeMux()
 					mux.Handle("/metrics", promhttp.Handler())

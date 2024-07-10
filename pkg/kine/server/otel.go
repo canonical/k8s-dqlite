@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"fmt"
 
 	"go.opentelemetry.io/otel"
@@ -24,11 +23,6 @@ var (
 )
 
 func init() {
-	ctx := context.Background()
-
-	setupOTelSDK(ctx)
-	//TODO: move this and handle shutdown setupOTelSDK
-
 	listCnt, _ = meter.Int64Counter(fmt.Sprintf("%s.list", name), metric.WithDescription("Number of list requests"))
 	getCnt, _ = meter.Int64Counter(fmt.Sprintf("%s.get", name), metric.WithDescription("Number of get requests"))
 	countCnt, _ = meter.Int64Counter(fmt.Sprintf("%s.count", name), metric.WithDescription("Number of count requests"))
