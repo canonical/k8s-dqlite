@@ -14,8 +14,11 @@ func (s *KVServerBridge) Alarm(context.Context, *etcdserverpb.AlarmRequest) (*et
 }
 
 func (s *KVServerBridge) Status(ctx context.Context, r *etcdserverpb.StatusRequest) (*etcdserverpb.StatusResponse, error) {
+	ctx, span := tracer.Start(ctx, "backend.dbSize")
+	defer span.End()
 	size, err := s.limited.dbSize(ctx)
 	if err != nil {
+		span.RecordError(err)
 		return nil, err
 	}
 	return &etcdserverpb.StatusResponse{
