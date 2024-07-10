@@ -43,7 +43,7 @@ func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 	res, err := resource.New(ctx,
 		resource.WithAttributes(
 			// The service name used to display traces in backends
-			semconv.ServiceNameKey.String("k8s-dqlite-service"),
+			semconv.ServiceNameKey.String("k8s-dqlite"),
 		),
 	)
 
@@ -57,7 +57,7 @@ func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 	otel.SetTracerProvider(tracerProvider)
 
 	// Set up meter provider.
-	meterProvider, err := newMeterProvider()
+	meterProvider, err := newMeterProvider(res)
 	if err != nil {
 		handleErr(err)
 		return
@@ -110,7 +110,7 @@ func newTraceProvider(ctx context.Context, res *resource.Resource) (*trace.Trace
 	return traceProvider, nil
 }
 
-func newMeterProvider() (*metric.MeterProvider, error) {
+func newMeterProvider(res *resource.Resource) (*metric.MeterProvider, error) {
 	metricExporter, err := stdoutmetric.New()
 	if err != nil {
 		return nil, err
@@ -120,6 +120,7 @@ func newMeterProvider() (*metric.MeterProvider, error) {
 		metric.WithReader(metric.NewPeriodicReader(metricExporter,
 			// Default is 1m. Set to 3s for demonstrative purposes.
 			metric.WithInterval(30*time.Second))),
+		metric.WithResource(res),
 	)
 	return meterProvider, nil
 }
