@@ -8,6 +8,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 func (l *LimitedServer) list(ctx context.Context, r *etcdserverpb.RangeRequest) (*RangeResponse, error) {
@@ -23,10 +24,23 @@ func (l *LimitedServer) list(ctx context.Context, r *etcdserverpb.RangeRequest) 
 	revision := r.Revision
 
 	if r.CountOnly {
+		ctx, span := tracer.Start(ctx, "backend.count")
+		defer span.End()
+		span.SetAttributes(
+			attribute.String("key", string(r.Key)),
+			attribute.String("rangeEnd", string(r.RangeEnd)),
+			attribute.String("prefix", prefix),
+			attribute.String("start", start),
+			attribute.Int64("revision", revision),
+		)
+		backendCountCnt.Add(ctx, 1)
 		rev, count, err := l.backend.Count(ctx, prefix, start, revision)
 		if err != nil {
+			span.RecordError(err)
 			return nil, err
 		}
+		span.SetAttributes(attribute.Int64("count", count))
+
 		logrus.Tracef("LIST COUNT key=%s, end=%s, revision=%d, currentRev=%d count=%d", r.Key, r.RangeEnd, revision, rev, count)
 		return &RangeResponse{
 			Header: txnHeader(rev),
@@ -39,14 +53,18 @@ func (l *LimitedServer) list(ctx context.Context, r *etcdserverpb.RangeRequest) 
 		limit++
 	}
 
-	ctx, span := tracer.Start(
-		ctx,
-		"backend.list",
-	)
-
+	ctx, span := tracer.Start(ctx, "backend.list")
 	defer span.End()
 
-	span.SetAttributes()
+	span.SetAttributes(
+		attribute.String("key", string(r.Key)),
+		attribute.String("rangeEnd", string(r.RangeEnd)),
+		attribute.String("prefix", prefix),
+		attribute.String("start", start),
+		attribute.Int64("limit", limit),
+		attribute.Int64("revision", revision),
+	)
+	backendListCnt.Add(ctx, 1)
 
 	rev, kvs, err := l.backend.List(ctx, prefix, start, limit, revision)
 	if err != nil {
@@ -70,12 +88,24 @@ func (l *LimitedServer) list(ctx context.Context, r *etcdserverpb.RangeRequest) 
 		if revision == 0 {
 			revision = rev
 		}
-
 		// count the actual number of results if there are more items in the db.
+		ctx, span := tracer.Start(ctx, "backend.count")
+		defer span.End()
+		span.SetAttributes(
+			attribute.String("key", string(r.Key)),
+			attribute.String("rangeEnd", string(r.RangeEnd)),
+			attribute.String("prefix", prefix),
+			attribute.String("start", start),
+			attribute.Int64("revision", revision),
+		)
+		backendCountCnt.Add(ctx, 1)
 		rev, resp.Count, err = l.backend.Count(ctx, prefix, start, revision)
 		if err != nil {
+			span.RecordError(err)
 			return nil, err
 		}
+		span.SetAttributes(attribute.Int64("count", resp.Count))
+
 		logrus.Tracef("LIST COUNT key=%s, end=%s, revision=%d, currentRev=%d count=%d", r.Key, r.RangeEnd, revision, rev, resp.Count)
 		resp.Header = txnHeader(rev)
 	}

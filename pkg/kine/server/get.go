@@ -13,18 +13,15 @@ func (l *LimitedServer) get(ctx context.Context, r *etcdserverpb.RangeRequest) (
 		return nil, fmt.Errorf("invalid combination of rangeEnd and limit, limit should be 0 got %d", r.Limit)
 	}
 
-	ctx, span := tracer.Start(
-		ctx,
-		"backend.get",
-	)
+	ctx, span := tracer.Start(ctx, "backend.get")
+	defer span.End()
 
 	span.SetAttributes(
 		attribute.String("key", string(r.Key)),
-		attribute.Int64("limit", int64(r.Limit)),
+		attribute.String("rangeEnd", string(r.RangeEnd)),
+		attribute.Int64("limit", r.Limit),
 		attribute.Int64("revision", r.Revision),
 	)
-
-	defer span.End()
 	backendGetCnt.Add(ctx, 1)
 
 	rev, kv, err := l.backend.Get(ctx, string(r.Key), string(r.RangeEnd), r.Limit, r.Revision)
@@ -33,7 +30,6 @@ func (l *LimitedServer) get(ctx context.Context, r *etcdserverpb.RangeRequest) (
 		return nil, err
 	}
 
-	span.AddEvent("get request is completed")
 	span.End()
 
 	resp := &RangeResponse{

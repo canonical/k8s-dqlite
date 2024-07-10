@@ -30,15 +30,23 @@ func txnHeader(rev int64) *etcdserverpb.ResponseHeader {
 
 func (l *LimitedServer) Txn(ctx context.Context, txn *etcdserverpb.TxnRequest) (*etcdserverpb.TxnResponse, error) {
 	if put := isCreate(txn); put != nil {
+		ctx, span := tracer.Start(ctx, "limited.create")
+		defer span.End()
 		return l.create(ctx, put, txn)
 	}
 	if rev, key, ok := isDelete(txn); ok {
+		ctx, span := tracer.Start(ctx, "limited.delete")
+		defer span.End()
 		return l.delete(ctx, key, rev)
 	}
 	if rev, key, value, lease, ok := isUpdate(txn); ok {
+		ctx, span := tracer.Start(ctx, "limited.update")
+		defer span.End()
 		return l.update(ctx, rev, key, value, lease)
 	}
 	if isCompact(txn) {
+		ctx, span := tracer.Start(ctx, "limited.compact")
+		defer span.End()
 		return l.compact(ctx)
 	}
 	return nil, fmt.Errorf("unsupported transaction: %v", txn)
