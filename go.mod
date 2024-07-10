@@ -15,15 +15,11 @@ require (
 	go.etcd.io/etcd/client/pkg/v3 v3.5.12
 	go.etcd.io/etcd/client/v3 v3.5.12
 	go.etcd.io/etcd/server/v3 v3.5.12
-	go.opentelemetry.io/contrib/bridges/otelslog v0.3.0
 	go.opentelemetry.io/otel v1.28.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.28.0
-	go.opentelemetry.io/otel/exporters/stdout/stdoutlog v0.4.0
 	go.opentelemetry.io/otel/exporters/stdout/stdoutmetric v1.28.0
-	go.opentelemetry.io/otel/log v0.4.0
 	go.opentelemetry.io/otel/metric v1.28.0
 	go.opentelemetry.io/otel/sdk v1.28.0
-	go.opentelemetry.io/otel/sdk/log v0.4.0
 	go.opentelemetry.io/otel/sdk/metric v1.28.0
 	golang.org/x/sync v0.7.0
 	golang.org/x/sys v0.21.0
