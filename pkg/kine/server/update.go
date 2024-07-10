@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 func isUpdate(txn *etcdserverpb.TxnRequest) (int64, string, []byte, int64, bool) {
@@ -31,10 +32,28 @@ func (l *LimitedServer) update(ctx context.Context, rev int64, key string, value
 	)
 
 	if rev == 0 {
+		ctx, span := tracer.Start(ctx, "backend.create")
+		defer span.End()
+		span.SetAttributes(
+			attribute.String("key", key),
+			attribute.Int64("lease", lease),
+		)
 		rev, err = l.backend.Create(ctx, key, value, lease)
+		//TODO: why are here no error checks?
 		ok = true
+		span.SetAttributes(attribute.Bool("ok", ok))
+		backendCreateCnt.Add(ctx, 1)
 	} else {
+		ctx, span := tracer.Start(ctx, "backend.update")
+		defer span.End()
+		span.SetAttributes(
+			attribute.String("key", key),
+			attribute.Int64("revision", rev),
+			attribute.Int64("lease", lease),
+		)
 		rev, kv, ok, err = l.backend.Update(ctx, key, value, rev, lease)
+		span.SetAttributes(attribute.Bool("ok", ok))
+		backendUpdateCnt.Add(ctx, 1)
 	}
 	if err != nil {
 		return nil, err
