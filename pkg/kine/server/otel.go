@@ -7,7 +7,6 @@ import (
 	"go.opentelemetry.io/otel/metric"
 )
 
-// TODO: This can probably get moved into tracing.go
 const name = "k8s-dqlite"
 
 var (

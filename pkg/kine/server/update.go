@@ -41,7 +41,6 @@ func (l *LimitedServer) update(ctx context.Context, rev int64, key string, value
 		createCnt.Add(ctx, 1)
 
 		rev, err = l.backend.Create(ctx, key, value, lease)
-		//TODO: why are here no error checks?
 		ok = true
 		span.SetAttributes(attribute.Bool("ok", ok))
 	} else {
