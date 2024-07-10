@@ -5,6 +5,9 @@ on:
     branches: [master]
   pull_request:
 
+env:
+  BENCH_COUNT: 7
+
 jobs:
   code-quality:
     name: Code Quality
@@ -38,8 +41,8 @@ jobs:
       - name: go vet
         run: make go.vet
 
-  tests-sqlite:
-    name: Test sqlite
+  tests:
+    name: Run Tests
     runs-on: ubuntu-latest
 
     steps:
@@ -57,27 +60,8 @@ jobs:
       - name: Run tests
         run: make go.test
 
-  tests-dqlite:
-    name: Test dqlite
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Check out Code
-        uses: actions/checkout@v4
-
-      - name: Install Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.21"
-
-      - name: go mod download
-        run: go mod download
-
-      - name: Run tests
-        run: make go.test.dqlite
-
   benchmarks:
-    name: Benchmark sqlite
+    name: Run Benchmarks
     runs-on: ubuntu-latest
 
     steps:
@@ -92,27 +76,14 @@ jobs:
       - name: go mod download
         run: go mod download
 
-      - name: Run benchmarks
-        run: make go.bench
-
-  benchmarks-dqlite:
-    name: Benchmark dqlite
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Check out Code
-        uses: actions/checkout@v4
-
-      - name: Install Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.21"
-
-      - name: go mod download
-        run: go mod download
+      - name: Install Dqlite
+        run: |
+          sudo add-apt-repository -y ppa:dqlite/dev 
+          sudo apt install libdqlite-dev
 
       - name: Run benchmarks
-        run: make go.bench.dqlite
+        run: |
+          go test -tags libsqlite3 -v -p 1 ./... -run "^$$" -bench . -benchmem -count $BENCH_COUNT
 
   build:
     name: Build k8s-dqlite

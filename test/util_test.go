@@ -3,40 +3,41 @@ package test
 import (
 	"context"
 	"fmt"
+	"io"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/canonical/go-dqlite/app"
 	"github.com/canonical/k8s-dqlite/pkg/kine/endpoint"
-	"github.com/canonical/k8s-dqlite/pkg/kine/server"
 	"github.com/sirupsen/logrus"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
-var (
-	// testWatchEventPollTimeout is the timeout for waiting to receive an event.
-	testWatchEventPollTimeout = 50 * time.Millisecond
-
-	// testWatchEventIdleTimeout is the amount of time to wait to ensure that no events
-	// are received when they should not.
-	testWatchEventIdleTimeout = 100 * time.Millisecond
-
-	// testExpirePollPeriod is the polling period for waiting for lease expiration
-	testExpirePollPeriod = 100 * time.Millisecond
-)
+func init() {
+	logrus.SetOutput(io.Discard)
+	logrus.SetLevel(logrus.FatalLevel)
+}
 
 // newKine spins up a new instance of kine.
 //
-// newKine will create a sqlite or dqlite endpoint based on the provided go build tags (see e.g. util_test_dqlite.go)
+// newKine will create a sqlite or dqlite endpoint based on the provided backendType.
 // Custom endpoint query parameters can be configured with the `qs` parameter (e.g. "admission-control-policy=limit")
 //
-// newKine will panic in case of error
+// newKine will make the test fail on error
 //
-// newKine will return a context as well as a configured etcd client for the kine instance
-func newKine(ctx context.Context, tb testing.TB, qs ...string) (*clientv3.Client, server.Backend) {
-	logrus.SetLevel(logrus.ErrorLevel)
+// newKine will return a Client as well as a configured etcd client for the kine instance
+func newKine(ctx context.Context, tb testing.TB, backendType string, qs ...string) *clientv3.Client {
+	var endpointConfig endpoint.Config
+	switch backendType {
+	case endpoint.SQLiteBackend:
+		endpointConfig = startSqlite(ctx, tb)
+	case endpoint.DQLiteBackend:
+		endpointConfig = startDqlite(ctx, tb)
+	default:
+		tb.Fatalf("Testing %s backend not supported", backendType)
+	}
 
-	endpointConfig := makeEndpointConfig(ctx, tb)
 	if !strings.Contains(endpointConfig.Endpoint, "?") {
 		endpointConfig.Endpoint += "?"
 	}
@@ -50,6 +51,7 @@ func newKine(ctx context.Context, tb testing.TB, qs ...string) (*clientv3.Client
 	tb.Cleanup(func() {
 		backend.Wait()
 	})
+
 	tlsConfig, err := config.TLSConfig.ClientConfig()
 	if err != nil {
 		tb.Fatal(err)
@@ -62,5 +64,36 @@ func newKine(ctx context.Context, tb testing.TB, qs ...string) (*clientv3.Client
 	if err != nil {
 		tb.Fatal(err)
 	}
-	return client, backend
+	return client
+}
+
+func startSqlite(ctx context.Context, tb testing.TB) endpoint.Config {
+	dir := tb.TempDir()
+	return endpoint.Config{
+		Listener: fmt.Sprintf("unix://%s/listen.sock", dir),
+		Endpoint: fmt.Sprintf("sqlite://%s/data.db", dir),
+	}
+}
+
+var nextPort = 59090
+
+func startDqlite(ctx context.Context, tb testing.TB) endpoint.Config {
+	nextPort++
+	dir := tb.TempDir()
+
+	app, err := app.New(dir, app.WithAddress(fmt.Sprintf("127.0.0.1:%d", nextPort)))
+	if err != nil {
+		tb.Fatalf("failed to create dqlite app: %v", err)
+	}
+	if err := app.Ready(ctx); err != nil {
+		tb.Fatalf("failed to initialize dqlite: %v", err)
+	}
+	tb.Cleanup(func() {
+		app.Close()
+	})
+
+	return endpoint.Config{
+		Listener: fmt.Sprintf("unix://%s/listen.sock", dir),
+		Endpoint: fmt.Sprintf("dqlite://k8s?driver-name=%s", app.Driver()),
+	}
 }

@@ -5,45 +5,53 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/canonical/k8s-dqlite/pkg/kine/endpoint"
 	. "github.com/onsi/gomega"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 // TestCreate is unit testing for the create operation.
 func TestCreate(t *testing.T) {
-	g := NewWithT(t)
+	for _, backendType := range []string{endpoint.SQLiteBackend, endpoint.DQLiteBackend} {
+		t.Run(backendType, func(t *testing.T) {
+			g := NewWithT(t)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 
-	client, _ := newKine(ctx, t)
+			client := newKine(ctx, t, backendType)
 
-	createKey(ctx, g, client, "testKey", "testValue")
+			createKey(ctx, g, client, "testKey", "testValue")
 
-	resp, err := client.Txn(ctx).
-		If(clientv3.Compare(clientv3.ModRevision("testKey"), "=", 0)).
-		Then(clientv3.OpPut("testKey", "testValue2")).
-		Commit()
+			resp, err := client.Txn(ctx).
+				If(clientv3.Compare(clientv3.ModRevision("testKey"), "=", 0)).
+				Then(clientv3.OpPut("testKey", "testValue2")).
+				Commit()
 
-	g.Expect(err).To(BeNil())
-	g.Expect(resp.Succeeded).To(BeFalse())
+			g.Expect(err).To(BeNil())
+			g.Expect(resp.Succeeded).To(BeFalse())
+		})
+	}
 }
 
 // BenchmarkCreate is a benchmark for the Create operation.
 func BenchmarkCreate(b *testing.B) {
-	b.StopTimer()
-	g := NewWithT(b)
+	for _, backendType := range []string{endpoint.SQLiteBackend, endpoint.DQLiteBackend} {
+		b.Run(backendType, func(b *testing.B) {
+			b.StopTimer()
+			g := NewWithT(b)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+			client := newKine(ctx, b, backendType)
 
-	client, _ := newKine(ctx, b)
-
-	b.StartTimer()
-	for i := 0; i < b.N; i++ {
-		key := fmt.Sprintf("key-%d", i)
-		value := fmt.Sprintf("value-%d", i)
-		createKey(ctx, g, client, key, value)
+			b.StartTimer()
+			for i := 0; i < b.N; i++ {
+				key := fmt.Sprintf("key-%d", i)
+				value := fmt.Sprintf("value-%d", i)
+				createKey(ctx, g, client, key, value)
+			}
+		})
 	}
 }
 
