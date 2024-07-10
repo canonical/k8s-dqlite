@@ -37,7 +37,7 @@ func (l *LimitedServer) create(ctx context.Context, put *etcdserverpb.PutRequest
 		attribute.String("key", string(put.Key)),
 		attribute.Int64("lease", put.Lease),
 	)
-	backendCreateCnt.Add(ctx, 1)
+	createCnt.Add(ctx, 1)
 
 	rev, err := l.backend.Create(ctx, string(put.Key), put.Value, put.Lease)
 	if err == ErrKeyExists {

@@ -22,7 +22,7 @@ func (l *LimitedServer) get(ctx context.Context, r *etcdserverpb.RangeRequest) (
 		attribute.Int64("limit", r.Limit),
 		attribute.Int64("revision", r.Revision),
 	)
-	backendGetCnt.Add(ctx, 1)
+	getCnt.Add(ctx, 1)
 
 	rev, kv, err := l.backend.Get(ctx, string(r.Key), string(r.RangeEnd), r.Limit, r.Revision)
 	if err != nil {

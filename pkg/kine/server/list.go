@@ -33,7 +33,7 @@ func (l *LimitedServer) list(ctx context.Context, r *etcdserverpb.RangeRequest) 
 			attribute.String("start", start),
 			attribute.Int64("revision", revision),
 		)
-		backendCountCnt.Add(ctx, 1)
+		countCnt.Add(ctx, 1)
 		rev, count, err := l.backend.Count(ctx, prefix, start, revision)
 		if err != nil {
 			span.RecordError(err)
@@ -64,14 +64,14 @@ func (l *LimitedServer) list(ctx context.Context, r *etcdserverpb.RangeRequest) 
 		attribute.Int64("limit", limit),
 		attribute.Int64("revision", revision),
 	)
-	backendListCnt.Add(ctx, 1)
+	listCnt.Add(ctx, 1)
 
 	rev, kvs, err := l.backend.List(ctx, prefix, start, limit, revision)
 	if err != nil {
 		span.RecordError(err)
 		return nil, err
 	}
-	backendListCnt.Add(ctx, 1)
+	listCnt.Add(ctx, 1)
 	span.End()
 
 	resp := &RangeResponse{
@@ -98,7 +98,7 @@ func (l *LimitedServer) list(ctx context.Context, r *etcdserverpb.RangeRequest) 
 			attribute.String("start", start),
 			attribute.Int64("revision", revision),
 		)
-		backendCountCnt.Add(ctx, 1)
+		countCnt.Add(ctx, 1)
 		rev, resp.Count, err = l.backend.Count(ctx, prefix, start, revision)
 		if err != nil {
 			span.RecordError(err)

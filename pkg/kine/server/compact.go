@@ -20,6 +20,7 @@ func isCompact(txn *etcdserverpb.TxnRequest) bool {
 }
 
 func (l *LimitedServer) compact(ctx context.Context) (*etcdserverpb.TxnResponse, error) {
+	compactCnt.Add(ctx, 1)
 	// return comparison failure so that the apiserver does not bother compacting
 	return &etcdserverpb.TxnResponse{
 		Header:    &etcdserverpb.ResponseHeader{},

@@ -35,7 +35,7 @@ func (l *LimitedServer) delete(ctx context.Context, key string, revision int64) 
 		attribute.String("key", key),
 		attribute.Int64("revision", revision),
 	)
-	backendDeleteCnt.Add(ctx, 1)
+	deleteCnt.Add(ctx, 1)
 	rev, kv, ok, err := l.backend.Delete(ctx, key, revision)
 	if err != nil {
 		span.RecordError(err)

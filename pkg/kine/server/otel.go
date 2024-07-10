@@ -12,15 +12,15 @@ import (
 const name = "k8s-dqlite"
 
 var (
-	tracer            = otel.Tracer(name)
-	meter             = otel.Meter(name)
-	backendGetCnt     metric.Int64Counter
-	backendListCnt    metric.Int64Counter
-	backendCountCnt   metric.Int64Counter
-	backendCreateCnt  metric.Int64Counter
-	backendDeleteCnt  metric.Int64Counter
-	backendUpdateCnt  metric.Int64Counter
-	backendCompactCnt metric.Int64Counter
+	tracer     = otel.Tracer(name)
+	meter      = otel.Meter(name)
+	getCnt     metric.Int64Counter
+	listCnt    metric.Int64Counter
+	countCnt   metric.Int64Counter
+	createCnt  metric.Int64Counter
+	deleteCnt  metric.Int64Counter
+	updateCnt  metric.Int64Counter
+	compactCnt metric.Int64Counter
 )
 
 func init() {
@@ -29,11 +29,11 @@ func init() {
 	setupOTelSDK(ctx)
 	//TODO: move this and handle shutdown setupOTelSDK
 
-	backendListCnt, _ = meter.Int64Counter(fmt.Sprintf("%s.list", name), metric.WithDescription("Number of list requests"))
-	backendGetCnt, _ = meter.Int64Counter(fmt.Sprintf("%s.get", name), metric.WithDescription("Number of get requests"))
-	backendCountCnt, _ = meter.Int64Counter(fmt.Sprintf("%s.count", name), metric.WithDescription("Number of count requests"))
-	backendCreateCnt, _ = meter.Int64Counter(fmt.Sprintf("%s.create", name), metric.WithDescription("Number of create requests"))
-	backendDeleteCnt, _ = meter.Int64Counter(fmt.Sprintf("%s.delete", name), metric.WithDescription("Number of delete requests"))
-	backendUpdateCnt, _ = meter.Int64Counter(fmt.Sprintf("%s.update", name), metric.WithDescription("Number of update requests"))
-	backendCompactCnt, _ = meter.Int64Counter(fmt.Sprintf("%s.compact", name), metric.WithDescription("Number of compact requests"))
+	listCnt, _ = meter.Int64Counter(fmt.Sprintf("%s.list", name), metric.WithDescription("Number of list requests"))
+	getCnt, _ = meter.Int64Counter(fmt.Sprintf("%s.get", name), metric.WithDescription("Number of get requests"))
+	countCnt, _ = meter.Int64Counter(fmt.Sprintf("%s.count", name), metric.WithDescription("Number of count requests"))
+	createCnt, _ = meter.Int64Counter(fmt.Sprintf("%s.create", name), metric.WithDescription("Number of create requests"))
+	deleteCnt, _ = meter.Int64Counter(fmt.Sprintf("%s.delete", name), metric.WithDescription("Number of delete requests"))
+	updateCnt, _ = meter.Int64Counter(fmt.Sprintf("%s.update", name), metric.WithDescription("Number of update requests"))
+	compactCnt, _ = meter.Int64Counter(fmt.Sprintf("%s.compact", name), metric.WithDescription("Number of compact requests"))
 }
