@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 func isCreate(txn *etcdserverpb.TxnRequest) *etcdserverpb.PutRequest {
@@ -28,13 +29,27 @@ func (l *LimitedServer) create(ctx context.Context, put *etcdserverpb.PutRequest
 		return nil, unsupported("prevKv")
 	}
 
+	ctx, span := tracer.Start(ctx, "backend.create")
+	defer span.End()
+
+	span.SetAttributes(
+
+		attribute.String("key", string(put.Key)),
+		//TODO: get key and value in utf-8 string
+		// attribute.String("value", string(put.Value)),
+		attribute.Int64("lease", put.Lease),
+	)
+	backendCreateCnt.Add(ctx, 1)
+
 	rev, err := l.backend.Create(ctx, string(put.Key), put.Value, put.Lease)
 	if err == ErrKeyExists {
+		span.RecordError(err)
 		return &etcdserverpb.TxnResponse{
 			Header:    txnHeader(rev),
 			Succeeded: false,
 		}, nil
 	} else if err != nil {
+		span.RecordError(err)
 		return nil, err
 	}
 
