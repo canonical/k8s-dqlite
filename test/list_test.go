@@ -195,6 +195,7 @@ func BenchmarkList(b *testing.B) {
 				},
 			})
 
+			kine.ResetMetrics()
 			b.StartTimer()
 			for i := 0; i < b.N; i++ {
 				resp, err := kine.client.Get(ctx, "key/", clientv3.WithPrefix())
@@ -202,6 +203,7 @@ func BenchmarkList(b *testing.B) {
 				g.Expect(err).To(BeNil())
 				g.Expect(resp.Kvs).To(HaveLen(b.N))
 			}
+			kine.ReportMetrics(b)
 		})
 	}
 }

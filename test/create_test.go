@@ -46,12 +46,14 @@ func BenchmarkCreate(b *testing.B) {
 
 			kine := newKine(ctx, b, &kineOptions{backendType: backendType})
 
+			kine.ResetMetrics()
 			b.StartTimer()
 			for i := 0; i < b.N; i++ {
 				key := fmt.Sprintf("key-%d", i)
 				value := fmt.Sprintf("value-%d", i)
 				createKey(ctx, g, kine.client, key, value)
 			}
+			kine.ReportMetrics(b)
 		})
 	}
 }

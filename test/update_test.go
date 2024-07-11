@@ -81,11 +81,13 @@ func BenchmarkUpdate(b *testing.B) {
 
 			kine := newKine(ctx, b, &kineOptions{backendType: backendType})
 
+			kine.ResetMetrics()
 			b.StartTimer()
 			for i, lastModRev := 0, int64(0); i < b.N; i++ {
 				value := fmt.Sprintf("value-%d", i)
 				lastModRev = updateRev(ctx, g, kine.client, "benchKey", lastModRev, value)
 			}
+			kine.ReportMetrics(b)
 		})
 	}
 }

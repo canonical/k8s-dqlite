@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/canonical/go-dqlite/app"
+	"github.com/canonical/k8s-dqlite/pkg/instrument"
 	"github.com/canonical/k8s-dqlite/pkg/kine/endpoint"
 	"github.com/canonical/k8s-dqlite/pkg/kine/server"
 	"github.com/sirupsen/logrus"
@@ -40,11 +41,33 @@ type kineOptions struct {
 type kineServer struct {
 	client  *clientv3.Client
 	backend server.Backend
+
+	sqliteMonitor *instrument.SQLiteMonitor
+}
+
+func (ks *kineServer) ResetMetrics() {
+	ks.sqliteMonitor.Reset()
+}
+
+func (ks *kineServer) ReportMetrics(b *testing.B) {
+	sqliteMetrics := ks.sqliteMonitor.Fetch()
+	b.ReportMetric(float64(sqliteMetrics.PagesCacheHit+sqliteMetrics.PagesCacheMiss)/float64(b.N), "pages-read/op")
+	b.ReportMetric(float64(sqliteMetrics.PagesCacheMiss)/float64(b.N), "cache-misses/op")
+	b.ReportMetric(float64(sqliteMetrics.PagesCacheSpill)/float64(b.N), "cache-spill/op")
+	b.ReportMetric(float64(sqliteMetrics.PagesCacheWrite)/float64(b.N), "pages-written/op")
+	b.ReportMetric(float64(sqliteMetrics.ReadTransactionTime)/float64(time.Second)/float64(b.N), "sec-read-query/op")
+	b.ReportMetric(float64(sqliteMetrics.WriteTransactionTime)/float64(time.Second)/float64(b.N), "sec-write-query/op")
 }
 
 // newKine spins up a new instance of kine. In case of an error, tb.Fatal is called.
 func newKine(ctx context.Context, tb testing.TB, options *kineOptions) *kineServer {
 	dir := tb.TempDir()
+
+	sqliteMonitor, err := instrument.SQLite()
+	if err != nil {
+		tb.Fatal(err)
+	}
+	tb.Cleanup(func() { sqliteMonitor.Done() })
 
 	var endpointConfig *endpoint.Config
 	var db *sql.DB
@@ -91,8 +114,9 @@ func newKine(ctx context.Context, tb testing.TB, options *kineOptions) *kineServ
 		tb.Fatal(err)
 	}
 	return &kineServer{
-		client:  client,
-		backend: backend,
+		client:        client,
+		backend:       backend,
+		sqliteMonitor: sqliteMonitor,
 	}
 }
 

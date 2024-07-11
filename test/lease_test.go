@@ -92,6 +92,7 @@ func BenchmarkLease(b *testing.B) {
 
 			kine := newKine(ctx, b, &kineOptions{backendType: backendType})
 
+			kine.ResetMetrics()
 			b.StartTimer()
 			for i := 0; i < b.N; i++ {
 				var ttl int64 = int64(i + 1)
@@ -101,6 +102,7 @@ func BenchmarkLease(b *testing.B) {
 				g.Expect(resp.ID).To(Equal(clientv3.LeaseID(ttl)))
 				g.Expect(resp.TTL).To(Equal(ttl))
 			}
+			kine.ReportMetrics(b)
 		})
 	}
 }

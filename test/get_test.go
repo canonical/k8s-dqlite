@@ -129,12 +129,14 @@ func BenchmarkGet(b *testing.B) {
 				},
 			})
 
+			kine.ResetMetrics()
 			b.StartTimer()
 			for i := 0; i < b.N; i++ {
 				resp, err := kine.client.Get(ctx, fmt.Sprintf("testKey/%d", i+1), clientv3.WithRange(""))
 				g.Expect(err).To(BeNil())
 				g.Expect(resp.Kvs).To(HaveLen(1))
 			}
+			kine.ReportMetrics(b)
 		})
 	}
 }

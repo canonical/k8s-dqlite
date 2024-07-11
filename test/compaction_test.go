@@ -90,10 +90,12 @@ func BenchmarkCompaction(b *testing.B) {
 				},
 			})
 
+			kine.ResetMetrics()
 			b.StartTimer()
 			if err := kine.backend.DoCompact(ctx); err != nil {
 				b.Fatal(err)
 			}
+			kine.ReportMetrics(b)
 		})
 	}
 }

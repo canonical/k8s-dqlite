@@ -71,11 +71,13 @@ func BenchmarkDelete(b *testing.B) {
 				},
 			})
 
+			kine.ResetMetrics()
 			b.StartTimer()
 			for i := 0; i < b.N; i++ {
 				key := fmt.Sprintf("key/%d", i)
 				deleteKey(ctx, g, kine.client, key)
 			}
+			kine.ReportMetrics(b)
 		})
 	}
 }
