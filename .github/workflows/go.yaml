@@ -5,7 +5,14 @@ on:
     branches: [master]
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
+  BASE_SHA: ${{ github.before || github.event.pull_request.base.sha }}
+  BASE_BRANCH: ${{ github.base_ref || github.ref }}
+  TARGET_SHA: ${{ github.sha }}
   BENCH_COUNT: 7
 
 jobs:
@@ -61,6 +68,9 @@ jobs:
         run: make go.test
 
   benchmarks:
+    permissions:
+      contents: read  # for actions/checkout to fetch code
+      pull-requests: write  # for marocchino/sticky-pull-request-comment to create or update PR comment
     name: Run Benchmarks
     runs-on: ubuntu-latest
 
@@ -74,7 +84,15 @@ jobs:
           go-version: "1.21"
 
       - name: go mod download
-        run: go mod download
+        run: |
+          go mod download
+          go install golang.org/x/perf/cmd/benchstat@latest
+
+      - name: Gather CPU info
+        id: cpuinfo
+        run: |
+          echo "model=$(cat /proc/cpuinfo | awk -F ': ' '/model name/ { print $2; exit }')" >> $GITHUB_OUTPUT
+          echo count=$(nproc) >> $GITHUB_OUTPUT
 
       - name: Install Dqlite
         run: |
@@ -82,8 +100,66 @@ jobs:
           sudo apt install libdqlite-dev
 
       - name: Run benchmarks
+        id: bench
         run: |
-          go test -tags libsqlite3 -v -p 1 ./... -run "^$$" -bench . -benchmem -count $BENCH_COUNT
+          go test                           \
+              -tags libsqlite3 -v -p 1 ./...  \
+              -benchmem -count $BENCH_COUNT   \
+              -run "^$$" -bench .             \
+            | tee bench-$TARGET_SHA.txt
+      - name: Restore base benchmark result
+        id: bench-cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            bench-${{ env.BASE_SHA }}.txt
+          key: ${{ runner.os }}-${{ steps.cpuinfo.outputs.model }}-${{ steps.cpuinfo.outputs.count }}-bench-${{ env.BENCH_COUNT }}-${{ github.workflow_sha }}-${{ env.BASE_SHA }}
+
+      - name: Run benchmark for base code
+        if: steps.bench-cache.outputs.cache-hit != 'true'
+        run: |
+          git fetch origin $BASE_BRANCH
+          git reset --hard $BASE_SHA
+          go test                           \
+              -tags libsqlite3 -v -p 1 ./...  \
+              -benchmem -count $BENCH_COUNT   \
+              -run "^$$" -bench .             \
+            | tee bench-$BASE_SHA.txt
+          git reset --hard $TARGET_SHA
+
+      - name: Benchmark stats
+        id: stats
+        run: |
+          GOPATH=$(realpath $(go env GOPATH))
+
+          echo "current<<EOF" >> $GITHUB_OUTPUT && \
+            $GOPATH/bin/benchstat After=bench-$TARGET_SHA.txt | tee -a $GITHUB_OUTPUT && \
+            echo EOF >> $GITHUB_OUTPUT
+
+          echo "diff<<EOF" >> $GITHUB_OUTPUT && \
+            $GOPATH/bin/benchstat Before=bench-$BASE_SHA.txt After=bench-$TARGET_SHA.txt | tee -a $GITHUB_OUTPUT && \
+            echo EOF >> $GITHUB_OUTPUT
+
+      - name: Publish benchmark result
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          header: Benchmarks
+          message: |
+            ### Benchmark Result
+
+            ```
+            ${{ steps.stats.outputs.diff }}
+            ```
+
+            <details><summary>Current status</summary>
+
+            ```
+            ${{ steps.stats.outputs.current }}
+            ```
+            </details>
 
   build:
     name: Build k8s-dqlite
