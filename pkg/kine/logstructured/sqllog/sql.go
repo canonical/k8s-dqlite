@@ -125,8 +125,7 @@ func (s *SQLLog) DoCompact(ctx context.Context) error {
 }
 
 func (s *SQLLog) compactor(ctx context.Context, nextEnd int64) (int64, error) {
-	spanCtx, span := tracer.Start(s.ctx, "sqllog.compactor")
-	s.ctx = spanCtx
+	_, span := tracer.Start(s.ctx, "sqllog.compactor")
 	defer span.End()
 	span.AddEvent(fmt.Sprintf("nextEnd: %d", nextEnd))
 
@@ -238,8 +237,7 @@ func (s *SQLLog) compactor(ctx context.Context, nextEnd int64) (int64, error) {
 }
 
 func (s *SQLLog) compact() {
-	ctx, span := tracer.Start(s.ctx, "sqllog.compact")
-	s.ctx = ctx // yes? no?
+	_, span := tracer.Start(s.ctx, "sqllog.compact")
 	defer span.End()
 	var nextEnd int64
 
