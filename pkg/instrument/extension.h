@@ -3,7 +3,7 @@
 
 typedef int sqlite3_error;
 
-typedef struct sqlite3_stats_s {
+typedef struct sqlite3_metrics_s {
     uint64_t pages_cache_write;
     uint64_t pages_cache_hit;
     uint64_t pages_cache_miss;
@@ -11,15 +11,16 @@ typedef struct sqlite3_stats_s {
 
     uint64_t read_txn_time_ns;
     uint64_t write_txn_time_ns;
-} sqlite3_stats_t;
+} sqlite3_metrics_t;
 
-// sqlite3_instrument instruments the connection represented
-// by the first argument so it can take measurements of key
-// sqlite performance metrics.
-// It will replace both the commit and the trace hook for 
-// the connection. If an error occurs, the connection is 
-// not touched (i.e. neither the trace nor the commit hook
-// are replaced).
+// sqlite3_instrument register an auto extension that 
+// instruments all new connections to collect key sqlite
+// performance metrics. Existing connections will not be 
+// affected. This call uses the trace hook to collect data.
+// Replacing the hook will remove instrumentation for the
+// connection. In this case, it is possible to call 
+// [sqlite3_collect_metrics] to keep the instrumentation
+// active in a custom trace hook.
 sqlite3_error sqlite3_instrument();
 
 // sqlite3_uninstrument remove instrumentation connection
@@ -29,4 +30,12 @@ sqlite3_error sqlite3_instrument();
 // and the instrumentation context is not freed.
 void sqlite3_uninstrument();
 
-sqlite3_error sqlite3_stats(sqlite3_stats_t* stats, int reset);
+// sqlite3_stats reads copies performance metrics into stats.
+// It returns SQLITE_ERROR error if stats is null, SQLITE_OK
+// otherwise.
+// If reset is != 0, it resets each metric to 0.
+sqlite3_error sqlite3_metrics(sqlite3_metrics_t* stats, int reset);
+
+// sqlite3_collect_metrics is a trace hook that collects performance
+// metrics during the SQLITE_TRACE_PROFILE event.
+sqlite3_error sqlite3_collect_metrics(unsigned int event, void *pCtx, void *P, void *X);

@@ -5,9 +5,9 @@
 #include <stdint.h>
 #include <string.h>
 
-static volatile sqlite3_stats_t global = {0};
-    
-static sqlite3_error collect_profile_stats(unsigned int event, void *pCtx, void *P, void *X) {
+static volatile sqlite3_metrics_t global = {0};
+
+sqlite3_error sqlite3_collect_metrics(unsigned int event, void *pCtx, void *P, void *X) {
     if (event == SQLITE_TRACE_PROFILE) {
         sqlite3_stmt* stmt = P;
         sqlite3* connection = sqlite3_db_handle(stmt);
@@ -40,7 +40,7 @@ static sqlite3_error collect_profile_stats(unsigned int event, void *pCtx, void 
     return SQLITE_OK;
 }
 
-sqlite3_error sqlite3_stats(sqlite3_stats_t* stats, int reset) {
+sqlite3_error sqlite3_metrics(sqlite3_metrics_t* stats, int reset) {
     if (stats == NULL) {
         return SQLITE_ERROR;
     }
@@ -65,13 +65,13 @@ sqlite3_error sqlite3_stats(sqlite3_stats_t* stats, int reset) {
 }
 
 static sqlite3_error auto_instrument_connection(sqlite3 *connection, const char** pzErrMsg, const struct sqlite3_api_routines* pThunk) {
-    return sqlite3_trace_v2(connection, SQLITE_TRACE_PROFILE|SQLITE_TRACE_CLOSE, collect_profile_stats, NULL);
+    return sqlite3_trace_v2(connection, SQLITE_TRACE_PROFILE|SQLITE_TRACE_CLOSE, sqlite3_collect_metrics, NULL);
 }
 
 sqlite3_error sqlite3_instrument() {
     return sqlite3_auto_extension((void (*)())(auto_instrument_connection));
 }
 
-void sqlite3_uninstrument(sqlite3 *connection) {
+void sqlite3_uninstrument() {
     sqlite3_cancel_auto_extension((void (*)())(auto_instrument_connection));
 }

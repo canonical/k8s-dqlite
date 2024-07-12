@@ -11,21 +11,25 @@ import (
 // #include "extension.h"
 import "C"
 
-func SQLite() (*SQLiteMonitor, error) {
+// StartSQLiteMonitoring instruments sqlite to collect metrics
+// on all connection opened after the call (i.e. existing connections
+// will not be instrumented). If monitoring is already in place, this
+// call has no effects.
+// Monitoring can be stopped using [StopSQLiteMonitoring].
+func StartSQLiteMonitoring() error {
 	if err := C.sqlite3_instrument(); err != sqlite3.SQLITE_OK {
-		return nil, sqlite3.ErrNo(err)
+		return sqlite3.ErrNo(err)
 	}
-
-	return &SQLiteMonitor{}, nil
+	return nil
 }
 
-type SQLiteMonitor struct{}
+// StopSQLiteMonitoring removes instrumentation from sqlite.
+// Existing connection will still be insturmented until they
+// are closed. If monitoring is not in place, this call has
+// no effects.
+func StopSQLiteMonitoring() { C.sqlite3_uninstrument() }
 
-func (m *SQLiteMonitor) Fetch() *SQLiteStats { return fetchSQLiteStats(0) }
-func (m *SQLiteMonitor) Reset() *SQLiteStats { return fetchSQLiteStats(1) }
-func (m *SQLiteMonitor) Done()               { C.sqlite3_uninstrument() }
-
-type SQLiteStats struct {
+type SQLiteMetrics struct {
 	PagesCacheWrite uint64
 	PagesCacheHit   uint64
 	PagesCacheMiss  uint64
@@ -35,11 +39,18 @@ type SQLiteStats struct {
 	WriteTransactionTime time.Duration
 }
 
-func fetchSQLiteStats(reset C.int) *SQLiteStats {
-	var cstats C.sqlite3_stats_t
-	C.sqlite3_stats(&cstats, reset)
+// ResetSQLiteMetrics returns the current metrics and
+// resets their value to 0.
+func ResetSQLiteMetrics() *SQLiteMetrics { return fetchSQLiteMetrics(1) }
 
-	return &SQLiteStats{
+// FetchSQLiteMetrics returns the current metrics
+func FetchSQLiteMetrics() *SQLiteMetrics { return fetchSQLiteMetrics(0) }
+
+func fetchSQLiteMetrics(reset C.int) *SQLiteMetrics {
+	var cstats C.sqlite3_metrics_t
+	C.sqlite3_metrics(&cstats, reset)
+
+	return &SQLiteMetrics{
 		PagesCacheWrite:      uint64(cstats.pages_cache_write),
 		PagesCacheHit:        uint64(cstats.pages_cache_hit),
 		PagesCacheMiss:       uint64(cstats.pages_cache_miss),

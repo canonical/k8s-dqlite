@@ -41,16 +41,14 @@ type kineOptions struct {
 type kineServer struct {
 	client  *clientv3.Client
 	backend server.Backend
-
-	sqliteMonitor *instrument.SQLiteMonitor
 }
 
 func (ks *kineServer) ResetMetrics() {
-	ks.sqliteMonitor.Reset()
+	instrument.ResetSQLiteMetrics()
 }
 
 func (ks *kineServer) ReportMetrics(b *testing.B) {
-	sqliteMetrics := ks.sqliteMonitor.Fetch()
+	sqliteMetrics := instrument.FetchSQLiteMetrics()
 	b.ReportMetric(float64(sqliteMetrics.PagesCacheHit+sqliteMetrics.PagesCacheMiss)/float64(b.N), "pages-read/op")
 	b.ReportMetric(float64(sqliteMetrics.PagesCacheMiss)/float64(b.N), "cache-misses/op")
 	b.ReportMetric(float64(sqliteMetrics.PagesCacheSpill)/float64(b.N), "cache-spill/op")
@@ -63,11 +61,11 @@ func (ks *kineServer) ReportMetrics(b *testing.B) {
 func newKine(ctx context.Context, tb testing.TB, options *kineOptions) *kineServer {
 	dir := tb.TempDir()
 
-	sqliteMonitor, err := instrument.SQLite()
+	err := instrument.StartSQLiteMonitoring()
 	if err != nil {
 		tb.Fatal(err)
 	}
-	tb.Cleanup(func() { sqliteMonitor.Done() })
+	tb.Cleanup(func() { instrument.StopSQLiteMonitoring() })
 
 	var endpointConfig *endpoint.Config
 	var db *sql.DB
@@ -114,9 +112,8 @@ func newKine(ctx context.Context, tb testing.TB, options *kineOptions) *kineServ
 		tb.Fatal(err)
 	}
 	return &kineServer{
-		client:        client,
-		backend:       backend,
-		sqliteMonitor: sqliteMonitor,
+		client:  client,
+		backend: backend,
 	}
 }
 
