@@ -11,7 +11,6 @@ import (
 	"github.com/canonical/k8s-dqlite/pkg/kine/broadcaster"
 	"github.com/canonical/k8s-dqlite/pkg/kine/server"
 	"github.com/sirupsen/logrus"
-	"go.opentelemetry.io/otel/attribute"
 )
 
 const SupersededCount = 100
@@ -125,7 +124,7 @@ func (s *SQLLog) DoCompact(ctx context.Context) error {
 }
 
 func (s *SQLLog) compactor(ctx context.Context, nextEnd int64) (int64, error) {
-	_, span := tracer.Start(s.ctx, "sqllog.compactor")
+	_, span := tracer.Start(ctx, "sqllog.compactor")
 	defer span.End()
 	span.AddEvent(fmt.Sprintf("nextEnd: %d", nextEnd))
 
@@ -237,18 +236,13 @@ func (s *SQLLog) compactor(ctx context.Context, nextEnd int64) (int64, error) {
 }
 
 func (s *SQLLog) compact() {
-	_, span := tracer.Start(s.ctx, "sqllog.compact")
-	defer span.End()
 	var nextEnd int64
-
 	t := time.NewTicker(s.d.GetCompactInterval())
 	nextEnd, _ = s.d.CurrentRevision(s.ctx)
-	span.SetAttributes(attribute.Int64("nextEnd", nextEnd))
 
 	for {
 		select {
 		case <-s.ctx.Done():
-			span.AddEvent("context done")
 			return
 		case <-t.C:
 		}
