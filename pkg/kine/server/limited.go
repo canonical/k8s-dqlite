@@ -40,13 +40,9 @@ func (l *LimitedServer) Txn(ctx context.Context, txn *etcdserverpb.TxnRequest) (
 		return l.delete(ctx, key, rev)
 	}
 	if rev, key, value, lease, ok := isUpdate(txn); ok {
-		ctx, span := tracer.Start(ctx, "limited.update")
-		defer span.End()
 		return l.update(ctx, rev, key, value, lease)
 	}
 	if isCompact(txn) {
-		ctx, span := tracer.Start(ctx, "limited.compact")
-		defer span.End()
 		return l.compact(ctx)
 	}
 	return nil, fmt.Errorf("unsupported transaction: %v", txn)

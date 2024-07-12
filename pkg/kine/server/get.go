@@ -9,10 +9,6 @@ import (
 )
 
 func (l *LimitedServer) get(ctx context.Context, r *etcdserverpb.RangeRequest) (*RangeResponse, error) {
-	if r.Limit != 0 && len(r.RangeEnd) != 0 {
-		return nil, fmt.Errorf("invalid combination of rangeEnd and limit, limit should be 0 got %d", r.Limit)
-	}
-
 	ctx, span := tracer.Start(ctx, "backend.get")
 	defer span.End()
 
@@ -22,6 +18,10 @@ func (l *LimitedServer) get(ctx context.Context, r *etcdserverpb.RangeRequest) (
 		attribute.Int64("limit", r.Limit),
 		attribute.Int64("revision", r.Revision),
 	)
+	if r.Limit != 0 && len(r.RangeEnd) != 0 {
+		span.RecordError(fmt.Errorf("invalid combination of rangeEnd and limit, limit should be 0 got %d", r.Limit))
+		return nil, fmt.Errorf("invalid combination of rangeEnd and limit, limit should be 0 got %d", r.Limit)
+	}
 	getCnt.Add(ctx, 1)
 
 	rev, kv, err := l.backend.Get(ctx, string(r.Key), string(r.RangeEnd), r.Limit, r.Revision)

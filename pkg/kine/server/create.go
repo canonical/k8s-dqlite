@@ -39,6 +39,7 @@ func (l *LimitedServer) create(ctx context.Context, put *etcdserverpb.PutRequest
 	createCnt.Add(ctx, 1)
 
 	rev, err := l.backend.Create(ctx, string(put.Key), put.Value, put.Lease)
+	span.SetAttributes(attribute.Int64("revision", rev))
 	if err == ErrKeyExists {
 		span.RecordError(err)
 		return &etcdserverpb.TxnResponse{
