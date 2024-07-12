@@ -2,6 +2,7 @@ package test
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -24,14 +25,17 @@ func TestAdmissionControl(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			client := newKine(ctx, t, backendType, "admission-control-policy=limit", "admission-control-policy-limit-max-concurrent-txn=600", "admission-control-only-write-queries=true")
-
-			// create a key space of 1000 items
-			for i := 0; i < 1000; i++ {
-				key := fmt.Sprintf("Key-%d", i)
-				value := fmt.Sprintf("Value-%d", i)
-				createKey(ctx, g, client, key, value)
-			}
+			kine := newKine(ctx, t, &kineOptions{
+				backendType: backendType,
+				endpointParameters: []string{
+					"admission-control-policy=limit",
+					"admission-control-policy-limit-max-concurrent-txn=600",
+					"admission-control-only-write-queries=true",
+				},
+				setup: func(db *sql.DB) error {
+					return setupScenario(ctx, db, "Key", 1000, 0, 0)
+				},
+			})
 
 			var wg sync.WaitGroup
 
@@ -41,8 +45,8 @@ func TestAdmissionControl(t *testing.T) {
 			reader := func(first int, last int) {
 				defer wg.Done()
 				for i := first; i < last; i++ {
-					key := fmt.Sprintf("Key-%d", i)
-					_, err := client.Get(ctx, key, clientv3.WithRange(""))
+					key := fmt.Sprintf("Key/%d", i+1)
+					_, err := kine.client.Get(ctx, key, clientv3.WithRange(""))
 					if err == nil {
 						numSuccessfulReaderTxn.Add(1)
 					}
@@ -52,15 +56,15 @@ func TestAdmissionControl(t *testing.T) {
 			writer := func(first int, last int) {
 				defer wg.Done()
 				for i := first; i < last; i++ {
-					key := fmt.Sprintf("Key-%d", i)
-					new_value := fmt.Sprintf("New-Value-%d", i)
-					resp, err := client.Get(ctx, key, clientv3.WithRange(""))
+					key := fmt.Sprintf("Key/%d", i+1)
+					new_value := fmt.Sprintf("New-Value-%d", i+1)
+					resp, err := kine.client.Get(ctx, key, clientv3.WithRange(""))
 					if err != nil || len(resp.Kvs) == 0 {
 						t.Logf("Could not get %s\n", key)
 						continue
 					}
 					lastModRev := resp.Kvs[0].ModRevision
-					put_resp, err := client.Txn(ctx).
+					put_resp, err := kine.client.Txn(ctx).
 						If(clientv3.Compare(clientv3.ModRevision(key), "=", lastModRev)).
 						Then(clientv3.OpPut(key, new_value)).
 						Else(clientv3.OpGet(key, clientv3.WithRange(""))).
