@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
 	"go.opentelemetry.io/otel/attribute"
@@ -30,6 +31,13 @@ func (l *LimitedServer) update(ctx context.Context, rev int64, key string, value
 		ok  bool
 		err error
 	)
+	ctx, updateSpan := tracer.Start(ctx, "limited.update")
+	defer updateSpan.End()
+	updateSpan.SetAttributes(
+		attribute.String("key", key),
+		attribute.Int64("revision", rev),
+		attribute.Int64("lease", lease),
+	)
 
 	if rev == 0 {
 		ctx, span := tracer.Start(ctx, "backend.create")
@@ -43,6 +51,26 @@ func (l *LimitedServer) update(ctx context.Context, rev int64, key string, value
 		rev, err = l.backend.Create(ctx, key, value, lease)
 		ok = true
 		span.SetAttributes(attribute.Bool("ok", ok))
+		span.RecordError(err)
+		span.End()
+
+		ctx, span = tracer.Start(ctx, "backend.get")
+		defer span.End()
+		span.SetAttributes(
+			attribute.String("key", key),
+			attribute.Int64("revision", rev),
+		)
+		if err == ErrKeyExists {
+			span.AddEvent("key exists")
+			rev, kv, err = l.backend.Get(ctx, key, "", 1, rev)
+			if err != nil {
+				span.RecordError(err)
+			}
+			span.AddEvent(fmt.Sprintf("got revision %d", rev))
+		} else {
+			ok = true
+		}
+		span.End()
 	} else {
 		ctx, span := tracer.Start(ctx, "backend.update")
 		defer span.End()
@@ -54,6 +82,7 @@ func (l *LimitedServer) update(ctx context.Context, rev int64, key string, value
 		updateCnt.Add(ctx, 1)
 
 		rev, kv, ok, err = l.backend.Update(ctx, key, value, rev, lease)
+		span.RecordError(err)
 		span.SetAttributes(attribute.Bool("ok", ok))
 	}
 	if err != nil {
