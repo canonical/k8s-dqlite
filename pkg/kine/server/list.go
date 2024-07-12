@@ -12,6 +12,13 @@ import (
 )
 
 func (l *LimitedServer) list(ctx context.Context, r *etcdserverpb.RangeRequest) (*RangeResponse, error) {
+	ctx, span := tracer.Start(ctx, "list")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("key", string(r.Key)),
+		attribute.String("rangeEnd", string(r.RangeEnd)),
+	)
 	if len(r.RangeEnd) == 0 {
 		return nil, fmt.Errorf("invalid range end length of 0")
 	}
@@ -53,17 +60,12 @@ func (l *LimitedServer) list(ctx context.Context, r *etcdserverpb.RangeRequest) 
 		limit++
 	}
 
-	ctx, span := tracer.Start(ctx, "backend.list")
-	defer span.End()
-
 	span.SetAttributes(
-		attribute.String("key", string(r.Key)),
-		attribute.String("rangeEnd", string(r.RangeEnd)),
-		attribute.String("prefix", prefix),
 		attribute.String("start", start),
 		attribute.Int64("limit", limit),
 		attribute.Int64("revision", revision),
 	)
+
 	listCnt.Add(ctx, 1)
 
 	rev, kvs, err := l.backend.List(ctx, prefix, start, limit, revision)

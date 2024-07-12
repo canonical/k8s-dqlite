@@ -13,11 +13,11 @@ type LimitedServer struct {
 
 func (l *LimitedServer) Range(ctx context.Context, r *etcdserverpb.RangeRequest) (*RangeResponse, error) {
 	if len(r.RangeEnd) == 0 {
-		ctx, span := tracer.Start(ctx, "limited.get")
+		ctx, span := tracer.Start(ctx, "range.get")
 		defer span.End()
 		return l.get(ctx, r)
 	}
-	ctx, span := tracer.Start(ctx, "limited.list")
+	ctx, span := tracer.Start(ctx, "range.list")
 	defer span.End()
 	return l.list(ctx, r)
 }
@@ -30,13 +30,9 @@ func txnHeader(rev int64) *etcdserverpb.ResponseHeader {
 
 func (l *LimitedServer) Txn(ctx context.Context, txn *etcdserverpb.TxnRequest) (*etcdserverpb.TxnResponse, error) {
 	if put := isCreate(txn); put != nil {
-		ctx, span := tracer.Start(ctx, "limited.create")
-		defer span.End()
 		return l.create(ctx, put, txn)
 	}
 	if rev, key, ok := isDelete(txn); ok {
-		ctx, span := tracer.Start(ctx, "limited.delete")
-		defer span.End()
 		return l.delete(ctx, key, rev)
 	}
 	if rev, key, value, lease, ok := isUpdate(txn); ok {

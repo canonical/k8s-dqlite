@@ -31,7 +31,7 @@ func (l *LimitedServer) update(ctx context.Context, rev int64, key string, value
 		ok  bool
 		err error
 	)
-	ctx, updateSpan := tracer.Start(ctx, "limited.update")
+	ctx, updateSpan := tracer.Start(ctx, "update")
 	defer updateSpan.End()
 	updateSpan.SetAttributes(
 		attribute.String("key", key),

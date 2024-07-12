@@ -21,6 +21,13 @@ func isCreate(txn *etcdserverpb.TxnRequest) *etcdserverpb.PutRequest {
 }
 
 func (l *LimitedServer) create(ctx context.Context, put *etcdserverpb.PutRequest, txn *etcdserverpb.TxnRequest) (*etcdserverpb.TxnResponse, error) {
+	ctx, span := tracer.Start(ctx, "backend.create")
+	defer span.End()
+	span.SetAttributes(
+		attribute.String("key", string(put.Key)),
+		attribute.Int64("lease", put.Lease),
+	)
+
 	if put.IgnoreLease {
 		return nil, unsupported("ignoreLease")
 	} else if put.IgnoreValue {
@@ -29,13 +36,6 @@ func (l *LimitedServer) create(ctx context.Context, put *etcdserverpb.PutRequest
 		return nil, unsupported("prevKv")
 	}
 
-	ctx, span := tracer.Start(ctx, "backend.create")
-	defer span.End()
-
-	span.SetAttributes(
-		attribute.String("key", string(put.Key)),
-		attribute.Int64("lease", put.Lease),
-	)
 	createCnt.Add(ctx, 1)
 
 	rev, err := l.backend.Create(ctx, string(put.Key), put.Value, put.Lease)
