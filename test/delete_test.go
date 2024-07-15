@@ -18,7 +18,7 @@ func TestDelete(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			kine := newKine(ctx, t, &kineOptions{backendType: backendType})
+			kine := newKineServer(ctx, t, &kineOptions{backendType: backendType})
 
 			// Calling the delete method outside a transaction should fail in kine
 			t.Run("DeleteNotSupportedFails", func(t *testing.T) {
@@ -64,7 +64,7 @@ func BenchmarkDelete(b *testing.B) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			kine := newKine(ctx, b, &kineOptions{
+			kine := newKineServer(ctx, b, &kineOptions{
 				backendType: backendType,
 				setup: func(db *sql.DB) error {
 					return setupScenario(ctx, db, "key", b.N, 0, 0)

@@ -13,9 +13,8 @@ import "C"
 
 // StartSQLiteMonitoring instruments sqlite to collect metrics
 // on all connection opened after the call (i.e. existing connections
-// will not be instrumented). If monitoring is already in place, this
-// call has no effects.
-// Monitoring can be stopped using [StopSQLiteMonitoring].
+// will not be instrumented).
+// Monitoring must be stopped by calling [StopSQLiteMonitoring].
 func StartSQLiteMonitoring() error {
 	if err := C.sqlite3_instrument(); err != sqlite3.SQLITE_OK {
 		return sqlite3.ErrNo(err)
@@ -24,38 +23,46 @@ func StartSQLiteMonitoring() error {
 }
 
 // StopSQLiteMonitoring removes instrumentation from sqlite.
-// Existing connection will still be insturmented until they
-// are closed. If monitoring is not in place, this call has
-// no effects.
-func StopSQLiteMonitoring() { C.sqlite3_uninstrument() }
+// Existing connections will still be insturmented until they
+// are closed.
+func StopSQLiteMonitoring() { C.sqlite3_deinstrument() }
 
 type SQLiteMetrics struct {
+	// These fields follow the same order as the `struct sqlite3_metrics_s`.
+
 	PagesCacheWrite uint64
 	PagesCacheHit   uint64
 	PagesCacheMiss  uint64
 	PagesCacheSpill uint64
 
-	ReadTransactionTime  time.Duration
-	WriteTransactionTime time.Duration
+	TransactionReadTime  time.Duration
+	TransactionWriteTime time.Duration
 }
 
 // ResetSQLiteMetrics returns the current metrics and
 // resets their value to 0.
-func ResetSQLiteMetrics() *SQLiteMetrics { return fetchSQLiteMetrics(1) }
-
-// FetchSQLiteMetrics returns the current metrics
-func FetchSQLiteMetrics() *SQLiteMetrics { return fetchSQLiteMetrics(0) }
-
-func fetchSQLiteMetrics(reset C.int) *SQLiteMetrics {
+func ResetSQLiteMetrics() *SQLiteMetrics {
 	var cstats C.sqlite3_metrics_t
-	C.sqlite3_metrics(&cstats, reset)
+	C.sqlite3_metrics(&cstats, 1)
 
+	return convertMetrics(&cstats)
+}
+
+// FetchSQLiteMetrics returns the current metrics.
+func FetchSQLiteMetrics() *SQLiteMetrics {
+	var stats C.sqlite3_metrics_t
+	C.sqlite3_metrics(&stats, 0)
+
+	return convertMetrics(&stats)
+}
+
+func convertMetrics(stats *C.sqlite3_metrics_t) *SQLiteMetrics {
 	return &SQLiteMetrics{
-		PagesCacheWrite:      uint64(cstats.pages_cache_write),
-		PagesCacheHit:        uint64(cstats.pages_cache_hit),
-		PagesCacheMiss:       uint64(cstats.pages_cache_miss),
-		PagesCacheSpill:      uint64(cstats.pages_cache_spill),
-		ReadTransactionTime:  time.Duration(cstats.read_txn_time_ns) * time.Nanosecond,
-		WriteTransactionTime: time.Duration(cstats.write_txn_time_ns) * time.Nanosecond,
+		PagesCacheWrite:      uint64(stats.pages_cache_write),
+		PagesCacheHit:        uint64(stats.pages_cache_hit),
+		PagesCacheMiss:       uint64(stats.pages_cache_miss),
+		PagesCacheSpill:      uint64(stats.pages_cache_spill),
+		TransactionReadTime:  time.Duration(stats.read_txn_time_ns) * time.Nanosecond,
+		TransactionWriteTime: time.Duration(stats.write_txn_time_ns) * time.Nanosecond,
 	}
 }

@@ -18,7 +18,7 @@ func TestGet(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			kine := newKine(ctx, t, &kineOptions{backendType: backendType})
+			kine := newKineServer(ctx, t, &kineOptions{backendType: backendType})
 
 			t.Run("FailNotFound", func(t *testing.T) {
 				g := NewWithT(t)
@@ -122,7 +122,7 @@ func BenchmarkGet(b *testing.B) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			kine := newKine(ctx, b, &kineOptions{
+			kine := newKineServer(ctx, b, &kineOptions{
 				backendType: backendType,
 				setup: func(db *sql.DB) error {
 					return setupScenario(ctx, db, "testKey", b.N, b.N, 0)

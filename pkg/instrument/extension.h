@@ -16,25 +16,23 @@ typedef struct sqlite3_metrics_s {
 // sqlite3_instrument register an auto extension that 
 // instruments all new connections to collect key sqlite
 // performance metrics. Existing connections will not be 
-// affected. This call uses the trace hook to collect data.
-// Replacing the hook will remove instrumentation for the
-// connection. In this case, it is possible to call 
-// [sqlite3_collect_metrics] to keep the instrumentation
-// active in a custom trace hook.
+// affected.
+// This call uses the trace hook to collect data. Replacing
+// the hook will remove instrumentation for the connection. 
+// In this case, it is possible to call [sqlite3_collect_metrics]
+// to keep the instrumentation active in a custom trace hook.
 sqlite3_error sqlite3_instrument();
 
-// sqlite3_uninstrument remove instrumentation connection
+// sqlite3_deinstrument removes instrumentation connection
 // and free the associated context.
 // It will not restore previous commit or trace hook.
 // If an error occurs, the conneciton is left unchanged
 // and the instrumentation context is not freed.
-void sqlite3_uninstrument();
+void sqlite3_deinstrument();
 
-// sqlite3_stats reads copies performance metrics into stats.
-// It returns SQLITE_ERROR error if stats is null, SQLITE_OK
-// otherwise.
+// sqlite3_metrics copies the current performance metrics into its first argument.
 // If reset is != 0, it resets each metric to 0.
-sqlite3_error sqlite3_metrics(sqlite3_metrics_t* stats, int reset);
+sqlite3_error sqlite3_metrics(sqlite3_metrics_t* metrics, int reset);
 
 // sqlite3_collect_metrics is a trace hook that collects performance
 // metrics during the SQLITE_TRACE_PROFILE event.

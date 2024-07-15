@@ -23,6 +23,11 @@ func init() {
 	logrus.SetLevel(logrus.FatalLevel)
 }
 
+type kineServer struct {
+	client  *clientv3.Client
+	backend server.Backend
+}
+
 type kineOptions struct {
 	// backendType is the type of the kine backend. It can be either
 	// endpoint.SQLiteBackend or endpoint.DQLiteBackend.
@@ -38,27 +43,8 @@ type kineOptions struct {
 	setup func(*sql.DB) error
 }
 
-type kineServer struct {
-	client  *clientv3.Client
-	backend server.Backend
-}
-
-func (ks *kineServer) ResetMetrics() {
-	instrument.ResetSQLiteMetrics()
-}
-
-func (ks *kineServer) ReportMetrics(b *testing.B) {
-	sqliteMetrics := instrument.FetchSQLiteMetrics()
-	b.ReportMetric(float64(sqliteMetrics.PagesCacheHit+sqliteMetrics.PagesCacheMiss)/float64(b.N), "pages-read/op")
-	b.ReportMetric(float64(sqliteMetrics.PagesCacheMiss)/float64(b.N), "cache-misses/op")
-	b.ReportMetric(float64(sqliteMetrics.PagesCacheSpill)/float64(b.N), "cache-spill/op")
-	b.ReportMetric(float64(sqliteMetrics.PagesCacheWrite)/float64(b.N), "pages-written/op")
-	b.ReportMetric(float64(sqliteMetrics.ReadTransactionTime)/float64(time.Second)/float64(b.N), "sec-read-query/op")
-	b.ReportMetric(float64(sqliteMetrics.WriteTransactionTime)/float64(time.Second)/float64(b.N), "sec-write-query/op")
-}
-
-// newKine spins up a new instance of kine. In case of an error, tb.Fatal is called.
-func newKine(ctx context.Context, tb testing.TB, options *kineOptions) *kineServer {
+// newKineServer spins up a new instance of kine. In case of an error, tb.Fatal is called.
+func newKineServer(ctx context.Context, tb testing.TB, options *kineOptions) *kineServer {
 	dir := tb.TempDir()
 
 	err := instrument.StartSQLiteMonitoring()
@@ -82,8 +68,8 @@ func newKine(ctx context.Context, tb testing.TB, options *kineOptions) *kineServ
 	if !strings.Contains(endpointConfig.Endpoint, "?") {
 		endpointConfig.Endpoint += "?"
 	}
-	for _, v := range options.endpointParameters {
-		endpointConfig.Endpoint = fmt.Sprintf("%s&%s", endpointConfig.Endpoint, v)
+	for _, param := range options.endpointParameters {
+		endpointConfig.Endpoint = fmt.Sprintf("%s&%s", endpointConfig.Endpoint, param)
 	}
 	config, backend, err := endpoint.ListenAndReturnBackend(ctx, *endpointConfig)
 	if err != nil {
@@ -158,6 +144,20 @@ func startDqlite(ctx context.Context, tb testing.TB, dir string) (*endpoint.Conf
 	}, db
 }
 
+func (ks *kineServer) ReportMetrics(b *testing.B) {
+	sqliteMetrics := instrument.FetchSQLiteMetrics()
+	b.ReportMetric(float64(sqliteMetrics.PagesCacheHit+sqliteMetrics.PagesCacheMiss)/float64(b.N), "pages-read/op")
+	b.ReportMetric(float64(sqliteMetrics.PagesCacheMiss)/float64(b.N), "cache-misses/op")
+	b.ReportMetric(float64(sqliteMetrics.PagesCacheSpill)/float64(b.N), "cache-spill/op")
+	b.ReportMetric(float64(sqliteMetrics.PagesCacheWrite)/float64(b.N), "pages-written/op")
+	b.ReportMetric(float64(sqliteMetrics.TransactionReadTime)/float64(time.Second)/float64(b.N), "sec-read-query/op")
+	b.ReportMetric(float64(sqliteMetrics.TransactionWriteTime)/float64(time.Second)/float64(b.N), "sec-write-query/op")
+}
+
+func (ks *kineServer) ResetMetrics() {
+	instrument.ResetSQLiteMetrics()
+}
+
 func setupScenario(ctx context.Context, db *sql.DB, prefix string, numInsert, numUpdates, numDeletes int) error {
 	t, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -201,7 +201,8 @@ JOIN (
 ) maxkv ON maxkv.id = kv.id
 WHERE kv.deleted = 0
 ORDER BY kv.name
-LIMIT %d`, numUpdates)
+LIMIT %d
+		`, numUpdates)
 	if _, err := t.ExecContext(ctx, updateManyQuery, prefix, prefix); err != nil {
 		return err
 	}
@@ -220,7 +221,8 @@ JOIN (
 ) maxkv ON maxkv.id = kv.id
 WHERE kv.deleted = 0
 ORDER BY kv.name
-LIMIT %d`, numDeletes)
+LIMIT %d
+		`, numDeletes)
 	if _, err := t.ExecContext(ctx, deleteManyQuery, prefix, prefix); err != nil {
 		return err
 	}

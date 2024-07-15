@@ -17,7 +17,7 @@ func TestUpdate(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			kine := newKine(ctx, t, &kineOptions{backendType: backendType})
+			kine := newKineServer(ctx, t, &kineOptions{backendType: backendType})
 
 			// Testing that update can create a new key if ModRevision is 0
 			t.Run("UpdateNewKey", func(t *testing.T) {
@@ -79,7 +79,7 @@ func BenchmarkUpdate(b *testing.B) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			kine := newKine(ctx, b, &kineOptions{backendType: backendType})
+			kine := newKineServer(ctx, b, &kineOptions{backendType: backendType})
 
 			kine.ResetMetrics()
 			b.StartTimer()
