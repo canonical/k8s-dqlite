@@ -35,10 +35,10 @@ func TestWatch(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			client := newKine(ctx, t, backendType)
+			kine := newKine(ctx, t, &kineOptions{backendType: backendType})
 
 			// start watching for events on key
-			watchCh := client.Watch(ctx, key)
+			watchCh := kine.client.Watch(ctx, key)
 
 			t.Run("ReceiveNothingUntilActivity", func(t *testing.T) {
 				g := NewWithT(t)
@@ -49,7 +49,7 @@ func TestWatch(t *testing.T) {
 				g := NewWithT(t)
 
 				// create a key
-				createKey(ctx, g, client, key, value)
+				createKey(ctx, g, kine.client, key, value)
 
 				// receive event
 				t.Run("Receive", func(t *testing.T) {
@@ -79,7 +79,7 @@ func TestWatch(t *testing.T) {
 
 				// update key
 				{
-					resp, err := client.Txn(ctx).
+					resp, err := kine.client.Txn(ctx).
 						If(clientv3.Compare(clientv3.ModRevision(key), "=", revAfterCreate)).
 						Then(clientv3.OpPut(key, string(updatedValue))).
 						Else(clientv3.OpGet(key)).
@@ -122,7 +122,7 @@ func TestWatch(t *testing.T) {
 
 				// delete key
 				{
-					resp, err := client.Txn(ctx).
+					resp, err := kine.client.Txn(ctx).
 						If(clientv3.Compare(clientv3.ModRevision(key), "=", revAfterUpdate)).
 						Then(clientv3.OpDelete(key)).
 						Else(clientv3.OpGet(key)).
@@ -162,7 +162,7 @@ func TestWatch(t *testing.T) {
 			})
 
 			t.Run("StartRevision", func(t *testing.T) {
-				watchAfterDeleteCh := client.Watch(ctx, key, clientv3.WithRev(revAfterUpdate))
+				watchAfterDeleteCh := kine.client.Watch(ctx, key, clientv3.WithRev(revAfterUpdate))
 
 				t.Run("Receive", func(t *testing.T) {
 					g := NewWithT(t)

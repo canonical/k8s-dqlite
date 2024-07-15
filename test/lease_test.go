@@ -23,12 +23,12 @@ func TestLease(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			client := newKine(ctx, t, backendType)
+			kine := newKine(ctx, t, &kineOptions{backendType: backendType})
 
 			t.Run("LeaseGrant", func(t *testing.T) {
 				g := NewWithT(t)
 				ttl := int64(300)
-				resp, err := client.Lease.Grant(ctx, ttl)
+				resp, err := kine.client.Lease.Grant(ctx, ttl)
 
 				g.Expect(err).To(BeNil())
 				g.Expect(resp.ID).To(Equal(clientv3.LeaseID(ttl)))
@@ -41,14 +41,14 @@ func TestLease(t *testing.T) {
 					g := NewWithT(t)
 
 					{
-						resp, err := client.Lease.Grant(ctx, ttl)
+						resp, err := kine.client.Lease.Grant(ctx, ttl)
 						g.Expect(err).To(BeNil())
 						g.Expect(resp.ID).To(Equal(clientv3.LeaseID(ttl)))
 						g.Expect(resp.TTL).To(Equal(ttl))
 					}
 
 					{
-						resp, err := client.Txn(ctx).
+						resp, err := kine.client.Txn(ctx).
 							If(clientv3.Compare(clientv3.ModRevision("/leaseTestKey"), "=", 0)).
 							Then(clientv3.OpPut("/leaseTestKey", "testValue", clientv3.WithLease(clientv3.LeaseID(ttl)))).
 							Commit()
@@ -57,7 +57,7 @@ func TestLease(t *testing.T) {
 					}
 
 					{
-						resp, err := client.Get(ctx, "/leaseTestKey", clientv3.WithRange(""))
+						resp, err := kine.client.Get(ctx, "/leaseTestKey", clientv3.WithRange(""))
 						g.Expect(err).To(BeNil())
 						g.Expect(resp.Kvs).To(HaveLen(1))
 						g.Expect(resp.Kvs[0].Key).To(Equal([]byte("/leaseTestKey")))
@@ -70,7 +70,7 @@ func TestLease(t *testing.T) {
 					g := NewWithT(t)
 					// timeout ttl*2 seconds, poll 100ms
 					g.Eventually(func() []*mvccpb.KeyValue {
-						resp, err := client.Get(ctx, "/leaseTestKey", clientv3.WithRange(""))
+						resp, err := kine.client.Get(ctx, "/leaseTestKey", clientv3.WithRange(""))
 						g.Expect(err).To(BeNil())
 						return resp.Kvs
 					}, time.Duration(ttl*2)*time.Second, testExpirePollPeriod, ctx).Should(BeEmpty())
@@ -85,16 +85,17 @@ func BenchmarkLease(b *testing.B) {
 	for _, backendType := range []string{endpoint.SQLiteBackend, endpoint.DQLiteBackend} {
 		b.Run(backendType, func(b *testing.B) {
 			b.StopTimer()
+			g := NewWithT(b)
+
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			client := newKine(ctx, b, backendType)
+			kine := newKine(ctx, b, &kineOptions{backendType: backendType})
 
-			g := NewWithT(b)
 			b.StartTimer()
 			for i := 0; i < b.N; i++ {
 				var ttl int64 = int64(i + 1)
-				resp, err := client.Lease.Grant(ctx, ttl)
+				resp, err := kine.client.Lease.Grant(ctx, ttl)
 
 				g.Expect(err).To(BeNil())
 				g.Expect(resp.ID).To(Equal(clientv3.LeaseID(ttl)))

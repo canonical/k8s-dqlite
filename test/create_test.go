@@ -19,11 +19,11 @@ func TestCreate(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			client := newKine(ctx, t, backendType)
+			kine := newKine(ctx, t, &kineOptions{backendType: backendType})
 
-			createKey(ctx, g, client, "testKey", "testValue")
+			createKey(ctx, g, kine.client, "testKey", "testValue")
 
-			resp, err := client.Txn(ctx).
+			resp, err := kine.client.Txn(ctx).
 				If(clientv3.Compare(clientv3.ModRevision("testKey"), "=", 0)).
 				Then(clientv3.OpPut("testKey", "testValue2")).
 				Commit()
@@ -40,16 +40,17 @@ func BenchmarkCreate(b *testing.B) {
 		b.Run(backendType, func(b *testing.B) {
 			b.StopTimer()
 			g := NewWithT(b)
+
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			client := newKine(ctx, b, backendType)
+			kine := newKine(ctx, b, &kineOptions{backendType: backendType})
 
 			b.StartTimer()
 			for i := 0; i < b.N; i++ {
 				key := fmt.Sprintf("key-%d", i)
 				value := fmt.Sprintf("value-%d", i)
-				createKey(ctx, g, client, key, value)
+				createKey(ctx, g, kine.client, key, value)
 			}
 		})
 	}

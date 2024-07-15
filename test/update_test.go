@@ -17,15 +17,15 @@ func TestUpdate(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			client := newKine(ctx, t, backendType)
+			kine := newKine(ctx, t, &kineOptions{backendType: backendType})
 
 			// Testing that update can create a new key if ModRevision is 0
 			t.Run("UpdateNewKey", func(t *testing.T) {
 				g := NewWithT(t)
 
-				createKey(ctx, g, client, "updateNewKey", "testValue")
+				createKey(ctx, g, kine.client, "updateNewKey", "testValue")
 
-				resp, err := client.Get(ctx, "updateNewKey", clientv3.WithRange(""))
+				resp, err := kine.client.Get(ctx, "updateNewKey", clientv3.WithRange(""))
 				g.Expect(err).To(BeNil())
 				g.Expect(resp.Kvs).To(HaveLen(1))
 				g.Expect(resp.Kvs[0].Key).To(Equal([]byte("updateNewKey")))
@@ -36,10 +36,10 @@ func TestUpdate(t *testing.T) {
 			t.Run("UpdateExisting", func(t *testing.T) {
 				g := NewWithT(t)
 
-				lastModRev := createKey(ctx, g, client, "updateExistingKey", "testValue1")
-				updateRev(ctx, g, client, "updateExistingKey", lastModRev, "testValue2")
+				lastModRev := createKey(ctx, g, kine.client, "updateExistingKey", "testValue1")
+				updateRev(ctx, g, kine.client, "updateExistingKey", lastModRev, "testValue2")
 
-				resp, err := client.Get(ctx, "updateExistingKey", clientv3.WithRange(""))
+				resp, err := kine.client.Get(ctx, "updateExistingKey", clientv3.WithRange(""))
 				g.Expect(err).To(BeNil())
 				g.Expect(resp.Kvs).To(HaveLen(1))
 				g.Expect(resp.Kvs[0].Key).To(Equal([]byte("updateExistingKey")))
@@ -51,10 +51,10 @@ func TestUpdate(t *testing.T) {
 			t.Run("UpdateOldRevisionFails", func(t *testing.T) {
 				g := NewWithT(t)
 
-				lastModRev := createKey(ctx, g, client, "updateOldRevKey", "testValue1")
-				updateRev(ctx, g, client, "updateOldRevKey", lastModRev, "testValue2")
+				lastModRev := createKey(ctx, g, kine.client, "updateOldRevKey", "testValue1")
+				updateRev(ctx, g, kine.client, "updateOldRevKey", lastModRev, "testValue2")
 
-				resp, err := client.Txn(ctx).
+				resp, err := kine.client.Txn(ctx).
 					If(clientv3.Compare(clientv3.ModRevision("updateOldRevKey"), "=", lastModRev)).
 					Then(clientv3.OpPut("updateOldRevKey", "testValue2")).
 					Else(clientv3.OpGet("updateOldRevKey", clientv3.WithRange(""))).
@@ -79,12 +79,12 @@ func BenchmarkUpdate(b *testing.B) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			client := newKine(ctx, b, backendType)
+			kine := newKine(ctx, b, &kineOptions{backendType: backendType})
 
 			b.StartTimer()
 			for i, lastModRev := 0, int64(0); i < b.N; i++ {
 				value := fmt.Sprintf("value-%d", i)
-				lastModRev = updateRev(ctx, g, client, "benchKey", lastModRev, value)
+				lastModRev = updateRev(ctx, g, kine.client, "benchKey", lastModRev, value)
 			}
 		})
 	}

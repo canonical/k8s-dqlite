@@ -2,6 +2,7 @@ package test
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"testing"
 
@@ -17,12 +18,12 @@ func TestDelete(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			client := newKine(ctx, t, backendType)
+			kine := newKine(ctx, t, &kineOptions{backendType: backendType})
 
 			// Calling the delete method outside a transaction should fail in kine
 			t.Run("DeleteNotSupportedFails", func(t *testing.T) {
 				g := NewWithT(t)
-				resp, err := client.Delete(ctx, "missingKey")
+				resp, err := kine.client.Delete(ctx, "missingKey")
 
 				g.Expect(err).NotTo(BeNil())
 				g.Expect(err.Error()).To(ContainSubstring("delete is not supported"))
@@ -32,7 +33,7 @@ func TestDelete(t *testing.T) {
 			// Delete a key that does not exist
 			t.Run("DeleteNonExistentKeys", func(t *testing.T) {
 				g := NewWithT(t)
-				deleteKey(ctx, g, client, "alsoNonExistentKey")
+				deleteKey(ctx, g, kine.client, "alsoNonExistentKey")
 			})
 
 			// Add a key, make sure it exists, then delete it, make sure it got deleted,
@@ -42,12 +43,12 @@ func TestDelete(t *testing.T) {
 
 				key := "testKeyToDelete"
 				value := "testValue"
-				createKey(ctx, g, client, key, value)
-				assertKey(ctx, g, client, key, value)
-				deleteKey(ctx, g, client, key)
-				assertMissingKey(ctx, g, client, key)
-				createKey(ctx, g, client, key, value)
-				assertKey(ctx, g, client, key, value)
+				createKey(ctx, g, kine.client, key, value)
+				assertKey(ctx, g, kine.client, key, value)
+				deleteKey(ctx, g, kine.client, key)
+				assertMissingKey(ctx, g, kine.client, key)
+				createKey(ctx, g, kine.client, key, value)
+				assertKey(ctx, g, kine.client, key, value)
 			})
 		})
 	}
@@ -63,18 +64,17 @@ func BenchmarkDelete(b *testing.B) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			client := newKine(ctx, b, backendType)
-
-			for i := 0; i < b.N; i++ {
-				key := fmt.Sprintf("key-%d", i)
-				value := fmt.Sprintf("value-%d", i)
-				createKey(ctx, g, client, key, value)
-			}
+			kine := newKine(ctx, b, &kineOptions{
+				backendType: backendType,
+				setup: func(db *sql.DB) error {
+					return setupScenario(ctx, db, "key", b.N, 0, 0)
+				},
+			})
 
 			b.StartTimer()
 			for i := 0; i < b.N; i++ {
-				key := fmt.Sprintf("key-%d", i)
-				deleteKey(ctx, g, client, key)
+				key := fmt.Sprintf("key/%d", i)
+				deleteKey(ctx, g, kine.client, key)
 			}
 		})
 	}
