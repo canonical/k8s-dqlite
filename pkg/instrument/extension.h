@@ -14,7 +14,7 @@ typedef struct sqlite3_metrics_s {
 } sqlite3_metrics_t;
 
 // sqlite3_instrument register an auto extension that 
-// instruments all new connections to collect key sqlite
+// instruments all new connections to collect sqlite
 // performance metrics. Existing connections will not be 
 // affected.
 // This call uses the trace hook to collect data. Replacing
