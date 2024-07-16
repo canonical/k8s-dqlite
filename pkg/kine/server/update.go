@@ -31,34 +31,23 @@ func (l *LimitedServer) update(ctx context.Context, rev int64, key string, value
 		ok  bool
 		err error
 	)
-	ctx, updateSpan := tracer.Start(ctx, "update")
-	defer updateSpan.End()
-	updateSpan.SetAttributes(
+	updateCnt.Add(ctx, 1)
+
+	ctx, span := tracer.Start(ctx, "limited.update")
+	defer span.End()
+	span.SetAttributes(
 		attribute.String("key", key),
-		attribute.Int64("revision", rev),
 		attribute.Int64("lease", lease),
+		attribute.Int64("revision", rev),
 	)
 
 	if rev == 0 {
-		ctx, span := tracer.Start(ctx, "backend.create")
-		defer span.End()
-		span.SetAttributes(
-			attribute.String("key", key),
-			attribute.Int64("lease", lease),
-		)
-		createCnt.Add(ctx, 1)
-
 		rev, err = l.backend.Create(ctx, key, value, lease)
 		ok = true
-		span.SetAttributes(attribute.Bool("ok", ok))
-		span.RecordError(err)
-		span.End()
 
-		ctx, span = tracer.Start(ctx, "backend.get")
-		defer span.End()
 		span.SetAttributes(
-			attribute.String("key", key),
 			attribute.Int64("revision", rev),
+			attribute.Bool("ok", ok),
 		)
 		if err == ErrKeyExists {
 			span.AddEvent("key exists")
@@ -72,15 +61,6 @@ func (l *LimitedServer) update(ctx context.Context, rev int64, key string, value
 		}
 		span.End()
 	} else {
-		ctx, span := tracer.Start(ctx, "backend.update")
-		defer span.End()
-		span.SetAttributes(
-			attribute.String("key", key),
-			attribute.Int64("revision", rev),
-			attribute.Int64("lease", lease),
-		)
-		updateCnt.Add(ctx, 1)
-
 		rev, kv, ok, err = l.backend.Update(ctx, key, value, rev, lease)
 		span.RecordError(err)
 		span.SetAttributes(attribute.Bool("ok", ok))

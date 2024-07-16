@@ -3,11 +3,12 @@ package server
 import (
 	"fmt"
 
+	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 )
 
-const name = "k8s-dqlite"
+const name = "limited-server"
 
 var (
 	tracer    = otel.Tracer(name)
@@ -21,10 +22,36 @@ var (
 )
 
 func init() {
-	listCnt, _ = meter.Int64Counter(fmt.Sprintf("%s.list", name), metric.WithDescription("Number of list requests"))
-	getCnt, _ = meter.Int64Counter(fmt.Sprintf("%s.get", name), metric.WithDescription("Number of get requests"))
-	countCnt, _ = meter.Int64Counter(fmt.Sprintf("%s.count", name), metric.WithDescription("Number of count requests"))
-	createCnt, _ = meter.Int64Counter(fmt.Sprintf("%s.create", name), metric.WithDescription("Number of create requests"))
-	deleteCnt, _ = meter.Int64Counter(fmt.Sprintf("%s.delete", name), metric.WithDescription("Number of delete requests"))
-	updateCnt, _ = meter.Int64Counter(fmt.Sprintf("%s.update", name), metric.WithDescription("Number of update requests"))
+	var err error
+
+	listCnt, err = meter.Int64Counter(fmt.Sprintf("%s.list", name), metric.WithDescription("Number of list requests"))
+	if err != nil {
+		logrus.WithError(err).Warning("Otel failed to create list counter")
+	}
+
+	getCnt, err = meter.Int64Counter(fmt.Sprintf("%s.get", name), metric.WithDescription("Number of get requests"))
+	if err != nil {
+		logrus.WithError(err).Warning("Otel failed to create get counter")
+	}
+
+	countCnt, err = meter.Int64Counter(fmt.Sprintf("%s.count", name), metric.WithDescription("Number of count requests"))
+	if err != nil {
+		logrus.WithError(err).Warning("Otel failed to create count counter")
+	}
+
+	createCnt, err = meter.Int64Counter(fmt.Sprintf("%s.create", name), metric.WithDescription("Number of create requests"))
+	if err != nil {
+		logrus.WithError(err).Warning("Otel failed to create create counter")
+	}
+
+	deleteCnt, err = meter.Int64Counter(fmt.Sprintf("%s.delete", name), metric.WithDescription("Number of delete requests"))
+	if err != nil {
+		logrus.WithError(err).Warning("Otel failed to create delete counter")
+	}
+
+	updateCnt, err = meter.Int64Counter(fmt.Sprintf("%s.update", name), metric.WithDescription("Number of update requests"))
+	if err != nil {
+		logrus.WithError(err).Warning("Otel failed to create update counter")
+	}
+
 }

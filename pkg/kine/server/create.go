@@ -21,7 +21,8 @@ func isCreate(txn *etcdserverpb.TxnRequest) *etcdserverpb.PutRequest {
 }
 
 func (l *LimitedServer) create(ctx context.Context, put *etcdserverpb.PutRequest, txn *etcdserverpb.TxnRequest) (*etcdserverpb.TxnResponse, error) {
-	ctx, span := tracer.Start(ctx, "backend.create")
+	createCnt.Add(ctx, 1)
+	ctx, span := tracer.Start(ctx, "limited.create")
 	defer span.End()
 	span.SetAttributes(
 		attribute.String("key", string(put.Key)),
@@ -36,18 +37,16 @@ func (l *LimitedServer) create(ctx context.Context, put *etcdserverpb.PutRequest
 		return nil, unsupported("prevKv")
 	}
 
-	createCnt.Add(ctx, 1)
-
 	rev, err := l.backend.Create(ctx, string(put.Key), put.Value, put.Lease)
 	span.SetAttributes(attribute.Int64("revision", rev))
 	if err == ErrKeyExists {
-		span.RecordError(err)
+		span.AddEvent("key exists")
 		return &etcdserverpb.TxnResponse{
 			Header:    txnHeader(rev),
 			Succeeded: false,
 		}, nil
 	} else if err != nil {
-		span.RecordError(err)
+		defer span.RecordError(err)
 		return nil, err
 	}
 

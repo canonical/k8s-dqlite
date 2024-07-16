@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
-	"go.opentelemetry.io/otel/attribute"
 )
 
 var _ etcdserverpb.MaintenanceServer = (*KVServerBridge)(nil)
@@ -15,14 +14,10 @@ func (s *KVServerBridge) Alarm(context.Context, *etcdserverpb.AlarmRequest) (*et
 }
 
 func (s *KVServerBridge) Status(ctx context.Context, r *etcdserverpb.StatusRequest) (*etcdserverpb.StatusResponse, error) {
-	ctx, span := tracer.Start(ctx, "backend.dbSize")
-	defer span.End()
 	size, err := s.limited.dbSize(ctx)
 	if err != nil {
-		span.RecordError(err)
 		return nil, err
 	}
-	span.SetAttributes(attribute.Int64("size", size))
 	return &etcdserverpb.StatusResponse{
 		Header: &etcdserverpb.ResponseHeader{},
 		DbSize: size,

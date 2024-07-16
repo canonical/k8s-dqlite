@@ -11,6 +11,7 @@ import (
 	"github.com/canonical/k8s-dqlite/pkg/kine/broadcaster"
 	"github.com/canonical/k8s-dqlite/pkg/kine/server"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 const SupersededCount = 100
@@ -124,12 +125,12 @@ func (s *SQLLog) DoCompact(ctx context.Context) error {
 }
 
 func (s *SQLLog) compactor(ctx context.Context, nextEnd int64) (int64, error) {
-	_, span := tracer.Start(ctx, "sqllog.compactor")
+	ctx, span := tracer.Start(ctx, "sqllog.compactor")
 	defer span.End()
-	span.AddEvent(fmt.Sprintf("nextEnd: %d", nextEnd))
+	span.SetAttributes(attribute.Int64("nextEnd", nextEnd))
 
 	currentRev, err := s.d.CurrentRevision(ctx)
-	span.AddEvent(fmt.Sprintf("get current revision: %d", currentRev))
+	span.SetAttributes(attribute.Int64("currentRev", currentRev))
 	if err != nil {
 		span.RecordError(err)
 		logrus.Errorf("failed to get current revision: %v", err)
@@ -142,7 +143,7 @@ func (s *SQLLog) compactor(ctx context.Context, nextEnd int64) (int64, error) {
 		logrus.Errorf("failed to get compact revision: %v", err)
 		return nextEnd, fmt.Errorf("failed to get compact revision: %v", err)
 	}
-	span.AddEvent(fmt.Sprintf("get compact revision: %d", cursor))
+	span.SetAttributes(attribute.Int64("cursor", cursor))
 
 	end := nextEnd
 	nextEnd = currentRev

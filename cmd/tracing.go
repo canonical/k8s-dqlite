@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
@@ -17,9 +18,14 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
+var (
+	otelEndpoint = "localhost:4317"
+)
+
 // setupOTelSDK bootstraps the OpenTelemetry pipeline.
 // If it does not return an error, make sure to call shutdown for proper cleanup.
 func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, err error) {
+	logrus.SetLevel(logrus.TraceLevel)
 	var shutdownFuncs []func(context.Context) error
 
 	shutdown = func(ctx context.Context) error {
@@ -40,6 +46,9 @@ func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 			semconv.ServiceNameKey.String("k8s-dqlite"),
 		),
 	)
+	if err != nil {
+		logrus.WithError(err).Warning("Otel failed to create resource")
+	}
 
 	tracerProvider, err := newTraceProvider(ctx, res)
 	if err != nil {
@@ -60,30 +69,6 @@ func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 	return
 }
 
-func initConn() (*grpc.ClientConn, error) {
-	// It connects the OpenTelemetry Collector through local gRPC connection.
-	// You may replace `localhost:4317` with your endpoint.
-	conn, err := grpc.NewClient("localhost:4317",
-		// Note the use of insecure transport here. TLS is recommended in production.
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create gRPC connection to collector: %w", err)
-	}
-
-	return conn, err
-}
-
-func newExporter(ctx context.Context) (trace.SpanExporter, error) {
-	conn, _ := initConn()
-
-	traceExporter, err := otlptracegrpc.New(ctx, otlptracegrpc.WithGRPCConn(conn))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create trace exporter: %w", err)
-	}
-	return traceExporter, nil
-}
-
 func newTraceProvider(ctx context.Context, res *resource.Resource) (*trace.TracerProvider, error) {
 	traceExporter, err := newExporter(ctx)
 	if err != nil {
@@ -97,6 +82,30 @@ func newTraceProvider(ctx context.Context, res *resource.Resource) (*trace.Trace
 		trace.WithResource(res),
 	)
 	return traceProvider, nil
+}
+
+func newExporter(ctx context.Context) (trace.SpanExporter, error) {
+	conn, _ := initConn()
+
+	traceExporter, err := otlptracegrpc.New(ctx, otlptracegrpc.WithGRPCConn(conn))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create trace exporter: %w", err)
+	}
+	return traceExporter, nil
+}
+
+func initConn() (*grpc.ClientConn, error) {
+	// It connects the OpenTelemetry Collector through local gRPC connection.
+	// You may replace `localhost:4317` with your endpoint.
+	conn, err := grpc.NewClient(otelEndpoint,
+		// Note the use of insecure transport here. TLS is recommended in production.
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create gRPC connection to collector: %w", err)
+	}
+
+	return conn, nil
 }
 
 func newMeterProvider(res *resource.Resource) (*metric.MeterProvider, error) {

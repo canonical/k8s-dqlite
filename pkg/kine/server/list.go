@@ -12,6 +12,7 @@ import (
 )
 
 func (l *LimitedServer) list(ctx context.Context, r *etcdserverpb.RangeRequest) (*RangeResponse, error) {
+	listCnt.Add(ctx, 1)
 	ctx, span := tracer.Start(ctx, "list")
 	defer span.End()
 
@@ -29,18 +30,13 @@ func (l *LimitedServer) list(ctx context.Context, r *etcdserverpb.RangeRequest) 
 	}
 	start := string(bytes.TrimRight(r.Key, "\x00"))
 	revision := r.Revision
+	span.SetAttributes(
+		attribute.String("prefix", prefix),
+		attribute.String("start", start),
+		attribute.Int64("revision", revision),
+	)
 
 	if r.CountOnly {
-		ctx, span := tracer.Start(ctx, "backend.count")
-		defer span.End()
-		span.SetAttributes(
-			attribute.String("key", string(r.Key)),
-			attribute.String("rangeEnd", string(r.RangeEnd)),
-			attribute.String("prefix", prefix),
-			attribute.String("start", start),
-			attribute.Int64("revision", revision),
-		)
-		countCnt.Add(ctx, 1)
 		rev, count, err := l.backend.Count(ctx, prefix, start, revision)
 		if err != nil {
 			span.RecordError(err)
@@ -59,27 +55,20 @@ func (l *LimitedServer) list(ctx context.Context, r *etcdserverpb.RangeRequest) 
 	if limit > 0 {
 		limit++
 	}
-
-	span.SetAttributes(
-		attribute.String("start", start),
-		attribute.Int64("limit", limit),
-		attribute.Int64("revision", revision),
-	)
-
-	listCnt.Add(ctx, 1)
+	span.SetAttributes(attribute.Int64("limit", limit))
 
 	rev, kvs, err := l.backend.List(ctx, prefix, start, limit, revision)
 	if err != nil {
 		span.RecordError(err)
 		return nil, err
 	}
-	span.End()
 
 	resp := &RangeResponse{
 		Header: txnHeader(rev),
 		Count:  int64(len(kvs)),
 		Kvs:    kvs,
 	}
+	span.SetAttributes(attribute.Int64("list-count", resp.Count))
 
 	// count the actual number of results if there are more items in the db.
 	if limit > 0 && resp.Count > r.Limit {
@@ -90,16 +79,6 @@ func (l *LimitedServer) list(ctx context.Context, r *etcdserverpb.RangeRequest) 
 			revision = rev
 		}
 		// count the actual number of results if there are more items in the db.
-		ctx, span := tracer.Start(ctx, "backend.count")
-		defer span.End()
-		span.SetAttributes(
-			attribute.String("key", string(r.Key)),
-			attribute.String("rangeEnd", string(r.RangeEnd)),
-			attribute.String("prefix", prefix),
-			attribute.String("start", start),
-			attribute.Int64("revision", revision),
-		)
-		countCnt.Add(ctx, 1)
 		rev, resp.Count, err = l.backend.Count(ctx, prefix, start, revision)
 		if err != nil {
 			span.RecordError(err)
