@@ -12,7 +12,7 @@ import (
 import "C"
 
 // StartSQLiteMonitoring instruments sqlite to collect metrics
-// on all connection opened after the call (i.e. existing connections
+// on all subsequent connections (i.e. existing connections
 // will not be instrumented).
 // Monitoring must be stopped by calling [StopSQLiteMonitoring].
 func StartSQLiteMonitoring() error {
@@ -23,8 +23,7 @@ func StartSQLiteMonitoring() error {
 }
 
 // StopSQLiteMonitoring removes instrumentation from sqlite.
-// Existing connections will still be insturmented until they
-// are closed.
+// After this call, no new connections are instrumented.
 func StopSQLiteMonitoring() { C.sqlite3_deinstrument() }
 
 type SQLiteMetrics struct {
