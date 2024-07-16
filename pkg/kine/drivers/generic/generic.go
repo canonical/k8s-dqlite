@@ -449,7 +449,7 @@ func (d *Generic) GetCompactRevision(ctx context.Context) (int64, int64, error) 
 	}
 	defer done()
 
-	rows, err := d.query(ctx, "TODO", revisionIntervalSQL) // TODO
+	rows, err := d.query(ctx, "revision_interval_sql", revisionIntervalSQL)
 	if err != nil {
 		return 0, 0, err
 	}

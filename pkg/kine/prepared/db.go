@@ -9,22 +9,22 @@ import (
 )
 
 type DB struct {
-	db      *sql.DB
-	mu      sync.Mutex
-	maxSize int
-	store   map[string]*lruEntry
-	lruList lruList
+	underlying *sql.DB
+	mu         sync.Mutex
+	maxSize    int
+	store      map[string]*lruEntry
+	lruList    lruList
 }
 
 func New(db *sql.DB, maxSize int) *DB {
 	return &DB{
-		db:      db,
-		maxSize: maxSize,
-		store:   make(map[string]*lruEntry, maxSize),
+		underlying: db,
+		maxSize:    maxSize,
+		store:      make(map[string]*lruEntry, maxSize),
 	}
 }
 
-func (db *DB) Underlying() *sql.DB { return db.db }
+func (db *DB) Underlying() *sql.DB { return db.underlying }
 
 func (db *DB) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
 	stms, err := db.prepare(ctx, query)
@@ -53,7 +53,7 @@ func (db *DB) Close() error {
 		}
 	}
 
-	if err := db.db.Close(); err != nil {
+	if err := db.underlying.Close(); err != nil {
 		errs = append(errs, err)
 	}
 
@@ -69,13 +69,15 @@ func (db *DB) prepare(ctx context.Context, query string) (*stmt, error) {
 	if stmt := db.get(query); stmt != nil {
 		return stmt, nil
 	}
-	prepared, err := db.db.PrepareContext(ctx, query)
+	prepared, err := db.underlying.PrepareContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
 	result := &stmt{prepared, atomic.Int32{}}
+	result.Ref()
+
 	db.put(query, result)
-	return result.Ref(), nil
+	return result, nil
 }
 
 func (db *DB) get(key string) *stmt {
