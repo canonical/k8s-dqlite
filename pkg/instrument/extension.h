@@ -18,10 +18,9 @@ typedef struct sqlite3_metrics_s {
 // sqlite performance metrics. Existing connections will will
 // remain unaffected.
 //
-// This call uses the trace hook to collect data. Replacing
-// the hook will remove instrumentation for the connection. 
-// In this case, it is possible to call [sqlite3_collect_metrics]
-// to keep the instrumentation active in a custom trace hook.
+// This call inserts a trace hook to collect metrics. If this
+// would clash with another hook, see the [sqlite3_collect_metrics]
+// function instead.
 sqlite3_error sqlite3_instrument();
 
 // sqlite3_deinstrument stops instrumenting new connections.
