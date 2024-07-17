@@ -41,17 +41,12 @@ sqlite3_error sqlite3_metrics(sqlite3_metrics_t* metrics, int reset) {
 }
 
 sqlite3_error sqlite3_collect_metrics(unsigned int event, void *pCtx, void *P, void *X) {
-    sqlite3_stmt* stmt;
-    sqlite3* connection;
+    if (event == SQLITE_TRACE_PROFILE) {
+        sqlite3_stmt* stmt = P;
+        sqlite3* connection = sqlite3_db_handle(stmt);
 
-    int64_t stmt_time_ns;
-    int cache_hit, cache_miss, cache_write, cache_spill, _;
-    
-    switch (event) {
-    case SQLITE_TRACE_PROFILE:
-        stmt = P;
-        connection = sqlite3_db_handle(stmt);
-        stmt_time_ns = *(sqlite3_int64*)(X);
+        int64_t stmt_time_ns = *(sqlite3_int64*)(X);
+        int cache_hit, cache_miss, cache_write, cache_spill, _;
 
         sqlite3_db_status(connection, SQLITE_DBSTATUS_CACHE_WRITE, &cache_write, &_, 1);
         sqlite3_db_status(connection, SQLITE_DBSTATUS_CACHE_HIT, &cache_hit, &_, 1);
@@ -69,10 +64,12 @@ sqlite3_error sqlite3_collect_metrics(unsigned int event, void *pCtx, void *P, v
             atomic_fetch_add(&global_metrics.write_txn_time_ns, stmt_time_ns);
         }
         return SQLITE_OK;
-    case SQLITE_TRACE_CLOSE:
+    }
+
+    if (event == SQLITE_TRACE_CLOSE) {
         sqlite3_trace_v2(P, SQLITE_TRACE_PROFILE|SQLITE_TRACE_CLOSE, NULL, NULL);
         return SQLITE_OK;
-    default:
-        return SQLITE_OK;
     }
+
+    return SQLITE_OK;
 }
