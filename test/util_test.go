@@ -146,12 +146,12 @@ func startDqlite(ctx context.Context, tb testing.TB, dir string) (*endpoint.Conf
 
 func (ks *kineServer) ReportMetrics(b *testing.B) {
 	sqliteMetrics := instrument.FetchSQLiteMetrics()
-	b.ReportMetric(float64(sqliteMetrics.PagesCacheHit+sqliteMetrics.PagesCacheMiss)/float64(b.N), "pages-read/op")
-	b.ReportMetric(float64(sqliteMetrics.PagesCacheMiss)/float64(b.N), "cache-misses/op")
-	b.ReportMetric(float64(sqliteMetrics.PagesCacheSpill)/float64(b.N), "cache-spill/op")
-	b.ReportMetric(float64(sqliteMetrics.PagesCacheWrite)/float64(b.N), "pages-written/op")
-	b.ReportMetric(float64(sqliteMetrics.TransactionReadTime)/float64(time.Second)/float64(b.N), "sec-read-query/op")
-	b.ReportMetric(float64(sqliteMetrics.TransactionWriteTime)/float64(time.Second)/float64(b.N), "sec-write-query/op")
+	b.ReportMetric(float64(sqliteMetrics.PageCacheHits+sqliteMetrics.PageCacheMisses)/float64(b.N), "page-reads/op")
+	b.ReportMetric(float64(sqliteMetrics.PageCacheMisses)/float64(b.N), "page-cache-misses/op")
+	b.ReportMetric(float64(sqliteMetrics.PageCacheSpills)/float64(b.N), "page-cache-spills/op")
+	b.ReportMetric(float64(sqliteMetrics.PageCacheWrites)/float64(b.N), "page-writes/op")
+	b.ReportMetric(float64(sqliteMetrics.TransactionReadTime)/float64(time.Second)/float64(b.N), "sec-reading/op")
+	b.ReportMetric(float64(sqliteMetrics.TransactionWriteTime)/float64(time.Second)/float64(b.N), "sec-writing/op")
 }
 
 func (ks *kineServer) ResetMetrics() {

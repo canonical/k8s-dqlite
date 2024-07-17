@@ -4,10 +4,10 @@
 typedef int sqlite3_error;
 
 typedef struct sqlite3_metrics_s {
-    uint64_t pages_cache_write;
-    uint64_t pages_cache_hit;
-    uint64_t pages_cache_miss;
-    uint64_t pages_cache_spill;
+    uint64_t page_cache_writes;
+    uint64_t page_cache_hits;
+    uint64_t page_cache_misses;
+    uint64_t page_cache_spills;
 
     uint64_t read_txn_time_ns;
     uint64_t write_txn_time_ns;
@@ -15,7 +15,7 @@ typedef struct sqlite3_metrics_s {
 
 // sqlite3_instrument registers an auto extension which 
 // instruments all new connections, causing them to collect
-// sqlite performance metrics. Existing connections will will
+// sqlite performance metrics. Existing connections will
 // remain unaffected.
 //
 // This call inserts a trace hook to collect metrics. If this

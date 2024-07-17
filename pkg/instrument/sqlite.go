@@ -29,10 +29,10 @@ func StopSQLiteMonitoring() { C.sqlite3_deinstrument() }
 type SQLiteMetrics struct {
 	// These fields follow the same order as the `struct sqlite3_metrics_s`.
 
-	PagesCacheWrite uint64
-	PagesCacheHit   uint64
-	PagesCacheMiss  uint64
-	PagesCacheSpill uint64
+	PageCacheWrites uint64
+	PageCacheHits   uint64
+	PageCacheMisses uint64
+	PageCacheSpills uint64
 
 	TransactionReadTime  time.Duration
 	TransactionWriteTime time.Duration
@@ -57,10 +57,10 @@ func FetchSQLiteMetrics() *SQLiteMetrics {
 
 func convertMetrics(stats *C.sqlite3_metrics_t) *SQLiteMetrics {
 	return &SQLiteMetrics{
-		PagesCacheWrite:      uint64(stats.pages_cache_write),
-		PagesCacheHit:        uint64(stats.pages_cache_hit),
-		PagesCacheMiss:       uint64(stats.pages_cache_miss),
-		PagesCacheSpill:      uint64(stats.pages_cache_spill),
+		PageCacheWrites:      uint64(stats.page_cache_writes),
+		PageCacheHits:        uint64(stats.page_cache_hits),
+		PageCacheMisses:      uint64(stats.page_cache_misses),
+		PageCacheSpills:      uint64(stats.page_cache_spills),
 		TransactionReadTime:  time.Duration(stats.read_txn_time_ns) * time.Nanosecond,
 		TransactionWriteTime: time.Duration(stats.write_txn_time_ns) * time.Nanosecond,
 	}
