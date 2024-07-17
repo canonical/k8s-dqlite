@@ -2,10 +2,26 @@ package server
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/sirupsen/logrus"
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
+
+var (
+	deleteCnt metric.Int64Counter
+)
+
+func init() {
+	var err error
+
+	deleteCnt, err = meter.Int64Counter(fmt.Sprintf("%s.delete", name), metric.WithDescription("Number of delete requests"))
+	if err != nil {
+		logrus.WithError(err).Warning("Otel failed to create delete counter")
+	}
+}
 
 func isDelete(txn *etcdserverpb.TxnRequest) (int64, string, bool) {
 	if len(txn.Compare) == 0 &&

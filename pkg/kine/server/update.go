@@ -4,9 +4,24 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/sirupsen/logrus"
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
+
+var (
+	updateCnt metric.Int64Counter
+)
+
+func init() {
+	var err error
+
+	updateCnt, err = meter.Int64Counter(fmt.Sprintf("%s.update", name), metric.WithDescription("Number of update requests"))
+	if err != nil {
+		logrus.WithError(err).Warning("Otel failed to create update counter")
+	}
+}
 
 func isUpdate(txn *etcdserverpb.TxnRequest) (int64, string, []byte, int64, bool) {
 	if len(txn.Compare) == 1 &&

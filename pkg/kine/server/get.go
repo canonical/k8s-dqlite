@@ -4,9 +4,23 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/sirupsen/logrus"
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
+
+var (
+	getCnt metric.Int64Counter
+)
+
+func init() {
+	var err error
+	getCnt, err = meter.Int64Counter(fmt.Sprintf("%s.get", name), metric.WithDescription("Number of get requests"))
+	if err != nil {
+		logrus.WithError(err).Warning("Otel failed to create get counter")
+	}
+}
 
 func (l *LimitedServer) get(ctx context.Context, r *etcdserverpb.RangeRequest) (*RangeResponse, error) {
 	getCnt.Add(ctx, 1)

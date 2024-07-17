@@ -2,10 +2,26 @@ package server
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/sirupsen/logrus"
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
+
+var (
+	createCnt metric.Int64Counter
+)
+
+func init() {
+	var err error
+
+	createCnt, err = meter.Int64Counter(fmt.Sprintf("%s.create", name), metric.WithDescription("Number of create requests"))
+	if err != nil {
+		logrus.WithError(err).Warning("Otel failed to create create counter")
+	}
+}
 
 func isCreate(txn *etcdserverpb.TxnRequest) *etcdserverpb.PutRequest {
 	if len(txn.Compare) == 1 &&
