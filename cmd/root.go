@@ -27,6 +27,7 @@ var (
 		diskMode               bool
 		clientSessionCacheSize uint
 		minTLSVersion          string
+		otel                   bool
 		metrics                bool
 		metricsAddress         string
 		otelAddress            string
@@ -60,8 +61,9 @@ var (
 				}()
 			}
 
-			if rootCmdOpts.metrics {
+			if rootCmdOpts.otel {
 				go func() {
+					logrus.WithField("address", rootCmdOpts.otelAddress).Print("Enable otel endpoint")
 					otelShutdown, err := setupOTelSDK(cmd.Context(), rootCmdOpts.otelAddress)
 					if err != nil {
 						logrus.WithError(err).Warning("Failed to setup OpenTelemetry SDK")
@@ -72,6 +74,11 @@ var (
 							logrus.WithError(err).Warning("Failed to shutdown OpenTelemetry SDK")
 						}
 					}()
+				}()
+			}
+
+			if rootCmdOpts.metrics {
+				go func() {
 					logrus.WithField("address", rootCmdOpts.metricsAddress).Print("Enable metrics endpoint")
 					mux := http.NewServeMux()
 					mux.Handle("/metrics", promhttp.Handler())
@@ -145,6 +152,7 @@ func init() {
 	rootCmd.Flags().UintVar(&rootCmdOpts.clientSessionCacheSize, "tls-client-session-cache-size", 0, "ClientCacheSession size for dial TLS config")
 	rootCmd.Flags().StringVar(&rootCmdOpts.minTLSVersion, "min-tls-version", "tls12", "Minimum TLS version for dqlite endpoint (tls10|tls11|tls12|tls13). Default is tls12")
 	rootCmd.Flags().BoolVar(&rootCmdOpts.metrics, "metrics", true, "enable metrics endpoint")
+	rootCmd.Flags().BoolVar(&rootCmdOpts.otel, "otel", false, "enable traces endpoint")
 	rootCmd.Flags().StringVar(&rootCmdOpts.otelAddress, "otel-listen", "127.0.0.1:4317", "listen address for OpenTelemetry endpoint")
 	rootCmd.Flags().StringVar(&rootCmdOpts.metricsAddress, "metrics-listen", "127.0.0.1:9042", "listen address for metrics endpoint")
 	rootCmd.Flags().DurationVar(&rootCmdOpts.watchAvailableStorageInterval, "watch-storage-available-size-interval", 5*time.Second, "Interval to check if the disk is running low on space. Set to 0 to disable the periodic disk size check")

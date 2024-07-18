@@ -25,20 +25,10 @@ var (
 // setupOTelSDK bootstraps the OpenTelemetry pipeline.
 // If it does not return an error, make sure to call shutdown for proper cleanup.
 func setupOTelSDK(ctx context.Context, otelEndpoint string) (shutdown func(context.Context) error, err error) {
-	logrus.SetLevel(logrus.TraceLevel)
-	var shutdownFuncs []func(context.Context) error
-
-	shutdown = func(ctx context.Context) error {
-		var err error
-		for _, fn := range shutdownFuncs {
-			err = errors.Join(err, fn(ctx))
-		}
-		shutdownFuncs = nil
-		return err
-	}
-
-	handleErr := func(inErr error) {
-		err = errors.Join(inErr, shutdown(ctx))
+	conn, err := initConn(otelEndpoint)
+	if err != nil {
+		logrus.WithError(err).Warning("Otel failed to create gRPC connection")
+		return nil, fmt.Errorf("failed to create gRPC connection to collector: %w", err)
 	}
 
 	res, err := resource.New(ctx,
@@ -50,48 +40,43 @@ func setupOTelSDK(ctx context.Context, otelEndpoint string) (shutdown func(conte
 		logrus.WithError(err).Warning("Otel failed to create resource")
 	}
 
-	tracerProvider, err := newTraceProvider(ctx, otelEndpoint, res)
+	traceExporter, err := newTraceExporter(ctx, conn)
 	if err != nil {
-		handleErr(err)
-		return
+		logrus.WithError(err).Warning("Otel failed to create trace exporter")
+		return nil, err
 	}
-	shutdownFuncs = append(shutdownFuncs, tracerProvider.Shutdown)
+
+	tracerProvider, err := newTraceProvider(traceExporter, res)
+	if err != nil {
+		logrus.WithError(err).Warning("Otel failed to create trace provider")
+		return nil, err
+	}
 	otel.SetTracerProvider(tracerProvider)
 
 	meterProvider, err := newMeterProvider(res)
 	if err != nil {
-		handleErr(err)
-		return
-	}
-	shutdownFuncs = append(shutdownFuncs, meterProvider.Shutdown)
-	otel.SetMeterProvider(meterProvider)
-
-	return
-}
-
-func newTraceProvider(ctx context.Context, otelEndpoint string, res *resource.Resource) (*trace.TracerProvider, error) {
-	traceExporter, err := newExporter(ctx, otelEndpoint)
-	if err != nil {
+		logrus.WithError(err).Warning("Otel failed to create meter provider")
 		return nil, err
 	}
+	otel.SetMeterProvider(meterProvider)
 
-	traceProvider := trace.NewTracerProvider(
-		trace.WithBatcher(traceExporter,
-			trace.WithBatchTimeout(time.Second),
-		),
-		trace.WithResource(res),
-	)
-	return traceProvider, nil
-}
-
-func newExporter(ctx context.Context, otelEndpoint string) (trace.SpanExporter, error) {
-	conn, _ := initConn(otelEndpoint)
-
-	traceExporter, err := otlptracegrpc.New(ctx, otlptracegrpc.WithGRPCConn(conn))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create trace exporter: %w", err)
+	shutdown = func(ctx context.Context) error {
+		var shutdownErrs error
+		err = meterProvider.Shutdown(ctx)
+		if err != nil {
+			shutdownErrs = errors.Join(shutdownErrs, err)
+		}
+		err = tracerProvider.Shutdown(ctx)
+		if err != nil {
+			shutdownErrs = errors.Join(shutdownErrs, err)
+		}
+		err = conn.Close()
+		if err != nil {
+			shutdownErrs = errors.Join(shutdownErrs, err)
+		}
+		return shutdownErrs
 	}
-	return traceExporter, nil
+	return
 }
 
 func initConn(otelEndpoint string) (*grpc.ClientConn, error) {
@@ -105,6 +90,24 @@ func initConn(otelEndpoint string) (*grpc.ClientConn, error) {
 	}
 
 	return conn, nil
+}
+
+func newTraceExporter(ctx context.Context, conn *grpc.ClientConn) (trace.SpanExporter, error) {
+	exporter, err := otlptracegrpc.New(ctx, otlptracegrpc.WithGRPCConn(conn))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create trace exporter: %w", err)
+	}
+	return exporter, nil
+}
+
+func newTraceProvider(traceExporter trace.SpanExporter, res *resource.Resource) (*trace.TracerProvider, error) {
+	traceProvider := trace.NewTracerProvider(
+		trace.WithBatcher(traceExporter,
+			trace.WithBatchTimeout(time.Second),
+		),
+		trace.WithResource(res),
+	)
+	return traceProvider, nil
 }
 
 func newMeterProvider(res *resource.Resource) (*metric.MeterProvider, error) {
