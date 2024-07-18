@@ -19,7 +19,6 @@ import (
 )
 
 var (
-	otelEndpoint = "localhost:4317"
 	resourceName = "k8s-dqlite"
 )
 
