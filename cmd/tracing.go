@@ -25,7 +25,7 @@ var (
 
 // setupOTelSDK bootstraps the OpenTelemetry pipeline.
 // If it does not return an error, make sure to call shutdown for proper cleanup.
-func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, err error) {
+func setupOTelSDK(ctx context.Context, otelEndpoint string) (shutdown func(context.Context) error, err error) {
 	logrus.SetLevel(logrus.TraceLevel)
 	var shutdownFuncs []func(context.Context) error
 
@@ -51,7 +51,7 @@ func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 		logrus.WithError(err).Warning("Otel failed to create resource")
 	}
 
-	tracerProvider, err := newTraceProvider(ctx, res)
+	tracerProvider, err := newTraceProvider(ctx, otelEndpoint, res)
 	if err != nil {
 		handleErr(err)
 		return
@@ -70,8 +70,8 @@ func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 	return
 }
 
-func newTraceProvider(ctx context.Context, res *resource.Resource) (*trace.TracerProvider, error) {
-	traceExporter, err := newExporter(ctx)
+func newTraceProvider(ctx context.Context, otelEndpoint string, res *resource.Resource) (*trace.TracerProvider, error) {
+	traceExporter, err := newExporter(ctx, otelEndpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -85,8 +85,8 @@ func newTraceProvider(ctx context.Context, res *resource.Resource) (*trace.Trace
 	return traceProvider, nil
 }
 
-func newExporter(ctx context.Context) (trace.SpanExporter, error) {
-	conn, _ := initConn()
+func newExporter(ctx context.Context, otelEndpoint string) (trace.SpanExporter, error) {
+	conn, _ := initConn(otelEndpoint)
 
 	traceExporter, err := otlptracegrpc.New(ctx, otlptracegrpc.WithGRPCConn(conn))
 	if err != nil {
@@ -95,7 +95,7 @@ func newExporter(ctx context.Context) (trace.SpanExporter, error) {
 	return traceExporter, nil
 }
 
-func initConn() (*grpc.ClientConn, error) {
+func initConn(otelEndpoint string) (*grpc.ClientConn, error) {
 	// It connects the OpenTelemetry Collector through local gRPC connection.
 	conn, err := grpc.NewClient(otelEndpoint,
 		// Note the use of insecure transport here. TLS is recommended in production.
