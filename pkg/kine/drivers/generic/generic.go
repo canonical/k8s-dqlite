@@ -13,6 +13,7 @@ import (
 	"github.com/Rican7/retry/jitter"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 var (
@@ -477,15 +478,19 @@ func (d *Generic) executePrepared(ctx context.Context, txName, sql string, prepa
 }
 
 func (d *Generic) GetCompactRevision(ctx context.Context) (int64, int64, error) {
+	getCompactRevCnt.Add(ctx, 1)
+	ctx, span := tracer.Start(ctx, "get_compact_revision")
 	var compact, target sql.NullInt64
 	start := time.Now()
 	var err error
 	defer func() {
+		span.RecordError(err)
 		if err == sql.ErrNoRows {
 			err = nil
 		}
 		recordOpResult("revision_interval_sql", err, start)
 		recordTxResult("revision_interval_sql", err)
+		span.End()
 	}()
 
 	done, err := d.AdmissionControlPolicy.Admit(ctx, "revision_interval_sql")
@@ -511,21 +516,40 @@ func (d *Generic) GetCompactRevision(ctx context.Context) (int64, int64, error) 
 	if err == sql.ErrNoRows {
 		return 0, 0, nil
 	}
-
+	span.SetAttributes(attribute.Int64("compact", compact.Int64), attribute.Int64("target", target.Int64))
 	return compact.Int64, target.Int64, err
 }
 
 func (d *Generic) SetCompactRevision(ctx context.Context, revision int64) error {
+	setCompactRevCnt.Add(ctx, 1)
+	ctx, span := tracer.Start(ctx, "set_compact_revision")
+	defer span.End()
+	span.SetAttributes(attribute.Int64("revision", revision))
+
 	_, err := d.executePrepared(ctx, "update_compact_sql", d.UpdateCompactSQL, d.updateCompactSQLPrepared, revision)
+	span.RecordError(err)
 	return err
 }
 
 func (d *Generic) GetRevision(ctx context.Context, revision int64) (*sql.Rows, error) {
-	return d.queryPrepared(ctx, "get_revision_sql", d.GetRevisionSQL, d.getRevisionSQLPrepared, revision)
+	getRevisionCnt.Add(ctx, 1)
+	ctx, span := tracer.Start(ctx, "get_revision")
+	defer span.End()
+	span.SetAttributes(attribute.Int64("revision", revision))
+
+	result, err := d.queryPrepared(ctx, "get_revision_sql", d.GetRevisionSQL, d.getRevisionSQLPrepared, revision)
+	span.RecordError(err)
+	return result, err
 }
 
 func (d *Generic) DeleteRevision(ctx context.Context, revision int64) error {
+	deleteRevCnt.Add(ctx, 1)
+	ctx, span := tracer.Start(ctx, "delete_revision")
+	defer span.End()
+	span.SetAttributes(attribute.Int64("revision", revision))
+
 	_, err := d.executePrepared(ctx, "delete_sql", d.DeleteSQL, d.deleteSQLPrepared, revision)
+	span.RecordError(err)
 	return err
 }
 
@@ -562,20 +586,27 @@ func (d *Generic) List(ctx context.Context, prefix, startKey string, limit, revi
 }
 
 func (d *Generic) CurrentRevision(ctx context.Context) (int64, error) {
+	currentRevCnt.Add(ctx, 1)
+	ctx, span := tracer.Start(ctx, "current_revision")
+	defer span.End()
 	var id int64
 	var err error
 
 	done, err := d.AdmissionControlPolicy.Admit(ctx, "rev_sql")
 	if err != nil {
+		span.RecordError(err)
 		return 0, fmt.Errorf("denied: %w", err)
 	}
 
 	row := d.queryRow(ctx, "rev_sql", revSQL)
 	done()
 	err = row.Scan(&id)
+	span.RecordError(err)
 	if err == sql.ErrNoRows {
+		span.AddEvent("no rows")
 		return 0, nil
 	}
+	span.SetAttributes(attribute.Int64("id", id))
 	return id, err
 }
 

@@ -64,23 +64,12 @@ func (l *LimitedServer) update(ctx context.Context, rev int64, key string, value
 			attribute.Int64("revision", rev),
 			attribute.Bool("ok", ok),
 		)
-		if err == ErrKeyExists {
-			span.AddEvent("key exists")
-			rev, kv, err = l.backend.Get(ctx, key, "", 1, rev)
-			if err != nil {
-				span.RecordError(err)
-			}
-			span.AddEvent(fmt.Sprintf("got revision %d", rev))
-		} else {
-			ok = true
-		}
-		span.End()
 	} else {
 		rev, kv, ok, err = l.backend.Update(ctx, key, value, rev, lease)
-		span.RecordError(err)
 		span.SetAttributes(attribute.Bool("ok", ok))
 	}
 	if err != nil {
+		span.RecordError(err)
 		return nil, err
 	}
 

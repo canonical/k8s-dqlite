@@ -232,7 +232,7 @@ func (s *SQLLog) compactor(ctx context.Context, nextEnd int64) (int64, error) {
 			return nextEnd, fmt.Errorf("failed to record compact revision: %v", err)
 		}
 	}
-
+	span.SetAttributes(attribute.Int64("new-nextEnd", nextEnd), attribute.Int64("cursor-ended:", cursor))
 	return nextEnd, nil
 }
 
