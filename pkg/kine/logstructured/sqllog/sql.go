@@ -11,10 +11,29 @@ import (
 	"github.com/canonical/k8s-dqlite/pkg/kine/broadcaster"
 	"github.com/canonical/k8s-dqlite/pkg/kine/server"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
 
 const SupersededCount = 100
+
+const name = "sqllog"
+
+var (
+	tracer     = otel.Tracer(name)
+	meter      = otel.Meter(name)
+	compactCnt metric.Int64Counter
+)
+
+func init() {
+	var err error
+	compactCnt, err = meter.Int64Counter(fmt.Sprintf("%s.compact", name), metric.WithDescription("Number of compact requests"))
+	if err != nil {
+		logrus.WithError(err).Warning("Otel failed to create create counter")
+	}
+
+}
 
 type SQLLog struct {
 	d           Dialect
