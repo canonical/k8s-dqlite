@@ -518,7 +518,7 @@ func (d *Generic) executePrepared(ctx context.Context, txName, sql string, prepa
 
 func (d *Generic) GetCompactRevision(ctx context.Context) (int64, int64, error) {
 	getCompactRevCnt.Add(ctx, 1)
-	ctx, span := tracer.Start(ctx, "get_compact_revision")
+	ctx, span := tracer.Start(ctx, "generic.get_compact_revision")
 	var compact, target sql.NullInt64
 	start := time.Now()
 	var err error
@@ -561,7 +561,7 @@ func (d *Generic) GetCompactRevision(ctx context.Context) (int64, int64, error) 
 
 func (d *Generic) SetCompactRevision(ctx context.Context, revision int64) error {
 	setCompactRevCnt.Add(ctx, 1)
-	ctx, span := tracer.Start(ctx, "set_compact_revision")
+	ctx, span := tracer.Start(ctx, "generic.set_compact_revision")
 	defer span.End()
 	span.SetAttributes(attribute.Int64("revision", revision))
 
@@ -572,7 +572,7 @@ func (d *Generic) SetCompactRevision(ctx context.Context, revision int64) error 
 
 func (d *Generic) GetRevision(ctx context.Context, revision int64) (*sql.Rows, error) {
 	getRevisionCnt.Add(ctx, 1)
-	ctx, span := tracer.Start(ctx, "get_revision")
+	ctx, span := tracer.Start(ctx, "generic.get_revision")
 	defer span.End()
 	span.SetAttributes(attribute.Int64("revision", revision))
 
@@ -583,7 +583,7 @@ func (d *Generic) GetRevision(ctx context.Context, revision int64) (*sql.Rows, e
 
 func (d *Generic) DeleteRevision(ctx context.Context, revision int64) error {
 	deleteRevCnt.Add(ctx, 1)
-	ctx, span := tracer.Start(ctx, "delete_revision")
+	ctx, span := tracer.Start(ctx, "generic.delete_revision")
 	defer span.End()
 	span.SetAttributes(attribute.Int64("revision", revision))
 
@@ -626,7 +626,7 @@ func (d *Generic) List(ctx context.Context, prefix, startKey string, limit, revi
 
 func (d *Generic) CurrentRevision(ctx context.Context) (int64, error) {
 	currentRevCnt.Add(ctx, 1)
-	ctx, span := tracer.Start(ctx, "current_revision")
+	ctx, span := tracer.Start(ctx, "generic.current_revision")
 	defer span.End()
 	var id int64
 	var err error

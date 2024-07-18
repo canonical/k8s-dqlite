@@ -27,7 +27,7 @@ func init() {
 
 func (l *LimitedServer) list(ctx context.Context, r *etcdserverpb.RangeRequest) (*RangeResponse, error) {
 	listCnt.Add(ctx, 1)
-	ctx, span := tracer.Start(ctx, "list")
+	ctx, span := tracer.Start(ctx, "limited.list")
 	defer span.End()
 
 	span.SetAttributes(

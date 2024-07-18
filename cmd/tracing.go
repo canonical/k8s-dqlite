@@ -20,6 +20,7 @@ import (
 
 var (
 	otelEndpoint = "localhost:4317"
+	resourceName = "k8s-dqlite"
 )
 
 // setupOTelSDK bootstraps the OpenTelemetry pipeline.
@@ -43,7 +44,7 @@ func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 
 	res, err := resource.New(ctx,
 		resource.WithAttributes(
-			semconv.ServiceNameKey.String("k8s-dqlite"),
+			semconv.ServiceNameKey.String(resourceName),
 		),
 	)
 	if err != nil {
@@ -96,7 +97,6 @@ func newExporter(ctx context.Context) (trace.SpanExporter, error) {
 
 func initConn() (*grpc.ClientConn, error) {
 	// It connects the OpenTelemetry Collector through local gRPC connection.
-	// You may replace `localhost:4317` with your endpoint.
 	conn, err := grpc.NewClient(otelEndpoint,
 		// Note the use of insecure transport here. TLS is recommended in production.
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
