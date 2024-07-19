@@ -66,7 +66,7 @@ var (
 			if rootCmdOpts.otel {
 				go func() {
 					var err error
-					logrus.WithField("address", rootCmdOpts.metricsAddress).Print("Enable otel endpoint")
+					logrus.WithField("address", rootCmdOpts.otelAddress).Print("Enable otel endpoint")
 					otelShutdown, err = setupOTelSDK(cmd.Context(), rootCmdOpts.otelAddress)
 					if err != nil {
 						logrus.WithError(err).Warning("Failed to setup OpenTelemetry SDK")
