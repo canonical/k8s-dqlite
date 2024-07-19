@@ -55,6 +55,7 @@ func setupOTelSDK(ctx context.Context, otelEndpoint string) (shutdown func(conte
 
 	meterProvider, err := newMeterProvider(res)
 	if err != nil {
+		tracerProvider.Shutdown(ctx)
 		logrus.WithError(err).Warning("Otel failed to create meter provider")
 		return nil, err
 	}

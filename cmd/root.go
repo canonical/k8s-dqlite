@@ -61,19 +61,16 @@ var (
 				}()
 			}
 
+			var otelShutdown func(context.Context) error
+
 			if rootCmdOpts.otel {
 				go func() {
-					logrus.WithField("address", rootCmdOpts.otelAddress).Print("Enable otel endpoint")
-					otelShutdown, err := setupOTelSDK(cmd.Context(), rootCmdOpts.otelAddress)
+					var err error
+					logrus.WithField("address", rootCmdOpts.metricsAddress).Print("Enable otel endpoint")
+					otelShutdown, err = setupOTelSDK(cmd.Context(), rootCmdOpts.otelAddress)
 					if err != nil {
 						logrus.WithError(err).Warning("Failed to setup OpenTelemetry SDK")
 					}
-					defer func() {
-						err = errors.Join(err, otelShutdown(cmd.Context()))
-						if err != nil {
-							logrus.WithError(err).Warning("Failed to shutdown OpenTelemetry SDK")
-						}
-					}()
 				}()
 			}
 
@@ -128,6 +125,12 @@ var (
 
 			if err := instance.Shutdown(stopCtx); err != nil {
 				logrus.WithError(err).Fatal("Failed to shutdown server")
+			}
+			if rootCmdOpts.metrics && otelShutdown != nil {
+				err = errors.Join(err, otelShutdown(stopCtx))
+				if err != nil {
+					logrus.WithError(err).Warning("Failed to shutdown OpenTelemetry SDK")
+				}
 			}
 		},
 	}
