@@ -18,7 +18,7 @@ func TestGet(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			kine := newKine(ctx, t, &kineOptions{backendType: backendType})
+			kine := newKineServer(ctx, t, &kineOptions{backendType: backendType})
 
 			t.Run("FailNotFound", func(t *testing.T) {
 				g := NewWithT(t)
@@ -122,19 +122,21 @@ func BenchmarkGet(b *testing.B) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			kine := newKine(ctx, b, &kineOptions{
+			kine := newKineServer(ctx, b, &kineOptions{
 				backendType: backendType,
 				setup: func(db *sql.DB) error {
 					return setupScenario(ctx, db, "testKey", b.N, b.N, 0)
 				},
 			})
 
+			kine.ResetMetrics()
 			b.StartTimer()
 			for i := 0; i < b.N; i++ {
 				resp, err := kine.client.Get(ctx, fmt.Sprintf("testKey/%d", i+1), clientv3.WithRange(""))
 				g.Expect(err).To(BeNil())
 				g.Expect(resp.Kvs).To(HaveLen(1))
 			}
+			kine.ReportMetrics(b)
 		})
 	}
 }

@@ -19,7 +19,7 @@ func TestCompaction(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
 
-				kine := newKine(ctx, t, &kineOptions{
+				kine := newKineServer(ctx, t, &kineOptions{
 					backendType: backendType,
 					setup: func(db *sql.DB) error {
 						return setupScenario(ctx, db, "testkey", 2, 1, 1)
@@ -45,7 +45,7 @@ func TestCompaction(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
 
-				kine := newKine(ctx, t, &kineOptions{
+				kine := newKineServer(ctx, t, &kineOptions{
 					backendType: backendType,
 					setup: func(db *sql.DB) error {
 						return setupScenario(ctx, db, "testkey", 10_000, 500, 500)
@@ -75,14 +75,14 @@ func BenchmarkCompaction(b *testing.B) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			kine := newKine(ctx, b, &kineOptions{
+			kine := newKineServer(ctx, b, &kineOptions{
 				backendType: backendType,
 				setup: func(db *sql.DB) error {
-					// Make sure there's enough rows deleted to have
+					// Make sure there are enough rows deleted to have
 					// b.N rows to compact.
 					delCount := b.N + sqllog.SupersededCount
 
-					// Also, make sure there's some uncollectable data, so
+					// Also, make sure there are uncollectable data, so
 					// that the deleted rows are about 5% of the total.
 					addCount := delCount * 20
 
@@ -90,10 +90,12 @@ func BenchmarkCompaction(b *testing.B) {
 				},
 			})
 
+			kine.ResetMetrics()
 			b.StartTimer()
 			if err := kine.backend.DoCompact(ctx); err != nil {
 				b.Fatal(err)
 			}
+			kine.ReportMetrics(b)
 		})
 	}
 }

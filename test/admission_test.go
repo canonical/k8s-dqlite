@@ -25,7 +25,7 @@ func TestAdmissionControl(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			kine := newKine(ctx, t, &kineOptions{
+			kine := newKineServer(ctx, t, &kineOptions{
 				backendType: backendType,
 				endpointParameters: []string{
 					"admission-control-policy=limit",

@@ -23,7 +23,7 @@ func TestLease(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			kine := newKine(ctx, t, &kineOptions{backendType: backendType})
+			kine := newKineServer(ctx, t, &kineOptions{backendType: backendType})
 
 			t.Run("LeaseGrant", func(t *testing.T) {
 				g := NewWithT(t)
@@ -90,8 +90,9 @@ func BenchmarkLease(b *testing.B) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			kine := newKine(ctx, b, &kineOptions{backendType: backendType})
+			kine := newKineServer(ctx, b, &kineOptions{backendType: backendType})
 
+			kine.ResetMetrics()
 			b.StartTimer()
 			for i := 0; i < b.N; i++ {
 				var ttl int64 = int64(i + 1)
@@ -101,6 +102,7 @@ func BenchmarkLease(b *testing.B) {
 				g.Expect(resp.ID).To(Equal(clientv3.LeaseID(ttl)))
 				g.Expect(resp.TTL).To(Equal(ttl))
 			}
+			kine.ReportMetrics(b)
 		})
 	}
 }

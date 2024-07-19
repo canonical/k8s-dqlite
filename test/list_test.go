@@ -20,7 +20,7 @@ func TestList(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			kine := newKine(ctx, t, &kineOptions{backendType: backendType})
+			kine := newKineServer(ctx, t, &kineOptions{backendType: backendType})
 
 			keys := []string{"/key/5", "/key/4", "/key/3", "/key/2", "/key/1"}
 			for _, key := range keys {
@@ -188,13 +188,14 @@ func BenchmarkList(b *testing.B) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			kine := newKine(ctx, b, &kineOptions{
+			kine := newKineServer(ctx, b, &kineOptions{
 				backendType: backendType,
 				setup: func(db *sql.DB) error {
 					return setupScenario(ctx, db, "key", b.N*2, b.N, b.N)
 				},
 			})
 
+			kine.ResetMetrics()
 			b.StartTimer()
 			for i := 0; i < b.N; i++ {
 				resp, err := kine.client.Get(ctx, "key/", clientv3.WithPrefix())
@@ -202,6 +203,7 @@ func BenchmarkList(b *testing.B) {
 				g.Expect(err).To(BeNil())
 				g.Expect(resp.Kvs).To(HaveLen(b.N))
 			}
+			kine.ReportMetrics(b)
 		})
 	}
 }
