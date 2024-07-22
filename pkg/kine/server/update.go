@@ -34,7 +34,10 @@ func (l *LimitedServer) update(ctx context.Context, rev int64, key string, value
 	updateCnt.Add(ctx, 1)
 
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.update", otelName))
-	defer span.End()
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 	span.SetAttributes(
 		attribute.String("key", key),
 		attribute.Int64("lease", lease),
@@ -54,7 +57,6 @@ func (l *LimitedServer) update(ctx context.Context, rev int64, key string, value
 		span.SetAttributes(attribute.Bool("ok", ok))
 	}
 	if err != nil {
-		span.RecordError(err)
 		return nil, err
 	}
 

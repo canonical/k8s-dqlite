@@ -30,9 +30,13 @@ func isDelete(txn *etcdserverpb.TxnRequest) (int64, string, bool) {
 }
 
 func (l *LimitedServer) delete(ctx context.Context, key string, revision int64) (*etcdserverpb.TxnResponse, error) {
+	var err error
 	deleteCnt.Add(ctx, 1)
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.delete", otelName))
-	defer span.End()
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 	span.SetAttributes(
 		attribute.String("key", key),
 		attribute.Int64("revision", revision),
@@ -40,7 +44,6 @@ func (l *LimitedServer) delete(ctx context.Context, key string, revision int64) 
 
 	rev, kv, ok, err := l.backend.Delete(ctx, key, revision)
 	if err != nil {
-		span.RecordError(err)
 		return nil, err
 	}
 	span.SetAttributes(attribute.Bool("ok", ok))

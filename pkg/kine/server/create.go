@@ -22,9 +22,13 @@ func isCreate(txn *etcdserverpb.TxnRequest) *etcdserverpb.PutRequest {
 }
 
 func (l *LimitedServer) create(ctx context.Context, put *etcdserverpb.PutRequest, txn *etcdserverpb.TxnRequest) (*etcdserverpb.TxnResponse, error) {
+	var err error
 	createCnt.Add(ctx, 1)
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.create", otelName))
-	defer span.End()
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 	span.SetAttributes(
 		attribute.String("key", string(put.Key)),
 		attribute.Int64("lease", put.Lease),
@@ -47,7 +51,6 @@ func (l *LimitedServer) create(ctx context.Context, put *etcdserverpb.PutRequest
 			Succeeded: false,
 		}, nil
 	} else if err != nil {
-		defer span.RecordError(err)
 		return nil, err
 	}
 

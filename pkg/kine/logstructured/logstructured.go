@@ -94,8 +94,12 @@ func (l *LogStructured) Get(ctx context.Context, key, rangeEnd string, limit, re
 }
 
 func (l *LogStructured) get(ctx context.Context, key, rangeEnd string, limit, revision int64, includeDeletes bool) (int64, *server.Event, error) {
+	var err error
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.get", otelName))
-	defer span.End()
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 	span.SetAttributes(
 		attribute.String("key", key),
 		attribute.String("rangeEnd", rangeEnd),
@@ -104,7 +108,6 @@ func (l *LogStructured) get(ctx context.Context, key, rangeEnd string, limit, re
 		attribute.Bool("includeDeletes", includeDeletes),
 	)
 	rev, events, err := l.log.List(ctx, key, rangeEnd, limit, revision, includeDeletes)
-	span.RecordError(err)
 	if err == server.ErrCompacted {
 		span.AddEvent("ignoring compacted error")
 		// ignore compacted when getting by revision

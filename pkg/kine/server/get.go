@@ -9,9 +9,13 @@ import (
 )
 
 func (l *LimitedServer) get(ctx context.Context, r *etcdserverpb.RangeRequest) (*RangeResponse, error) {
+	var err error
 	getCnt.Add(ctx, 1)
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.get", otelName))
-	defer span.End()
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 
 	span.SetAttributes(
 		attribute.String("key", string(r.Key)),
@@ -21,13 +25,11 @@ func (l *LimitedServer) get(ctx context.Context, r *etcdserverpb.RangeRequest) (
 	)
 	if r.Limit != 0 && len(r.RangeEnd) != 0 {
 		err := fmt.Errorf("invalid combination of rangeEnd and limit, limit should be 0 got %d", r.Limit)
-		span.RecordError(err)
 		return nil, err
 	}
 
 	rev, kv, err := l.backend.Get(ctx, string(r.Key), string(r.RangeEnd), r.Limit, r.Revision)
 	if err != nil {
-		span.RecordError(err)
 		return nil, err
 	}
 

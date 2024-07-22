@@ -526,10 +526,10 @@ func (d *Generic) GetCompactRevision(ctx context.Context) (int64, int64, error) 
 	start := time.Now()
 	var err error
 	defer func() {
-		span.RecordError(err)
 		if err == sql.ErrNoRows {
 			err = nil
 		}
+		span.RecordError(err)
 		recordOpResult("revision_interval_sql", err, start)
 		recordTxResult("revision_interval_sql", err)
 		span.End()
@@ -563,35 +563,44 @@ func (d *Generic) GetCompactRevision(ctx context.Context) (int64, int64, error) 
 }
 
 func (d *Generic) SetCompactRevision(ctx context.Context, revision int64) error {
+	var err error
 	setCompactRevCnt.Add(ctx, 1)
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.set_compact_revision", otelName))
-	defer span.End()
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 	span.SetAttributes(attribute.Int64("revision", revision))
 
-	_, err := d.executePrepared(ctx, "update_compact_sql", d.UpdateCompactSQL, d.updateCompactSQLPrepared, revision)
-	span.RecordError(err)
+	_, err = d.executePrepared(ctx, "update_compact_sql", d.UpdateCompactSQL, d.updateCompactSQLPrepared, revision)
 	return err
 }
 
 func (d *Generic) GetRevision(ctx context.Context, revision int64) (*sql.Rows, error) {
+	var err error
 	getRevisionCnt.Add(ctx, 1)
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.get_revision", otelName))
-	defer span.End()
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 	span.SetAttributes(attribute.Int64("revision", revision))
 
 	result, err := d.queryPrepared(ctx, "get_revision_sql", d.GetRevisionSQL, d.getRevisionSQLPrepared, revision)
-	span.RecordError(err)
 	return result, err
 }
 
 func (d *Generic) DeleteRevision(ctx context.Context, revision int64) error {
+	var err error
 	deleteRevCnt.Add(ctx, 1)
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.delete_revision", otelName))
-	defer span.End()
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 	span.SetAttributes(attribute.Int64("revision", revision))
 
-	_, err := d.executePrepared(ctx, "delete_sql", d.DeleteSQL, d.deleteSQLPrepared, revision)
-	span.RecordError(err)
+	_, err = d.executePrepared(ctx, "delete_sql", d.DeleteSQL, d.deleteSQLPrepared, revision)
 	return err
 }
 
@@ -628,22 +637,24 @@ func (d *Generic) List(ctx context.Context, prefix, startKey string, limit, revi
 }
 
 func (d *Generic) CurrentRevision(ctx context.Context) (int64, error) {
-	currentRevCnt.Add(ctx, 1)
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.current_revision", otelName))
-	defer span.End()
 	var id int64
 	var err error
 
+	currentRevCnt.Add(ctx, 1)
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.current_revision", otelName))
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+
 	done, err := d.AdmissionControlPolicy.Admit(ctx, "rev_sql")
 	if err != nil {
-		span.RecordError(err)
 		return 0, fmt.Errorf("denied: %w", err)
 	}
 
 	row := d.queryRow(ctx, "rev_sql", revSQL)
 	done()
 	err = row.Scan(&id)
-	span.RecordError(err)
 	if err == sql.ErrNoRows {
 		span.AddEvent("no rows")
 		return 0, nil

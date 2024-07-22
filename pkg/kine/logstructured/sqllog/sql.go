@@ -148,21 +148,23 @@ func (s *SQLLog) DoCompact(ctx context.Context) error {
 }
 
 func (s *SQLLog) compactor(ctx context.Context, nextEnd int64) (int64, error) {
+	var err error
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.compactor", otelName))
-	defer span.End()
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 	span.SetAttributes(attribute.Int64("nextEnd", nextEnd))
 
 	currentRev, err := s.d.CurrentRevision(ctx)
 	span.SetAttributes(attribute.Int64("currentRev", currentRev))
 	if err != nil {
-		span.RecordError(err)
 		logrus.Errorf("failed to get current revision: %v", err)
 		return nextEnd, fmt.Errorf("failed to get current revision: %v", err)
 	}
 
 	cursor, _, err := s.d.GetCompactRevision(ctx)
 	if err != nil {
-		span.RecordError(err)
 		logrus.Errorf("failed to get compact revision: %v", err)
 		return nextEnd, fmt.Errorf("failed to get compact revision: %v", err)
 	}
@@ -185,14 +187,12 @@ func (s *SQLLog) compactor(ctx context.Context, nextEnd int64) (int64, error) {
 	for ; cursor <= end; cursor++ {
 		rows, err := s.d.GetRevision(ctx, cursor)
 		if err != nil {
-			span.RecordError(err)
 			logrus.Errorf("failed to get revision %d: %v", cursor, err)
 			return nextEnd, fmt.Errorf("failed to get revision %d: %v", cursor, err)
 		}
 
 		events, err := RowsToEvents(rows)
 		if err != nil {
-			span.RecordError(err)
 			logrus.Errorf("failed to convert to events: %v", err)
 			return nextEnd, fmt.Errorf("failed to convert to events: %v", err)
 		}
@@ -213,7 +213,6 @@ func (s *SQLLog) compactor(ctx context.Context, nextEnd int64) (int64, error) {
 		if event.PrevKV != nil && event.PrevKV.ModRevision != 0 {
 			if savedCursor != cursor {
 				if err := s.d.SetCompactRevision(ctx, cursor); err != nil {
-					span.RecordError(err)
 					span.AddEvent(fmt.Sprintf("failed to record compact revision: %v", err))
 					logrus.Errorf("failed to record compact revision: %v", err)
 					return nextEnd, fmt.Errorf("failed to record compact revision: %v", err)
@@ -223,7 +222,6 @@ func (s *SQLLog) compactor(ctx context.Context, nextEnd int64) (int64, error) {
 			}
 
 			if err := s.d.DeleteRevision(ctx, event.PrevKV.ModRevision); err != nil {
-				span.RecordError(err)
 				span.AddEvent(fmt.Sprintf("failed to delete revision %d", event.PrevKV.ModRevision))
 				logrus.Errorf("failed to delete revision %d: %v", event.PrevKV.ModRevision, err)
 				return nextEnd, fmt.Errorf("failed to delete revision %d: %v", event.PrevKV.ModRevision, err)
@@ -233,7 +231,6 @@ func (s *SQLLog) compactor(ctx context.Context, nextEnd int64) (int64, error) {
 		if event.Delete {
 			if !setRev && savedCursor != cursor {
 				if err := s.d.SetCompactRevision(ctx, cursor); err != nil {
-					span.RecordError(err)
 					logrus.Errorf("failed to record compact revision: %v", err)
 					return nextEnd, fmt.Errorf("failed to record compact revision: %v", err)
 				}
@@ -241,7 +238,6 @@ func (s *SQLLog) compactor(ctx context.Context, nextEnd int64) (int64, error) {
 			}
 
 			if err := s.d.DeleteRevision(ctx, cursor); err != nil {
-				span.RecordError(err)
 				logrus.Errorf("failed to delete current revision %d: %v", cursor, err)
 				return nextEnd, fmt.Errorf("failed to delete current revision %d: %v", cursor, err)
 			}
@@ -250,7 +246,6 @@ func (s *SQLLog) compactor(ctx context.Context, nextEnd int64) (int64, error) {
 
 	if savedCursor != cursor {
 		if err := s.d.SetCompactRevision(ctx, cursor); err != nil {
-			span.RecordError(err)
 			logrus.Errorf("failed to record compact revision: %v", err)
 			return nextEnd, fmt.Errorf("failed to record compact revision: %v", err)
 		}

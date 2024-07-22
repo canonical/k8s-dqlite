@@ -12,9 +12,13 @@ import (
 )
 
 func (l *LimitedServer) list(ctx context.Context, r *etcdserverpb.RangeRequest) (*RangeResponse, error) {
+	var err error
 	listCnt.Add(ctx, 1)
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.list", otelName))
-	defer span.End()
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 
 	span.SetAttributes(
 		attribute.String("key", string(r.Key)),
@@ -39,7 +43,6 @@ func (l *LimitedServer) list(ctx context.Context, r *etcdserverpb.RangeRequest) 
 	if r.CountOnly {
 		rev, count, err := l.backend.Count(ctx, prefix, start, revision)
 		if err != nil {
-			span.RecordError(err)
 			return nil, err
 		}
 		span.SetAttributes(attribute.Int64("count", count))
@@ -59,7 +62,6 @@ func (l *LimitedServer) list(ctx context.Context, r *etcdserverpb.RangeRequest) 
 
 	rev, kvs, err := l.backend.List(ctx, prefix, start, limit, revision)
 	if err != nil {
-		span.RecordError(err)
 		return nil, err
 	}
 
@@ -81,7 +83,6 @@ func (l *LimitedServer) list(ctx context.Context, r *etcdserverpb.RangeRequest) 
 		// count the actual number of results if there are more items in the db.
 		rev, resp.Count, err = l.backend.Count(ctx, prefix, start, revision)
 		if err != nil {
-			span.RecordError(err)
 			return nil, err
 		}
 		span.SetAttributes(attribute.Int64("count", resp.Count))
