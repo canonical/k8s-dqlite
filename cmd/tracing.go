@@ -41,6 +41,10 @@ func setupOTelSDK(ctx context.Context, otelEndpoint string) (shutdown func(conte
 
 	traceExporter, err := newTraceExporter(ctx, conn)
 	if err != nil {
+		connErr := conn.Close()
+		if connErr != nil {
+			logrus.WithError(connErr).Warning("Failed to shut down otel gRPC connection")
+		}
 		return nil, fmt.Errorf("failed to create trace exporter: %w", err)
 	}
 
