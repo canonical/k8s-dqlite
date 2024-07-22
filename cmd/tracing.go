@@ -27,7 +27,6 @@ var (
 func setupOTelSDK(ctx context.Context, otelEndpoint string) (shutdown func(context.Context) error, err error) {
 	conn, err := initConn(otelEndpoint)
 	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create gRPC connection")
 		return nil, fmt.Errorf("failed to create gRPC connection to collector: %w", err)
 	}
 
@@ -42,22 +41,27 @@ func setupOTelSDK(ctx context.Context, otelEndpoint string) (shutdown func(conte
 
 	traceExporter, err := newTraceExporter(ctx, conn)
 	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create trace exporter")
-		return nil, err
+		return nil, fmt.Errorf("failed to create trace exporter: %w", err)
 	}
 
-	tracerProvider, err := newTraceProvider(traceExporter, res)
-	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create trace provider")
-		return nil, err
-	}
+	tracerProvider := newTraceProvider(traceExporter, res)
 	otel.SetTracerProvider(tracerProvider)
 
 	meterProvider, err := newMeterProvider(res)
 	if err != nil {
-		tracerProvider.Shutdown(ctx)
-		logrus.WithError(err).Warning("Otel failed to create meter provider")
-		return nil, err
+		var shutdownErrs error
+		shutdownErr := tracerProvider.Shutdown(ctx)
+		if shutdownErr != nil {
+			shutdownErrs = errors.Join(shutdownErrs, shutdownErr)
+		}
+		shutdownErr = conn.Close()
+		if shutdownErr != nil {
+			shutdownErrs = errors.Join(shutdownErrs, shutdownErr)
+		}
+		if shutdownErrs != nil {
+			logrus.WithError(shutdownErrs).Warning("Failed to shutdown OpenTelemetry SDK")
+			return nil, fmt.Errorf("failed to create meter provider: %w", err)
+		}
 	}
 	otel.SetMeterProvider(meterProvider)
 
@@ -77,7 +81,7 @@ func setupOTelSDK(ctx context.Context, otelEndpoint string) (shutdown func(conte
 		}
 		return shutdownErrs
 	}
-	return
+	return shutdown, nil
 }
 
 func initConn(otelEndpoint string) (*grpc.ClientConn, error) {
@@ -101,14 +105,14 @@ func newTraceExporter(ctx context.Context, conn *grpc.ClientConn) (trace.SpanExp
 	return exporter, nil
 }
 
-func newTraceProvider(traceExporter trace.SpanExporter, res *resource.Resource) (*trace.TracerProvider, error) {
+func newTraceProvider(traceExporter trace.SpanExporter, res *resource.Resource) *trace.TracerProvider {
 	traceProvider := trace.NewTracerProvider(
 		trace.WithBatcher(traceExporter,
 			trace.WithBatchTimeout(time.Second),
 		),
 		trace.WithResource(res),
 	)
-	return traceProvider, nil
+	return traceProvider
 }
 
 func newMeterProvider(res *resource.Resource) (*metric.MeterProvider, error) {

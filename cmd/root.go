@@ -27,9 +27,9 @@ var (
 		diskMode               bool
 		clientSessionCacheSize uint
 		minTLSVersion          string
-		otel                   bool
 		metrics                bool
 		metricsAddress         string
+		otel                   bool
 		otelAddress            string
 
 		watchAvailableStorageInterval time.Duration
@@ -64,14 +64,12 @@ var (
 			var otelShutdown func(context.Context) error
 
 			if rootCmdOpts.otel {
-				go func() {
-					var err error
-					logrus.WithField("address", rootCmdOpts.otelAddress).Print("Enable otel endpoint")
-					otelShutdown, err = setupOTelSDK(cmd.Context(), rootCmdOpts.otelAddress)
-					if err != nil {
-						logrus.WithError(err).Warning("Failed to setup OpenTelemetry SDK")
-					}
-				}()
+				var err error
+				logrus.WithField("address", rootCmdOpts.otelAddress).Print("Enable otel endpoint")
+				otelShutdown, err = setupOTelSDK(cmd.Context(), rootCmdOpts.otelAddress)
+				if err != nil {
+					logrus.WithError(err).Warning("Failed to setup OpenTelemetry SDK")
+				}
 			}
 
 			if rootCmdOpts.metrics {
@@ -126,7 +124,7 @@ var (
 			if err := instance.Shutdown(stopCtx); err != nil {
 				logrus.WithError(err).Fatal("Failed to shutdown server")
 			}
-			if rootCmdOpts.metrics && otelShutdown != nil {
+			if rootCmdOpts.otel && otelShutdown != nil {
 				err = errors.Join(err, otelShutdown(stopCtx))
 				if err != nil {
 					logrus.WithError(err).Warning("Failed to shutdown OpenTelemetry SDK")
