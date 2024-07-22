@@ -157,11 +157,12 @@ func migrate(ctx context.Context, txn *sql.Tx) error {
 			return err
 		}
 		fallthrough
+	case 1:
+		if err := applySchemaV2(ctx, txn); err != nil {
+			return err
+		}
 	case databaseSchemaVersion:
 		break
-	default:
-		// FIXME this needs better handling
-		return errors.Errorf("unsupported version: %d", userVersion)
 	}
 
 	setUserVersionSQL := fmt.Sprintf(`PRAGMA user_version = %d`, databaseSchemaVersion)

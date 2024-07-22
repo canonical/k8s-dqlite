@@ -11,7 +11,7 @@ import (
 // present anymore, and unexpired rows of the key_value table with
 // the latest revisions must have been recorded in the Kine table
 // already
-const databaseSchemaVersion = 1
+const databaseSchemaVersion = 2
 
 // applySchemaV1 moves the schema from version 0 to version 1,
 // taking into account the possible unversioned schema from
@@ -55,6 +55,19 @@ CREATE TABLE kine
 	}
 
 	if _, err := txn.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS kine_name_prev_revision_uindex ON kine (prev_revision, name)`); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// applySchemaV2 moves the schema from version 1 to version 2
+func applySchemaV2(ctx context.Context, txn *sql.Tx) error {
+	if _, err := txn.ExecContext(ctx, `DROP INDEX kine_name_index`); err != nil {
+		return err
+	}
+
+	if _, err := txn.ExecContext(ctx, `CREATE UNIQUE INDEX kine_name_index ON kine(name, id, deleted)`); err != nil {
 		return err
 	}
 
