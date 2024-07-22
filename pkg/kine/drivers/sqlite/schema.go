@@ -11,7 +11,11 @@ import (
 // present anymore, and unexpired rows of the key_value table with
 // the latest revisions must have been recorded in the Kine table
 // already
-const databaseSchemaVersion = 1
+
+const (
+	databaseSchemaMajorVersion = 1
+	databaseSchemaMinorVersion = 0
+)
 
 // applySchemaV1 moves the schema from version 0 to version 1,
 // taking into account the possible unversioned schema from
