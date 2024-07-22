@@ -11,9 +11,33 @@ import (
 	"github.com/canonical/k8s-dqlite/pkg/kine/broadcaster"
 	"github.com/canonical/k8s-dqlite/pkg/kine/server"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 )
 
-const SupersededCount = 100
+const (
+	SupersededCount = 100
+	otelName        = "sqllog"
+)
+
+var (
+	otelTracer trace.Tracer
+	otelMeter  metric.Meter
+	compactCnt metric.Int64Counter
+)
+
+func init() {
+	var err error
+	otelTracer = otel.Tracer(otelName)
+	otelMeter = otel.Meter(otelName)
+
+	compactCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.compact", otelName), metric.WithDescription("Number of compact requests"))
+	if err != nil {
+		logrus.WithError(err).Warning("Otel failed to create create counter")
+	}
+}
 
 type SQLLog struct {
 	d           Dialect
@@ -124,7 +148,16 @@ func (s *SQLLog) DoCompact(ctx context.Context) error {
 }
 
 func (s *SQLLog) compactor(ctx context.Context, nextEnd int64) (int64, error) {
+	var err error
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.compactor", otelName))
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+	span.SetAttributes(attribute.Int64("nextEnd", nextEnd))
+
 	currentRev, err := s.d.CurrentRevision(ctx)
+	span.SetAttributes(attribute.Int64("currentRev", currentRev))
 	if err != nil {
 		logrus.Errorf("failed to get current revision: %v", err)
 		return nextEnd, fmt.Errorf("failed to get current revision: %v", err)
@@ -135,6 +168,7 @@ func (s *SQLLog) compactor(ctx context.Context, nextEnd int64) (int64, error) {
 		logrus.Errorf("failed to get compact revision: %v", err)
 		return nextEnd, fmt.Errorf("failed to get compact revision: %v", err)
 	}
+	span.SetAttributes(attribute.Int64("cursor", cursor))
 
 	end := nextEnd
 	nextEnd = currentRev
@@ -148,6 +182,8 @@ func (s *SQLLog) compactor(ctx context.Context, nextEnd int64) (int64, error) {
 	savedCursor := cursor
 	// Purposefully start at the current and redo the current as
 	// it could have failed before actually compacting
+	compactCnt.Add(ctx, 1)
+	span.AddEvent(fmt.Sprintf("start compaction from %d to %d", cursor, end))
 	for ; cursor <= end; cursor++ {
 		rows, err := s.d.GetRevision(ctx, cursor)
 		if err != nil {
@@ -168,6 +204,7 @@ func (s *SQLLog) compactor(ctx context.Context, nextEnd int64) (int64, error) {
 		event := events[0]
 
 		if event.KV.Key == "compact_rev_key" {
+			span.AddEvent("skip compact_rev_key")
 			// don't compact the compact key
 			continue
 		}
@@ -176,6 +213,7 @@ func (s *SQLLog) compactor(ctx context.Context, nextEnd int64) (int64, error) {
 		if event.PrevKV != nil && event.PrevKV.ModRevision != 0 {
 			if savedCursor != cursor {
 				if err := s.d.SetCompactRevision(ctx, cursor); err != nil {
+					span.AddEvent(fmt.Sprintf("failed to record compact revision: %v", err))
 					logrus.Errorf("failed to record compact revision: %v", err)
 					return nextEnd, fmt.Errorf("failed to record compact revision: %v", err)
 				}
@@ -184,6 +222,7 @@ func (s *SQLLog) compactor(ctx context.Context, nextEnd int64) (int64, error) {
 			}
 
 			if err := s.d.DeleteRevision(ctx, event.PrevKV.ModRevision); err != nil {
+				span.AddEvent(fmt.Sprintf("failed to delete revision %d", event.PrevKV.ModRevision))
 				logrus.Errorf("failed to delete revision %d: %v", event.PrevKV.ModRevision, err)
 				return nextEnd, fmt.Errorf("failed to delete revision %d: %v", event.PrevKV.ModRevision, err)
 			}
@@ -211,13 +250,12 @@ func (s *SQLLog) compactor(ctx context.Context, nextEnd int64) (int64, error) {
 			return nextEnd, fmt.Errorf("failed to record compact revision: %v", err)
 		}
 	}
-
+	span.SetAttributes(attribute.Int64("new-nextEnd", nextEnd), attribute.Int64("cursor-ended:", cursor))
 	return nextEnd, nil
 }
 
 func (s *SQLLog) compact() {
 	var nextEnd int64
-
 	t := time.NewTicker(s.d.GetCompactInterval())
 	nextEnd, _ = s.d.CurrentRevision(s.ctx)
 

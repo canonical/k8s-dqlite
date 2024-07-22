@@ -13,7 +13,50 @@ import (
 	"github.com/Rican7/retry/jitter"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 )
+
+const otelName = "generic"
+
+var (
+	otelTracer       trace.Tracer
+	otelMeter        metric.Meter
+	setCompactRevCnt metric.Int64Counter
+	getRevisionCnt   metric.Int64Counter
+	deleteRevCnt     metric.Int64Counter
+	currentRevCnt    metric.Int64Counter
+	getCompactRevCnt metric.Int64Counter
+)
+
+func init() {
+	var err error
+	otelTracer = otel.Tracer(otelName)
+	otelMeter = otel.Meter(otelName)
+	setCompactRevCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.compact", otelName), metric.WithDescription("Number of compact requests"))
+	if err != nil {
+		logrus.WithError(err).Warning("Otel failed to create create counter")
+	}
+	getRevisionCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.get_revision", otelName), metric.WithDescription("Number of get revision requests"))
+	if err != nil {
+		logrus.WithError(err).Warning("Otel failed to create create counter")
+	}
+	deleteRevCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.delete_revision", otelName), metric.WithDescription("Number of delete revision requests"))
+	if err != nil {
+		logrus.WithError(err).Warning("Otel failed to create create counter")
+	}
+	currentRevCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.current_revision", otelName), metric.WithDescription("Current revision"))
+	if err != nil {
+		logrus.WithError(err).Warning("Otel failed to create create counter")
+	}
+	getCompactRevCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.get_compact_revision", otelName), metric.WithDescription("Get compact revision"))
+	if err != nil {
+		logrus.WithError(err).Warning("Otel failed to create create counter")
+	}
+
+}
 
 var (
 	columns = "kv.id as theid, kv.name, kv.created, kv.deleted, kv.create_revision, kv.prev_revision, kv.lease, kv.value, kv.old_value"
@@ -477,6 +520,8 @@ func (d *Generic) executePrepared(ctx context.Context, txName, sql string, prepa
 }
 
 func (d *Generic) GetCompactRevision(ctx context.Context) (int64, int64, error) {
+	getCompactRevCnt.Add(ctx, 1)
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.get_compact_revision", otelName))
 	var compact, target sql.NullInt64
 	start := time.Now()
 	var err error
@@ -484,8 +529,10 @@ func (d *Generic) GetCompactRevision(ctx context.Context) (int64, int64, error) 
 		if err == sql.ErrNoRows {
 			err = nil
 		}
+		span.RecordError(err)
 		recordOpResult("revision_interval_sql", err, start)
 		recordTxResult("revision_interval_sql", err)
+		span.End()
 	}()
 
 	done, err := d.AdmissionControlPolicy.Admit(ctx, "revision_interval_sql")
@@ -511,21 +558,49 @@ func (d *Generic) GetCompactRevision(ctx context.Context) (int64, int64, error) 
 	if err == sql.ErrNoRows {
 		return 0, 0, nil
 	}
-
+	span.SetAttributes(attribute.Int64("compact", compact.Int64), attribute.Int64("target", target.Int64))
 	return compact.Int64, target.Int64, err
 }
 
 func (d *Generic) SetCompactRevision(ctx context.Context, revision int64) error {
-	_, err := d.executePrepared(ctx, "update_compact_sql", d.UpdateCompactSQL, d.updateCompactSQLPrepared, revision)
+	var err error
+	setCompactRevCnt.Add(ctx, 1)
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.set_compact_revision", otelName))
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+	span.SetAttributes(attribute.Int64("revision", revision))
+
+	_, err = d.executePrepared(ctx, "update_compact_sql", d.UpdateCompactSQL, d.updateCompactSQLPrepared, revision)
 	return err
 }
 
 func (d *Generic) GetRevision(ctx context.Context, revision int64) (*sql.Rows, error) {
-	return d.queryPrepared(ctx, "get_revision_sql", d.GetRevisionSQL, d.getRevisionSQLPrepared, revision)
+	var err error
+	getRevisionCnt.Add(ctx, 1)
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.get_revision", otelName))
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+	span.SetAttributes(attribute.Int64("revision", revision))
+
+	result, err := d.queryPrepared(ctx, "get_revision_sql", d.GetRevisionSQL, d.getRevisionSQLPrepared, revision)
+	return result, err
 }
 
 func (d *Generic) DeleteRevision(ctx context.Context, revision int64) error {
-	_, err := d.executePrepared(ctx, "delete_sql", d.DeleteSQL, d.deleteSQLPrepared, revision)
+	var err error
+	deleteRevCnt.Add(ctx, 1)
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.delete_revision", otelName))
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+	span.SetAttributes(attribute.Int64("revision", revision))
+
+	_, err = d.executePrepared(ctx, "delete_sql", d.DeleteSQL, d.deleteSQLPrepared, revision)
 	return err
 }
 
@@ -565,6 +640,13 @@ func (d *Generic) CurrentRevision(ctx context.Context) (int64, error) {
 	var id int64
 	var err error
 
+	currentRevCnt.Add(ctx, 1)
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.current_revision", otelName))
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+
 	done, err := d.AdmissionControlPolicy.Admit(ctx, "rev_sql")
 	if err != nil {
 		return 0, fmt.Errorf("denied: %w", err)
@@ -574,8 +656,10 @@ func (d *Generic) CurrentRevision(ctx context.Context) (int64, error) {
 	done()
 	err = row.Scan(&id)
 	if err == sql.ErrNoRows {
+		span.AddEvent("no rows")
 		return 0, nil
 	}
+	span.SetAttributes(attribute.Int64("id", id))
 	return id, err
 }
 

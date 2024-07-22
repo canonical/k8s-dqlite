@@ -2,8 +2,10 @@ package server
 
 import (
 	"context"
+	"fmt"
 
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 func isUpdate(txn *etcdserverpb.TxnRequest) (int64, string, []byte, int64, bool) {
@@ -29,12 +31,30 @@ func (l *LimitedServer) update(ctx context.Context, rev int64, key string, value
 		ok  bool
 		err error
 	)
+	updateCnt.Add(ctx, 1)
+
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.update", otelName))
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+	span.SetAttributes(
+		attribute.String("key", key),
+		attribute.Int64("lease", lease),
+		attribute.Int64("revision", rev),
+	)
 
 	if rev == 0 {
 		rev, err = l.backend.Create(ctx, key, value, lease)
 		ok = true
+
+		span.SetAttributes(
+			attribute.Int64("revision", rev),
+			attribute.Bool("ok", ok),
+		)
 	} else {
 		rev, kv, ok, err = l.backend.Update(ctx, key, value, rev, lease)
+		span.SetAttributes(attribute.Bool("ok", ok))
 	}
 	if err != nil {
 		return nil, err

@@ -165,7 +165,7 @@ Steps:
 
 7. While developing and making changes to `k8s-dqlite`, just restart k8s-dqlite
 
-Note: When develop k8s-dqlite against Canonical Kubernetes use the following flags:
+Note: When developing k8s-dqlite against Canonical Kubernetes use the following flags:
 
 - `--storage-dir /var/snap/k8s/common/var/lib/k8s-dqlite`
 - `--listen unix:///var/snap/k8s/common/var/lib/k8s-dqlite/k8s-dqlite.sock`

@@ -2,8 +2,10 @@ package server
 
 import (
 	"context"
+	"fmt"
 
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 func isCreate(txn *etcdserverpb.TxnRequest) *etcdserverpb.PutRequest {
@@ -20,6 +22,18 @@ func isCreate(txn *etcdserverpb.TxnRequest) *etcdserverpb.PutRequest {
 }
 
 func (l *LimitedServer) create(ctx context.Context, put *etcdserverpb.PutRequest, txn *etcdserverpb.TxnRequest) (*etcdserverpb.TxnResponse, error) {
+	var err error
+	createCnt.Add(ctx, 1)
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.create", otelName))
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+	span.SetAttributes(
+		attribute.String("key", string(put.Key)),
+		attribute.Int64("lease", put.Lease),
+	)
+
 	if put.IgnoreLease {
 		return nil, unsupported("ignoreLease")
 	} else if put.IgnoreValue {
@@ -29,7 +43,9 @@ func (l *LimitedServer) create(ctx context.Context, put *etcdserverpb.PutRequest
 	}
 
 	rev, err := l.backend.Create(ctx, string(put.Key), put.Value, put.Lease)
+	span.SetAttributes(attribute.Int64("revision", rev))
 	if err == ErrKeyExists {
+		span.AddEvent("key exists")
 		return &etcdserverpb.TxnResponse{
 			Header:    txnHeader(rev),
 			Succeeded: false,

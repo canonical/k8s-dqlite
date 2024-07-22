@@ -12,6 +12,8 @@ type LimitedServer struct {
 }
 
 func (l *LimitedServer) Range(ctx context.Context, r *etcdserverpb.RangeRequest) (*RangeResponse, error) {
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Range", otelName))
+	defer span.End()
 	if len(r.RangeEnd) == 0 {
 		return l.get(ctx, r)
 	}
