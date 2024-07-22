@@ -4,24 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/sirupsen/logrus"
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/metric"
 )
-
-var (
-	createCnt metric.Int64Counter
-)
-
-func init() {
-	var err error
-
-	createCnt, err = meter.Int64Counter(fmt.Sprintf("%s.create", name), metric.WithDescription("Number of create requests"))
-	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create create counter")
-	}
-}
 
 func isCreate(txn *etcdserverpb.TxnRequest) *etcdserverpb.PutRequest {
 	if len(txn.Compare) == 1 &&
@@ -38,7 +23,7 @@ func isCreate(txn *etcdserverpb.TxnRequest) *etcdserverpb.PutRequest {
 
 func (l *LimitedServer) create(ctx context.Context, put *etcdserverpb.PutRequest, txn *etcdserverpb.TxnRequest) (*etcdserverpb.TxnResponse, error) {
 	createCnt.Add(ctx, 1)
-	ctx, span := tracer.Start(ctx, "limited.create")
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.create", otelName))
 	defer span.End()
 	span.SetAttributes(
 		attribute.String("key", string(put.Key)),

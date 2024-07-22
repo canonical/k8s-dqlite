@@ -14,25 +14,29 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 )
 
-const SupersededCount = 100
-
-const name = "sqllog"
+const (
+	SupersededCount = 100
+	otelName        = "sqllog"
+)
 
 var (
-	tracer     = otel.Tracer(name)
-	meter      = otel.Meter(name)
+	otelTracer trace.Tracer
+	otelMeter  metric.Meter
 	compactCnt metric.Int64Counter
 )
 
 func init() {
 	var err error
-	compactCnt, err = meter.Int64Counter(fmt.Sprintf("%s.compact", name), metric.WithDescription("Number of compact requests"))
+	otelTracer = otel.Tracer(otelName)
+	otelMeter = otel.Meter(otelName)
+
+	compactCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.compact", otelName), metric.WithDescription("Number of compact requests"))
 	if err != nil {
 		logrus.WithError(err).Warning("Otel failed to create create counter")
 	}
-
 }
 
 type SQLLog struct {
@@ -144,7 +148,7 @@ func (s *SQLLog) DoCompact(ctx context.Context) error {
 }
 
 func (s *SQLLog) compactor(ctx context.Context, nextEnd int64) (int64, error) {
-	ctx, span := tracer.Start(ctx, "sqllog.compactor")
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.compactor", otelName))
 	defer span.End()
 	span.SetAttributes(attribute.Int64("nextEnd", nextEnd))
 

@@ -9,25 +9,11 @@ import (
 	"github.com/sirupsen/logrus"
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/metric"
 )
-
-var (
-	listCnt metric.Int64Counter
-)
-
-func init() {
-	var err error
-
-	listCnt, err = meter.Int64Counter(fmt.Sprintf("%s.list", name), metric.WithDescription("Number of list requests"))
-	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create list counter")
-	}
-}
 
 func (l *LimitedServer) list(ctx context.Context, r *etcdserverpb.RangeRequest) (*RangeResponse, error) {
 	listCnt.Add(ctx, 1)
-	ctx, span := tracer.Start(ctx, "limited.list")
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.list", otelName))
 	defer span.End()
 
 	span.SetAttributes(

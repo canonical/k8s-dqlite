@@ -16,13 +16,14 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 )
 
-const name = "generic"
+const otelName = "generic"
 
 var (
-	tracer           = otel.Tracer(name)
-	meter            = otel.Meter(name)
+	otelTracer       trace.Tracer
+	otelMeter        metric.Meter
 	setCompactRevCnt metric.Int64Counter
 	getRevisionCnt   metric.Int64Counter
 	deleteRevCnt     metric.Int64Counter
@@ -32,23 +33,25 @@ var (
 
 func init() {
 	var err error
-	setCompactRevCnt, err = meter.Int64Counter(fmt.Sprintf("%s.compact", name), metric.WithDescription("Number of compact requests"))
+	otelTracer = otel.Tracer(otelName)
+	otelMeter = otel.Meter(otelName)
+	setCompactRevCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.compact", otelName), metric.WithDescription("Number of compact requests"))
 	if err != nil {
 		logrus.WithError(err).Warning("Otel failed to create create counter")
 	}
-	getRevisionCnt, err = meter.Int64Counter(fmt.Sprintf("%s.get_revision", name), metric.WithDescription("Number of get revision requests"))
+	getRevisionCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.get_revision", otelName), metric.WithDescription("Number of get revision requests"))
 	if err != nil {
 		logrus.WithError(err).Warning("Otel failed to create create counter")
 	}
-	deleteRevCnt, err = meter.Int64Counter(fmt.Sprintf("%s.delete_revision", name), metric.WithDescription("Number of delete revision requests"))
+	deleteRevCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.delete_revision", otelName), metric.WithDescription("Number of delete revision requests"))
 	if err != nil {
 		logrus.WithError(err).Warning("Otel failed to create create counter")
 	}
-	currentRevCnt, err = meter.Int64Counter(fmt.Sprintf("%s.current_revision", name), metric.WithDescription("Current revision"))
+	currentRevCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.current_revision", otelName), metric.WithDescription("Current revision"))
 	if err != nil {
 		logrus.WithError(err).Warning("Otel failed to create create counter")
 	}
-	getCompactRevCnt, err = meter.Int64Counter(fmt.Sprintf("%s.get_compact_revision", name), metric.WithDescription("Get compact revision"))
+	getCompactRevCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.get_compact_revision", otelName), metric.WithDescription("Get compact revision"))
 	if err != nil {
 		logrus.WithError(err).Warning("Otel failed to create create counter")
 	}
@@ -518,7 +521,7 @@ func (d *Generic) executePrepared(ctx context.Context, txName, sql string, prepa
 
 func (d *Generic) GetCompactRevision(ctx context.Context) (int64, int64, error) {
 	getCompactRevCnt.Add(ctx, 1)
-	ctx, span := tracer.Start(ctx, "generic.get_compact_revision")
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.get_compact_revision", otelName))
 	var compact, target sql.NullInt64
 	start := time.Now()
 	var err error
@@ -561,7 +564,7 @@ func (d *Generic) GetCompactRevision(ctx context.Context) (int64, int64, error) 
 
 func (d *Generic) SetCompactRevision(ctx context.Context, revision int64) error {
 	setCompactRevCnt.Add(ctx, 1)
-	ctx, span := tracer.Start(ctx, "generic.set_compact_revision")
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.set_compact_revision", otelName))
 	defer span.End()
 	span.SetAttributes(attribute.Int64("revision", revision))
 
@@ -572,7 +575,7 @@ func (d *Generic) SetCompactRevision(ctx context.Context, revision int64) error 
 
 func (d *Generic) GetRevision(ctx context.Context, revision int64) (*sql.Rows, error) {
 	getRevisionCnt.Add(ctx, 1)
-	ctx, span := tracer.Start(ctx, "generic.get_revision")
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.get_revision", otelName))
 	defer span.End()
 	span.SetAttributes(attribute.Int64("revision", revision))
 
@@ -583,7 +586,7 @@ func (d *Generic) GetRevision(ctx context.Context, revision int64) (*sql.Rows, e
 
 func (d *Generic) DeleteRevision(ctx context.Context, revision int64) error {
 	deleteRevCnt.Add(ctx, 1)
-	ctx, span := tracer.Start(ctx, "generic.delete_revision")
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.delete_revision", otelName))
 	defer span.End()
 	span.SetAttributes(attribute.Int64("revision", revision))
 
@@ -626,7 +629,7 @@ func (d *Generic) List(ctx context.Context, prefix, startKey string, limit, revi
 
 func (d *Generic) CurrentRevision(ctx context.Context) (int64, error) {
 	currentRevCnt.Add(ctx, 1)
-	ctx, span := tracer.Start(ctx, "generic.current_revision")
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.current_revision", otelName))
 	defer span.End()
 	var id int64
 	var err error
