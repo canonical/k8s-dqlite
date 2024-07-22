@@ -109,7 +109,7 @@ func (l *LogStructured) get(ctx context.Context, key, rangeEnd string, limit, re
 	)
 	rev, events, err := l.log.List(ctx, key, rangeEnd, limit, revision, includeDeletes)
 	if err == server.ErrCompacted {
-		span.AddEvent("ignoring compacted error")
+		span.AddEvent("key already compacted")
 		// ignore compacted when getting by revision
 		err = nil
 	}
