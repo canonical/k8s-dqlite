@@ -124,8 +124,14 @@ func BenchmarkGet(b *testing.B) {
 
 			kine := newKineServer(ctx, b, &kineOptions{
 				backendType: backendType,
-				setup: func(db *sql.DB) error {
-					return setupScenario(ctx, db, "testKey", b.N, b.N, 0)
+				setup: func(ctx context.Context, tx *sql.Tx) error {
+					if err := insertMany(ctx, tx, "testKey", 100, b.N*2); err != nil {
+						return err
+					}
+					if err := updateMany(ctx, tx, "testKey", 100, b.N); err != nil {
+						return err
+					}
+					return nil
 				},
 			})
 
