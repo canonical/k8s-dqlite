@@ -79,27 +79,50 @@ func init() {
 
 var (
 	revSQL = `
-		SELECT MAX(rkv.id) AS id
-		FROM kine AS rkv`
+		SELECT MAX(id) AS id
+		FROM kine`
 
+	// listSQL query looks for the latest version of every row in
+	// the range and returns all columns from it.
+	// The search for the "latest id" (table `maxkv` in the query)
+	// can be carried on quickly with a covering index (kine_name_index).
+	// The `deleted <= ?` is used to select deleted rows:
+	//  - when the argument is 0 (false), the only rows selected are
+	//    those with deleted = 0 (i.e. alive)
+	//  - when the argument is 1 (true), all rows will be selected,
+	//    including deleted ones.
+	// Unfortunately, using a normal JOIN operation will confuse
+	// SQLite planner and insert a SORT temp table at the end of
+	// the plan, forcing SQLite to load and sort the entire set
+	// before returning it (and making the cost of a paginated
+	// query very high) and returning an unsorted set would make
+	// pagination impossible.
+	// To workaround this silly misplan, a ORDER by in the first
+	// table forces ordering of `maxkv` (without paying for it
+	// as it is the same order as the index) and CROSS JOIN is
+	// used as it forces SQLite to keep the outer-loop order
+	// when joining tables. See https://www.sqlite.org/optoverview.html#crossjoin
+	// for more details.
 	listSQL = `
+		WITH maxkv AS (
+			SELECT MAX(id) AS id
+			FROM kine
+			WHERE name >= ? AND name < ?
+				AND mkv.id <= ?
+			GROUP BY name
+			HAVING deleted <= ?
+			ORDER BY name
+		)
 		SELECT kv.id, 
 			name, 
-			CASE WHEN kv.created THEN kv.id ELSE kv.create_revision END AS create_revision,
+			CASE 
+				WHEN kv.created THEN kv.id
+				ELSE kv.create_revision
+			END AS create_revision,
 			lease, 
 			value
-		FROM kine AS kv
-		JOIN (
-			SELECT MAX(mkv.id) as id
-			FROM kine AS mkv
-			WHERE
-				mkv.name >= ? AND mkv.name < ?
-				AND mkv.id <= ?
-			GROUP BY mkv.name
-		) AS maxkv
-	    	ON maxkv.id = kv.id
-		WHERE kv.deleted = 0
-		ORDER BY kv.name ASC, kv.id ASC`
+		FROM maxkv CROSS JOIN kine kv
+	    	ON maxkv.id = kv.id`
 
 	revisionIntervalSQL = `
 		SELECT (
@@ -117,8 +140,7 @@ var (
 		JOIN (
 			SELECT MAX(mkv.id) as id
 			FROM kine AS mkv
-			WHERE
-				mkv.name >= ? AND mkv.name < ?
+			WHERE mkv.name >= ? AND mkv.name < ?
 				AND mkv.id <= ?
 			GROUP BY mkv.name
 		) AS maxkv
