@@ -16,7 +16,7 @@ import (
 type SchemaVersion int32
 
 var (
-	databaseSchemaVersion = NewSchemaVersion(0, 1)
+	databaseSchemaVersion = NewSchemaVersion(0, 2)
 )
 
 func NewSchemaVersion(major int16, minor int16) SchemaVersion {
@@ -83,6 +83,19 @@ CREATE TABLE kine
 	}
 
 	if _, err := txn.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS kine_name_prev_revision_uindex ON kine (prev_revision, name)`); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// applySchemaV0_2 moves the schema from version 1 to version 2
+func applySchemaV0_2(ctx context.Context, txn *sql.Tx) error {
+	if _, err := txn.ExecContext(ctx, `DROP INDEX kine_name_index`); err != nil {
+		return err
+	}
+
+	if _, err := txn.ExecContext(ctx, `CREATE UNIQUE INDEX kine_name_index ON kine(name, id, deleted)`); err != nil {
 		return err
 	}
 
