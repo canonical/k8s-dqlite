@@ -80,13 +80,14 @@ func (l *LimitedServer) list(ctx context.Context, r *etcdserverpb.RangeRequest) 
 		if revision == 0 {
 			revision = rev
 		}
+
 		// count the actual number of results if there are more items in the db.
 		rev, resp.Count, err = l.backend.Count(ctx, prefix, start, revision)
 		if err != nil {
 			return nil, err
 		}
-		span.SetAttributes(attribute.Int64("count", resp.Count))
 
+		span.SetAttributes(attribute.Int64("count", resp.Count))
 		logrus.Tracef("LIST COUNT key=%s, end=%s, revision=%d, currentRev=%d count=%d", r.Key, r.RangeEnd, revision, rev, resp.Count)
 		resp.Header = txnHeader(rev)
 	}

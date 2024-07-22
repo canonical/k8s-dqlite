@@ -310,7 +310,6 @@ func (l *LogStructured) Count(ctx context.Context, prefix, startKey string, revi
 
 func (l *LogStructured) Update(ctx context.Context, key string, value []byte, revision, lease int64) (revRet int64, kvRet *server.KeyValue, updateRet bool, errRet error) {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Update", otelName))
-
 	defer func() {
 		l.adjustRevision(ctx, &revRet)
 		kvRev := int64(0)
