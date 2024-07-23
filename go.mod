@@ -4,7 +4,7 @@ go 1.21
 
 require (
 	github.com/Rican7/retry v0.3.1
-	github.com/canonical/go-dqlite v1.21.1-0.20240712123858-1374ba00bdd7
+	github.com/canonical/go-dqlite v1.22.0
 	github.com/mattn/go-sqlite3 v1.14.22
 	github.com/onsi/gomega v1.27.10
 	github.com/pkg/errors v0.9.1
