@@ -166,8 +166,8 @@ func (ks *kineServer) ReportMetrics(b *testing.B) {
 
 	if ks.dqliteListener != nil {
 		dqliteMetrics := ks.dqliteListener.Metrics()
-		b.ReportMetric(float64(dqliteMetrics.BytesRead)/float64(b.N), "network-reads/op")
-		b.ReportMetric(float64(dqliteMetrics.BytesWritten)/float64(b.N), "network-writes/op")
+		b.ReportMetric(float64(dqliteMetrics.BytesRead)/float64(b.N), "network-bytes-read/op")
+		b.ReportMetric(float64(dqliteMetrics.BytesWritten)/float64(b.N), "network-bytes-written/op")
 	}
 }
 
