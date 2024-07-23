@@ -2,6 +2,7 @@ package instrument
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -11,10 +12,11 @@ import (
 
 type Listener struct {
 	Network, Address        string
-	AcceptChan              chan net.Conn
-	listener                net.Listener
+	AcceptedChan            chan net.Conn
+	netListener             net.Listener
 	bytesWritten, bytesRead atomic.Int64
 	wg                      sync.WaitGroup
+	err                     error
 }
 
 type ListenerMetrics struct {
@@ -22,26 +24,38 @@ type ListenerMetrics struct {
 	BytesRead    int64
 }
 
-func Listen(network, address string) (*Listener, error) {
-	netListener, err := net.Listen(network, address)
+func NewListener(network, address string) *Listener {
+	return &Listener{
+		Network:      network,
+		Address:      address,
+		AcceptedChan: make(chan net.Conn),
+		netListener:  nil,
+	}
+}
+
+func (l *Listener) Listen() error {
+	if l.netListener != nil {
+		return fmt.Errorf("listener already running")
+	}
+	netListener, err := net.Listen(l.Network, l.Address)
 	if err != nil {
-		return nil, err
+		return err
 	}
+	l.netListener = netListener
 
-	listener := &Listener{
-		Network:    network,
-		Address:    address,
-		AcceptChan: make(chan net.Conn),
-		listener:   netListener,
-	}
-
-	listener.wg.Add(1)
+	l.wg.Add(1)
 	go func() {
-		listener.run()
-		listener.wg.Done()
+		defer l.wg.Done()
+		for {
+			conn, err := l.netListener.Accept()
+			if err != nil {
+				l.err = err
+				break
+			}
+			l.AcceptedChan <- conn
+		}
 	}()
-
-	return listener, nil
+	return nil
 }
 
 func (l *Listener) Connect(ctx context.Context, _ string) (net.Conn, error) {
@@ -51,20 +65,9 @@ func (l *Listener) Connect(ctx context.Context, _ string) (net.Conn, error) {
 		return nil, err
 	}
 	if conn, ok := conn.(fileConn); ok {
-		return &wrappedConn{conn, l}, nil
+		return &metredConn{conn, l}, nil
 	}
 	return nil, fmt.Errorf("can't setup probes")
-}
-
-func (l *Listener) run() {
-	defer close(l.AcceptChan)
-	for {
-		conn, err := l.listener.Accept()
-		if err != nil {
-			break
-		}
-		l.AcceptChan <- conn
-	}
 }
 
 func (l *Listener) Metrics() *ListenerMetrics {
@@ -79,32 +82,39 @@ func (l *Listener) ResetMetrics() {
 	l.bytesRead.Store(0)
 }
 
-func (l *Listener) Close() error {
-	if err := l.listener.Close(); err != nil {
-		return err
+func (l *Listener) Close() {
+	if l.netListener == nil {
+		return
+	}
+
+	if err := l.netListener.Close(); err != nil {
+		l.err = errors.Join(l.err, err)
 	}
 
 	l.wg.Wait()
-	return nil
+	l.netListener = nil
+	close(l.AcceptedChan)
 }
+
+func (l *Listener) Err() error { return l.err }
 
 type fileConn interface {
 	net.Conn
 	File() (*os.File, error)
 }
 
-type wrappedConn struct {
+type metredConn struct {
 	fileConn
 	listener *Listener
 }
 
-func (wc *wrappedConn) Write(b []byte) (n int, err error) {
+func (wc *metredConn) Write(b []byte) (n int, err error) {
 	n, err = wc.fileConn.Write(b)
 	wc.listener.bytesWritten.Add(int64(n))
 	return n, err
 }
 
-func (wc *wrappedConn) Read(b []byte) (n int, err error) {
+func (wc *metredConn) Read(b []byte) (n int, err error) {
 	n, err = wc.fileConn.Read(b)
 	wc.listener.bytesRead.Add(int64(n))
 	return n, err

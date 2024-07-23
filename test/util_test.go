@@ -60,12 +60,16 @@ func newKineServer(ctx context.Context, tb testing.TB, options *kineOptions) *ki
 	case endpoint.SQLiteBackend:
 		endpointConfig, db = startSqlite(ctx, tb, dir)
 	case endpoint.DQLiteBackend:
-		var err error
-		dqliteListener, err = instrument.Listen("unix", path.Join(dir, "dqlite.sock"))
-		if err != nil {
+		dqliteListener = instrument.NewListener("unix", path.Join(dir, "dqlite.sock"))
+		if err := dqliteListener.Listen(); err != nil {
 			tb.Fatal(err)
 		}
-		tb.Cleanup(func() { dqliteListener.Close() })
+		tb.Cleanup(func() {
+			dqliteListener.Close()
+			if err := dqliteListener.Err(); err != nil {
+				tb.Error(err)
+			}
+		})
 		endpointConfig, db = startDqlite(ctx, tb, dir, dqliteListener)
 	default:
 		tb.Fatalf("Testing %s backend not supported", options.backendType)
@@ -128,7 +132,7 @@ func startSqlite(_ context.Context, tb testing.TB, dir string) (*endpoint.Config
 func startDqlite(ctx context.Context, tb testing.TB, dir string, listener *instrument.Listener) (*endpoint.Config, *sql.DB) {
 	app, err := app.New(dir,
 		app.WithAddress(listener.Address),
-		app.WithExternalConn(listener.Connect, listener.AcceptChan),
+		app.WithExternalConn(listener.Connect, listener.AcceptedChan),
 	)
 	if err != nil {
 		tb.Fatalf("failed to create dqlite app: %v", err)
