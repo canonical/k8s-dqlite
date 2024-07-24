@@ -121,7 +121,7 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 // changes are rolled back if an error occurs.
 func setup(ctx context.Context, db *sql.DB) error {
 	// Optimistically ask for the user_version without starting a transaction
-	var currentSchemaVersion schemaVersion
+	var currentSchemaVersion SchemaVersion
 
 	row := db.QueryRowContext(ctx, `PRAGMA user_version`)
 	if err := row.Scan(&currentSchemaVersion); err != nil {
@@ -148,7 +148,7 @@ func setup(ctx context.Context, db *sql.DB) error {
 // migrate tries to migrate from a version of the database
 // to the target one.
 func migrate(ctx context.Context, txn *sql.Tx) error {
-	var currentVersion schemaVersion
+	var currentVersion SchemaVersion
 
 	row := txn.QueryRowContext(ctx, `PRAGMA user_version`)
 	if err := row.Scan(&currentVersion); err != nil {

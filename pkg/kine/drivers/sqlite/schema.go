@@ -3,8 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
-
-	"github.com/pkg/errors"
+	"fmt"
 )
 
 // The database version that designates whether table migration
@@ -20,38 +19,38 @@ const (
 	mask                       int32 = 0xFFFF // Mask for 2 bytes (16 bits)
 )
 
-type schemaVersion int32
+type SchemaVersion int32
 
 var (
 	databaseSchemaVersion = ToSchemaVersion(databaseSchemaMajorVersion, databaseSchemaMinorVersion)
 )
 
-func ToSchemaVersion(major int16, minor int16) schemaVersion {
-	return schemaVersion(int32(major)<<16 | int32(minor))
+func ToSchemaVersion(major int16, minor int16) SchemaVersion {
+	return SchemaVersion(int32(major)<<16 | int32(minor))
 }
 
-func (sv schemaVersion) Major() int16 {
+func (sv SchemaVersion) Major() int16 {
 	// Extract the high 16 bits
 	return int16((int32(sv) >> 16) & mask)
 }
 
-func (sv schemaVersion) Minor() int16 {
+func (sv SchemaVersion) Minor() int16 {
 	// Extract the lower 16 bits
 	return int16(int32(sv) & mask)
 }
 
-func (sv schemaVersion) CanMigrate(targetSV schemaVersion) (bool, error) {
+func (sv SchemaVersion) CanMigrate(targetSV SchemaVersion) (bool, error) {
 	// Check wether version is the same
 	if sv.Major() == targetSV.Major() && sv.Minor() == targetSV.Minor() {
 		return false, nil
 	}
 	// Major version must be the same
 	if sv.Major() != targetSV.Major() {
-		return false, errors.Errorf("can not migrate between different major versions: %d to %d", sv.Major(), targetSV.Major())
+		return false, fmt.Errorf("can not migrate between different major versions")
 	}
 	// Minor version must be greater
 	if sv.Minor() > targetSV.Minor() {
-		return false, errors.Errorf("can not rollback to earlier minor version: %d to %d", sv.Minor(), targetSV.Minor())
+		return false, fmt.Errorf("can not rollback to earlier minor version")
 	}
 	return true, nil
 }
