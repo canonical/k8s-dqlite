@@ -178,32 +178,88 @@ func TestList(t *testing.T) {
 	}
 }
 
-// BenchmarkList is a benchmark for the Get operation.
 func BenchmarkList(b *testing.B) {
-	for _, backendType := range []string{endpoint.SQLiteBackend, endpoint.DQLiteBackend} {
-		b.Run(backendType, func(b *testing.B) {
-			b.StopTimer()
-			g := NewWithT(b)
+	setup := func(ctx context.Context, tx *sql.Tx, payloadSize, n int) error {
+		if err := insertMany(ctx, tx, "key", payloadSize, n); err != nil {
+			return err
+		}
+		b.Log("insert", n)
 
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+		if err := updateMany(ctx, tx, "key", payloadSize, n/2); err != nil {
+			return err
+		}
+		b.Log("update", n)
 
-			kine := newKineServer(ctx, b, &kineOptions{
-				backendType: backendType,
-				setup: func(db *sql.DB) error {
-					return setupScenario(ctx, db, "key", b.N*2, b.N, b.N)
-				},
+		if err := deleteMany(ctx, tx, "key", n/2); err != nil {
+			return err
+		}
+		b.Log("delete", n)
+		return nil
+	}
+	backends := []string{endpoint.SQLiteBackend, endpoint.DQLiteBackend}
+	payloadSizes := []int{100, 1000, 5000}
+	for _, backendType := range backends {
+		for _, payloadSize := range payloadSizes {
+			b.Run(fmt.Sprintf("%s-%d", backendType, payloadSize), func(b *testing.B) {
+				b.Run("all", func(b *testing.B) {
+					b.StopTimer()
+					g := NewWithT(b)
+
+					ctx, cancel := context.WithCancel(context.Background())
+					defer cancel()
+
+					kine := newKineServer(ctx, b, &kineOptions{
+						backendType: backendType,
+						setup: func(ctx context.Context, tx *sql.Tx) error {
+							return setup(ctx, tx, payloadSize, b.N)
+						},
+					})
+
+					kine.ResetMetrics()
+					b.StartTimer()
+					resp, err := kine.client.Get(ctx, "key/", clientv3.WithPrefix())
+
+					g.Expect(err).To(BeNil())
+					g.Expect(resp.Kvs).To(HaveLen((b.N + 1) / 2))
+					kine.ReportMetrics(b)
+				})
+
+				b.Run("pagination", func(b *testing.B) {
+					b.StopTimer()
+					g := NewWithT(b)
+
+					ctx, cancel := context.WithCancel(context.Background())
+					defer cancel()
+
+					kine := newKineServer(ctx, b, &kineOptions{
+						backendType: backendType,
+						setup: func(ctx context.Context, tx *sql.Tx) error {
+							return setup(ctx, tx, payloadSize, b.N)
+						},
+					})
+
+					kine.ResetMetrics()
+					b.StartTimer()
+					nextKey := "key/"
+					endRange := clientv3.GetPrefixRangeEnd(nextKey)
+					count := 0
+					for more := true; more; {
+						resp, err := kine.client.Get(ctx,
+							nextKey,
+							clientv3.WithRange(endRange),
+							clientv3.WithLimit(int64(b.N)/10),
+						)
+						g.Expect(err).To(BeNil())
+
+						more = resp.More
+						count += len(resp.Kvs)
+						nextKey = string(resp.Kvs[len(resp.Kvs)-1].Key) + "\x01"
+					}
+
+					g.Expect(count).To(Equal((b.N + 1) / 2))
+					kine.ReportMetrics(b)
+				})
 			})
-
-			kine.ResetMetrics()
-			b.StartTimer()
-			for i := 0; i < b.N; i++ {
-				resp, err := kine.client.Get(ctx, "key/", clientv3.WithPrefix())
-
-				g.Expect(err).To(BeNil())
-				g.Expect(resp.Kvs).To(HaveLen(b.N))
-			}
-			kine.ReportMetrics(b)
-		})
+		}
 	}
 }
