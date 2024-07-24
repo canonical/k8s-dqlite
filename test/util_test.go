@@ -24,8 +24,9 @@ func init() {
 }
 
 type kineServer struct {
-	client  *clientv3.Client
-	backend server.Backend
+	client         *clientv3.Client
+	backend        server.Backend
+	dqliteListener *instrument.Listener
 }
 
 type kineOptions struct {
@@ -47,19 +48,29 @@ type kineOptions struct {
 func newKineServer(ctx context.Context, tb testing.TB, options *kineOptions) *kineServer {
 	dir := tb.TempDir()
 
-	err := instrument.StartSQLiteMonitoring()
-	if err != nil {
+	if err := instrument.StartSQLiteMonitoring(); err != nil {
 		tb.Fatal(err)
 	}
 	tb.Cleanup(func() { instrument.StopSQLiteMonitoring() })
 
 	var endpointConfig *endpoint.Config
 	var db *sql.DB
+	var dqliteListener *instrument.Listener
 	switch options.backendType {
 	case endpoint.SQLiteBackend:
 		endpointConfig, db = startSqlite(ctx, tb, dir)
 	case endpoint.DQLiteBackend:
-		endpointConfig, db = startDqlite(ctx, tb, dir)
+		dqliteListener = instrument.NewListener("unix", path.Join(dir, "dqlite.sock"))
+		if err := dqliteListener.Listen(ctx); err != nil {
+			tb.Fatal(err)
+		}
+		tb.Cleanup(func() {
+			dqliteListener.Close()
+			if err := dqliteListener.Err(); err != nil {
+				tb.Error(err)
+			}
+		})
+		endpointConfig, db = startDqlite(ctx, tb, dir, dqliteListener)
 	default:
 		tb.Fatalf("Testing %s backend not supported", options.backendType)
 	}
@@ -98,8 +109,9 @@ func newKineServer(ctx context.Context, tb testing.TB, options *kineOptions) *ki
 		tb.Fatal(err)
 	}
 	return &kineServer{
-		client:  client,
-		backend: backend,
+		client:         client,
+		backend:        backend,
+		dqliteListener: dqliteListener,
 	}
 }
 
@@ -117,12 +129,11 @@ func startSqlite(_ context.Context, tb testing.TB, dir string) (*endpoint.Config
 	}, db
 }
 
-var nextPort = 59090
-
-func startDqlite(ctx context.Context, tb testing.TB, dir string) (*endpoint.Config, *sql.DB) {
-	nextPort++
-
-	app, err := app.New(dir, app.WithAddress(fmt.Sprintf("127.0.0.1:%d", nextPort)))
+func startDqlite(ctx context.Context, tb testing.TB, dir string, listener *instrument.Listener) (*endpoint.Config, *sql.DB) {
+	app, err := app.New(dir,
+		app.WithAddress(listener.Address),
+		app.WithExternalConn(listener.Connect, listener.AcceptedChan),
+	)
 	if err != nil {
 		tb.Fatalf("failed to create dqlite app: %v", err)
 	}
@@ -152,10 +163,19 @@ func (ks *kineServer) ReportMetrics(b *testing.B) {
 	b.ReportMetric(float64(sqliteMetrics.PageCacheWrites)/float64(b.N), "page-writes/op")
 	b.ReportMetric(float64(sqliteMetrics.TransactionReadTime)/float64(time.Second)/float64(b.N), "sec-reading/op")
 	b.ReportMetric(float64(sqliteMetrics.TransactionWriteTime)/float64(time.Second)/float64(b.N), "sec-writing/op")
+
+	if ks.dqliteListener != nil {
+		dqliteMetrics := ks.dqliteListener.Metrics()
+		b.ReportMetric(float64(dqliteMetrics.BytesRead)/float64(b.N), "network-bytes-read/op")
+		b.ReportMetric(float64(dqliteMetrics.BytesWritten)/float64(b.N), "network-bytes-written/op")
+	}
 }
 
 func (ks *kineServer) ResetMetrics() {
 	instrument.ResetSQLiteMetrics()
+	if ks.dqliteListener != nil {
+		ks.dqliteListener.ResetMetrics()
+	}
 }
 
 func setupScenario(ctx context.Context, db *sql.DB, prefix string, numInsert, numUpdates, numDeletes int) error {
