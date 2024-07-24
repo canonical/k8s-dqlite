@@ -14,8 +14,8 @@ import (
 // already
 
 const (
-	databaseSchemaMajorVersion int16 = 1
-	databaseSchemaMinorVersion int16 = 0
+	databaseSchemaMajorVersion int16 = 0
+	databaseSchemaMinorVersion int16 = 1
 	mask                       int32 = 0xFFFF // Mask for 2 bytes (16 bits)
 )
 
