@@ -121,20 +121,15 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 // changes are rolled back if an error occurs.
 func setup(ctx context.Context, db *sql.DB) error {
 	// Optimistically ask for the user_version without starting a transaction
-	var schemaVersion int32
+	var currentSchemaVersion schemaVersion
 
 	row := db.QueryRowContext(ctx, `PRAGMA user_version`)
-	if err := row.Scan(&schemaVersion); err != nil {
+	if err := row.Scan(&currentSchemaVersion); err != nil {
 		return err
 	}
-	currentMajor, currentMinor := getMajorMinorVersion(schemaVersion)
 
-	if currentMajor == databaseSchemaMajorVersion && currentMinor == databaseSchemaMinorVersion {
-		return nil
-	} else if currentMajor > 0 && currentMajor < databaseSchemaMajorVersion {
-		return errors.Errorf("can not update major versions: %d to %d", currentMajor, databaseSchemaMajorVersion)
-	} else if currentMajor > databaseSchemaMajorVersion {
-		return errors.Errorf("can not rollback to earlier major version: %d to %d", currentMajor, databaseSchemaMajorVersion)
+	if canMigrate, err := currentSchemaVersion.CanMigrate(databaseSchemaVersion); !canMigrate {
+		return err
 	}
 
 	txn, err := db.BeginTx(ctx, nil)
@@ -153,41 +148,25 @@ func setup(ctx context.Context, db *sql.DB) error {
 // migrate tries to migrate from a version of the database
 // to the target one.
 func migrate(ctx context.Context, txn *sql.Tx) error {
-	var userVersion int32
+	var currentVersion schemaVersion
 
 	row := txn.QueryRowContext(ctx, `PRAGMA user_version`)
-	if err := row.Scan(&userVersion); err != nil {
+	if err := row.Scan(&currentVersion); err != nil {
 		return err
 	}
-	currentMajor, currentMinor := getMajorMinorVersion(int32(userVersion))
 
-	if currentMajor == 0 && currentMinor == 0 {
+	if currentVersion == 0 {
 		if err := applySchemaV1(ctx, txn); err != nil {
 			return err
 		}
 	}
 
-	setUserVersionSQL := fmt.Sprintf(`PRAGMA user_version = %d`, toInt32(databaseSchemaMajorVersion, databaseSchemaMinorVersion))
+	setUserVersionSQL := fmt.Sprintf(`PRAGMA user_version = %d`, databaseSchemaVersion)
 	if _, err := txn.ExecContext(ctx, setUserVersionSQL); err != nil {
 		return err
 	}
 
 	return nil
-}
-
-func getMajorMinorVersion(value int32) (major int16, minor int16) {
-	const mask int32 = 0xFFFF // Mask for 2 bytes (16 bits)
-
-	// Extract the high 16 bits
-	major = int16((value >> 16) & mask)
-	// Extract the lower 16 bits
-	minor = int16(value & mask)
-
-	return major, minor
-}
-
-func toInt32(major int16, minor int16) int32 {
-	return int32(major)<<16 | int32(minor)
 }
 
 func parseOpts(dsn string) (opts, error) {
