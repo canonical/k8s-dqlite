@@ -155,9 +155,15 @@ func migrate(ctx context.Context, txn *sql.Tx) error {
 		return err
 	}
 
-	if currentVersion == 0 {
-		if err := applySchemaV1(ctx, txn); err != nil {
-			return err
+	switch currentVersion.Major() {
+	case 0:
+		for v := currentVersion.Minor(); v <= databaseSchemaMinorVersion; v++ {
+			switch v {
+			case 0:
+				if err := applySchemaV1(ctx, txn); err != nil {
+					return err
+				}
+			}
 		}
 	}
 
