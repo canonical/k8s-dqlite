@@ -61,7 +61,7 @@ func newKineServer(ctx context.Context, tb testing.TB, options *kineOptions) *ki
 		endpointConfig, db = startSqlite(ctx, tb, dir)
 	case endpoint.DQLiteBackend:
 		dqliteListener = instrument.NewListener("unix", path.Join(dir, "dqlite.sock"))
-		if err := dqliteListener.Listen(); err != nil {
+		if err := dqliteListener.Listen(ctx); err != nil {
 			tb.Fatal(err)
 		}
 		tb.Cleanup(func() {

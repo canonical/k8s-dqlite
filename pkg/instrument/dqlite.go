@@ -33,11 +33,12 @@ func NewListener(network, address string) *Listener {
 	}
 }
 
-func (l *Listener) Listen() error {
+func (l *Listener) Listen(ctx context.Context) error {
 	if l.netListener != nil {
 		return fmt.Errorf("listener already running")
 	}
-	netListener, err := net.Listen(l.Network, l.Address)
+	var lc net.ListenConfig
+	netListener, err := lc.Listen(ctx, l.Network, l.Address)
 	if err != nil {
 		return err
 	}
@@ -48,8 +49,11 @@ func (l *Listener) Listen() error {
 		defer l.wg.Done()
 		for {
 			conn, err := l.netListener.Accept()
+			if ctx.Err() != nil {
+				break
+			}
 			if err != nil {
-				l.err = err
+				l.err = errors.Join(l.err, err)
 				break
 			}
 			l.AcceptedChan <- conn
