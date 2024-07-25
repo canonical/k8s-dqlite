@@ -13,52 +13,42 @@ import (
 // the latest revisions must have been recorded in the Kine table
 // already
 
-const (
-	databaseSchemaMajorVersion int16 = 0
-	databaseSchemaMinorVersion int16 = 1
-	mask                       int32 = 0xFFFF // Mask for 2 bytes (16 bits)
-)
-
 type SchemaVersion int32
 
 var (
-	databaseSchemaVersion = ToSchemaVersion(databaseSchemaMajorVersion, databaseSchemaMinorVersion)
+	databaseSchemaVersion = NewSchemaVersion(1, 0)
 )
 
-func ToSchemaVersion(major int16, minor int16) SchemaVersion {
+func NewSchemaVersion(major int16, minor int16) SchemaVersion {
 	return SchemaVersion(int32(major)<<16 | int32(minor))
 }
 
 func (sv SchemaVersion) Major() int16 {
 	// Extract the high 16 bits
-	return int16((int32(sv) >> 16) & mask)
+	return int16((int32(sv) >> 16))
 }
 
 func (sv SchemaVersion) Minor() int16 {
 	// Extract the lower 16 bits
-	return int16(int32(sv) & mask)
+	return int16(sv)
 }
 
-func (sv SchemaVersion) CanMigrate(targetSV SchemaVersion) (bool, error) {
-	// Check wether version is the same
-	if sv.Major() == targetSV.Major() && sv.Minor() == targetSV.Minor() {
-		return false, nil
-	}
+func (sv SchemaVersion) CompatibleWith(targetSV SchemaVersion) error {
 	// Major version must be the same
 	if sv.Major() != targetSV.Major() {
-		return false, fmt.Errorf("can not migrate between different major versions")
+		return fmt.Errorf("can not migrate between different major versions")
 	}
 	// Minor version must be greater
 	if sv.Minor() > targetSV.Minor() {
-		return false, fmt.Errorf("can not rollback to earlier minor version")
+		return fmt.Errorf("can not rollback to earlier minor version")
 	}
-	return true, nil
+	return nil
 }
 
-// applySchemaV1 moves the schema from version 0 to version 1,
+// applySchemaV0_1 moves the schema from version 0 to version 1,
 // taking into account the possible unversioned schema from
 // upstream kine.
-func applySchemaV1(ctx context.Context, txn *sql.Tx) error {
+func applySchemaV0_1(ctx context.Context, txn *sql.Tx) error {
 	if kineTableExists, err := hasTable(ctx, txn, "kine"); err != nil {
 		return err
 	} else if !kineTableExists {

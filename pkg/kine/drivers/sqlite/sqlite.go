@@ -128,8 +128,11 @@ func setup(ctx context.Context, db *sql.DB) error {
 		return err
 	}
 
-	if canMigrate, err := currentSchemaVersion.CanMigrate(databaseSchemaVersion); !canMigrate {
+	if err := currentSchemaVersion.CompatibleWith(databaseSchemaVersion); err != nil {
 		return err
+	}
+	if currentSchemaVersion >= databaseSchemaVersion {
+		return nil
 	}
 
 	txn, err := db.BeginTx(ctx, nil)
@@ -148,23 +151,27 @@ func setup(ctx context.Context, db *sql.DB) error {
 // migrate tries to migrate from a version of the database
 // to the target one.
 func migrate(ctx context.Context, txn *sql.Tx) error {
-	var currentVersion SchemaVersion
+	var currentSchemaVersion SchemaVersion
 
 	row := txn.QueryRowContext(ctx, `PRAGMA user_version`)
-	if err := row.Scan(&currentVersion); err != nil {
+	if err := row.Scan(&currentSchemaVersion); err != nil {
 		return err
 	}
 
-	switch currentVersion.Major() {
-	case 0:
-		for v := currentVersion.Minor(); v <= databaseSchemaMinorVersion; v++ {
-			switch v {
-			case 0:
-				if err := applySchemaV1(ctx, txn); err != nil {
-					return err
-				}
-			}
+	if err := currentSchemaVersion.CompatibleWith(databaseSchemaVersion); err != nil {
+		return err
+	}
+	if currentSchemaVersion >= databaseSchemaVersion {
+		return nil
+	}
+
+	switch currentSchemaVersion {
+	case NewSchemaVersion(0, 0):
+		if err := applySchemaV0_1(ctx, txn); err != nil {
+			return err
 		}
+	default:
+		return fmt.Errorf("unknown schema version %d", currentSchemaVersion)
 	}
 
 	setUserVersionSQL := fmt.Sprintf(`PRAGMA user_version = %d`, databaseSchemaVersion)
