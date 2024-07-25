@@ -568,6 +568,11 @@ func (s *SQLLog) Count(ctx context.Context, prefix, startKey string, revision in
 		span.RecordError(err)
 		span.End()
 	}()
+	span.SetAttributes(
+		attribute.String("prefix", prefix),
+		attribute.String("startKey", startKey),
+		attribute.Int64("revision", revision),
+	)
 	if revision == 0 {
 		return s.d.CountCurrent(ctx, prefix, startKey)
 	}
