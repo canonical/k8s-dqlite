@@ -38,10 +38,6 @@ func (sv SchemaVersion) CompatibleWith(targetSV SchemaVersion) error {
 	if sv.Major() != targetSV.Major() {
 		return fmt.Errorf("can not migrate between different major versions")
 	}
-	// Minor version must be greater
-	if sv.Minor() > targetSV.Minor() {
-		return fmt.Errorf("can not rollback to earlier minor version")
-	}
 	return nil
 }
 

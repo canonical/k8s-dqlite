@@ -27,12 +27,6 @@ func TestCanMigrate(t *testing.T) {
 			target:      sqlite.NewSchemaVersion(0, 1),
 			expectedErr: nil,
 		},
-		{
-			name:        "can not rollback minor version",
-			current:     sqlite.NewSchemaVersion(1, 1),
-			target:      sqlite.NewSchemaVersion(1, 0),
-			expectedErr: fmt.Errorf("can not rollback to earlier minor version"),
-		},
 	}
 
 	for _, tt := range tests {

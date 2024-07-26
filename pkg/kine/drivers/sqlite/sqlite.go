@@ -171,7 +171,7 @@ func migrate(ctx context.Context, txn *sql.Tx) error {
 			return err
 		}
 	default:
-		return fmt.Errorf("unknown schema version %d", currentSchemaVersion)
+		return nil
 	}
 
 	setUserVersionSQL := fmt.Sprintf(`PRAGMA user_version = %d`, databaseSchemaVersion)
