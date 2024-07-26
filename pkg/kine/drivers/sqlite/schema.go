@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"fmt"
 )
 
 // The database version that designates whether table migration
@@ -11,12 +12,39 @@ import (
 // present anymore, and unexpired rows of the key_value table with
 // the latest revisions must have been recorded in the Kine table
 // already
-const databaseSchemaVersion = 1
 
-// applySchemaV1 moves the schema from version 0 to version 1,
+type SchemaVersion int32
+
+var (
+	databaseSchemaVersion = NewSchemaVersion(0, 1)
+)
+
+func NewSchemaVersion(major int16, minor int16) SchemaVersion {
+	return SchemaVersion(int32(major)<<16 | int32(minor))
+}
+
+func (sv SchemaVersion) Major() int16 {
+	// Extract the high 16 bits
+	return int16((int32(sv) >> 16))
+}
+
+func (sv SchemaVersion) Minor() int16 {
+	// Extract the lower 16 bits
+	return int16(sv)
+}
+
+func (sv SchemaVersion) CompatibleWith(targetSV SchemaVersion) error {
+	// Major version must be the same
+	if sv.Major() != targetSV.Major() {
+		return fmt.Errorf("can not migrate between different major versions")
+	}
+	return nil
+}
+
+// applySchemaV0_1 moves the schema from version 0 to version 1,
 // taking into account the possible unversioned schema from
 // upstream kine.
-func applySchemaV1(ctx context.Context, txn *sql.Tx) error {
+func applySchemaV0_1(ctx context.Context, txn *sql.Tx) error {
 	if kineTableExists, err := hasTable(ctx, txn, "kine"); err != nil {
 		return err
 	} else if !kineTableExists {
