@@ -16,7 +16,7 @@ import (
 type SchemaVersion int32
 
 var (
-	databaseSchemaVersion = NewSchemaVersion(1, 0)
+	databaseSchemaVersion = NewSchemaVersion(0, 1)
 )
 
 func NewSchemaVersion(major int16, minor int16) SchemaVersion {
