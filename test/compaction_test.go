@@ -98,7 +98,6 @@ func BenchmarkCompaction(b *testing.B) {
 			b.StopTimer()
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-
 			kine := newKineServer(ctx, b, &kineOptions{
 				backendType: backendType,
 				setup: func(ctx context.Context, tx *sql.Tx) error {
@@ -119,7 +118,6 @@ func BenchmarkCompaction(b *testing.B) {
 					return nil
 				},
 			})
-
 			kine.ResetMetrics()
 			b.StartTimer()
 			if err := kine.backend.DoCompact(ctx); err != nil {

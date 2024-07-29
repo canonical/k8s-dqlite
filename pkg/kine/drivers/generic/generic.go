@@ -24,7 +24,7 @@ const otelName = "generic"
 var (
 	otelTracer       trace.Tracer
 	otelMeter        metric.Meter
-	setCompactRevCnt metric.Int64Counter
+	compactCnt       metric.Int64Counter
 	getRevisionCnt   metric.Int64Counter
 	deleteRevCnt     metric.Int64Counter
 	currentRevCnt    metric.Int64Counter
@@ -35,7 +35,7 @@ func init() {
 	var err error
 	otelTracer = otel.Tracer(otelName)
 	otelMeter = otel.Meter(otelName)
-	setCompactRevCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.compact", otelName), metric.WithDescription("Number of compact requests"))
+	compactCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.compact", otelName), metric.WithDescription("Number of compact requests"))
 	if err != nil {
 		logrus.WithError(err).Warning("Otel failed to create create counter")
 	}
@@ -104,11 +104,9 @@ var (
 
 	revisionIntervalSQL = `
 		SELECT (
-			SELECT prev_revision
+			SELECT MAX(prev_revision)
 			FROM kine
 			WHERE name = 'compact_rev_key'
-			ORDER BY prev_revision
-			DESC LIMIT 1
 		) AS low, (
 			SELECT MAX(id)
 			FROM kine
@@ -143,6 +141,7 @@ type Generic struct {
 	AfterSQLPrefix        string
 	AfterSQL              string
 	DeleteSQL             string
+	CompactSQL            string
 	UpdateCompactSQL      string
 	InsertSQL             string
 	FillSQL               string
@@ -279,7 +278,7 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 
 		UpdateCompactSQL: q(`
 			UPDATE kine
-			SET prev_revision = ?
+			SET prev_revision = max(prev_revision, ?)
 			WHERE name = 'compact_rev_key'`, paramCharacter, numbered),
 
 		InsertLastInsertIDSQL: q(`INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
@@ -440,6 +439,87 @@ func (d *Generic) Count(ctx context.Context, prefix, startKey string, revision i
 	return rev.Int64, id, err
 }
 
+// Compact compacts to revision the database. After the call,
+// any request for a version older than revision will return
+// a compacted error.
+func (d *Generic) Compact(ctx context.Context, revision int64) (err error) {
+	compactCnt.Add(ctx, 1)
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.compact", otelName))
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+	compactStart, currentRevision, err := d.GetCompactRevision(ctx)
+	if err != nil {
+		return err
+	}
+	if compactStart >= revision {
+		return nil // Nothing to compact.
+	}
+	if revision > currentRevision {
+		revision = currentRevision
+	}
+
+	for i := 0; i < retryCount; i++ {
+		err = d.tryCompact(ctx, compactStart, revision)
+		if err == nil || d.Retry == nil || !d.Retry(err) {
+			break
+		}
+	}
+	return err
+}
+
+func (d *Generic) tryCompact(ctx context.Context, start, end int64) error {
+	tx, err := d.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := tx.Rollback(); err != nil {
+			logrus.WithError(err).Trace("can't rollback compaction")
+		}
+	}()
+
+	// This query adds `created = 0` as a condition
+	// to mitigate a bug in vXXX where newly created
+	// keys had `prev_revision = max(id)` instead of 0.
+	// Even with the bug fixed, we still need to check
+	// for that in older rows and if older peers are
+	// still running. Given that we are not yet using
+	// an index, it won't change much in performance
+	// however, it should be included in a covering
+	// index if ever necessary.
+	_, err = tx.ExecContext(ctx, `
+		DELETE FROM kine
+		WHERE id IN (
+			SELECT prev_revision
+			FROM kine
+			WHERE name != 'compact_rev_key'
+				AND created = 0
+				AND prev_revision != 0
+				AND ? < id AND id <= ?
+		)
+	`, start, end)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.ExecContext(ctx, `
+		DELETE FROM kine
+		WHERE deleted = 1
+			AND ? < id AND id <= ?
+	`, start, end)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.ExecContext(ctx, d.UpdateCompactSQL, end)
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (d *Generic) GetCompactRevision(ctx context.Context) (int64, int64, error) {
 	getCompactRevCnt.Add(ctx, 1)
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.get_compact_revision", otelName))
@@ -447,9 +527,6 @@ func (d *Generic) GetCompactRevision(ctx context.Context) (int64, int64, error) 
 	start := time.Now()
 	var err error
 	defer func() {
-		if err == sql.ErrNoRows {
-			err = nil
-		}
 		span.RecordError(err)
 		recordOpResult("revision_interval_sql", err, start)
 		recordTxResult("revision_interval_sql", err)
@@ -472,7 +549,7 @@ func (d *Generic) GetCompactRevision(ctx context.Context) (int64, int64, error) 
 		if err := rows.Err(); err != nil {
 			return 0, 0, err
 		}
-		return 0, 0, nil
+		return 0, 0, fmt.Errorf("cannot get compact revision: aggregate query returned no rows")
 	}
 
 	if err := rows.Scan(&compact, &target); err != nil {
@@ -480,20 +557,6 @@ func (d *Generic) GetCompactRevision(ctx context.Context) (int64, int64, error) 
 	}
 	span.SetAttributes(attribute.Int64("compact", compact.Int64), attribute.Int64("target", target.Int64))
 	return compact.Int64, target.Int64, err
-}
-
-func (d *Generic) SetCompactRevision(ctx context.Context, revision int64) error {
-	var err error
-	setCompactRevCnt.Add(ctx, 1)
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.set_compact_revision", otelName))
-	defer func() {
-		span.End()
-		span.RecordError(err)
-	}()
-	span.SetAttributes(attribute.Int64("revision", revision))
-
-	_, err = d.execute(ctx, "update_compact_sql", d.UpdateCompactSQL, revision)
-	return err
 }
 
 func (d *Generic) GetRevision(ctx context.Context, revision int64) (*sql.Rows, error) {

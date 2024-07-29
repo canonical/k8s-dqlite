@@ -27,19 +27,21 @@ func New(db *sql.DB, maxSize int) *DB {
 func (db *DB) Underlying() *sql.DB { return db.underlying }
 
 func (db *DB) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
-	stms, err := db.prepare(ctx, query)
+	stmt, err := db.prepare(ctx, query)
 	if err != nil {
 		return nil, err
 	}
-	return stms.ExecContext(ctx, args...)
+	defer stmt.Close()
+	return stmt.ExecContext(ctx, args...)
 }
 
 func (db *DB) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
-	stms, err := db.prepare(ctx, query)
+	stmt, err := db.prepare(ctx, query)
 	if err != nil {
 		return nil, err
 	}
-	return stms.QueryContext(ctx, args...)
+	defer stmt.Close()
+	return stmt.QueryContext(ctx, args...)
 }
 
 func (db *DB) Close() error {
@@ -58,6 +60,18 @@ func (db *DB) Close() error {
 	}
 
 	return errors.Join(errs...)
+}
+
+func (db *DB) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
+	tx, err := db.underlying.BeginTx(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Tx{
+		db: db,
+		tx: tx,
+	}, nil
 }
 
 func (db *DB) touch(entry *lruEntry) {
@@ -141,6 +155,34 @@ func (s *stmt) Close() error {
 	}
 	return nil
 }
+
+type Tx struct {
+	db *DB
+	tx *sql.Tx
+}
+
+func (tx *Tx) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	stmt, err := tx.db.prepare(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer stmt.Close()
+
+	return tx.tx.StmtContext(ctx, stmt.Stmt).ExecContext(ctx, args...)
+}
+
+func (tx *Tx) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	stmt, err := tx.db.prepare(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer stmt.Close()
+
+	return tx.tx.StmtContext(ctx, stmt.Stmt).QueryContext(ctx, args...)
+}
+
+func (tx *Tx) Commit() error   { return tx.tx.Commit() }
+func (tx *Tx) Rollback() error { return tx.tx.Rollback() }
 
 type lruList struct {
 	// lruList is implemented as a circular linked list

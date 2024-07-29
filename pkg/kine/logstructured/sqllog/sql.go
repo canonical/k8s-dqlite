@@ -18,8 +18,9 @@ import (
 )
 
 const (
-	SupersededCount = 100
-	otelName        = "sqllog"
+	SupersededCount  = 100
+	compactBatchSize = 1000
+	otelName         = "sqllog"
 )
 
 var (
@@ -67,7 +68,7 @@ type Dialect interface {
 	GetRevision(ctx context.Context, revision int64) (*sql.Rows, error)
 	DeleteRevision(ctx context.Context, revision int64) error
 	GetCompactRevision(ctx context.Context) (int64, int64, error)
-	SetCompactRevision(ctx context.Context, revision int64) error
+	Compact(ctx context.Context, revision int64) error
 	Fill(ctx context.Context, revision int64) error
 	IsFill(key string) bool
 	GetSize(ctx context.Context) (int64, error)
@@ -143,133 +144,36 @@ func (s *SQLLog) DoCompact(ctx context.Context) error {
 		return fmt.Errorf("failed to initialise compaction: %v", err)
 	}
 
-	nextEnd, _ := s.d.CurrentRevision(ctx)
-	_, err := s.compactor(ctx, nextEnd)
-
-	return err
-}
-
-func (s *SQLLog) compactor(ctx context.Context, nextEnd int64) (int64, error) {
-	var err error
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.compactor", otelName))
-	defer func() {
-		span.RecordError(err)
-		span.End()
-	}()
-	span.SetAttributes(attribute.Int64("nextEnd", nextEnd))
-
-	currentRev, err := s.d.CurrentRevision(ctx)
-	span.SetAttributes(attribute.Int64("currentRev", currentRev))
-	if err != nil {
-		logrus.Errorf("failed to get current revision: %v", err)
-		return nextEnd, fmt.Errorf("failed to get current revision: %v", err)
-	}
-
-	cursor, _, err := s.d.GetCompactRevision(ctx)
-	if err != nil {
-		logrus.Errorf("failed to get compact revision: %v", err)
-		return nextEnd, fmt.Errorf("failed to get compact revision: %v", err)
-	}
-	span.SetAttributes(attribute.Int64("cursor", cursor))
-
-	end := nextEnd
-	nextEnd = currentRev
-
-	// NOTE(neoaggelos): Ignoring the last 1000 revisions causes the following CNCF conformance test to fail.
+	// NOTE: Upstream is ignoring the last 1000 revisions, however that causes the following CNCF conformance test to fail.
 	// This is because of low activity, where the created list is part of the last 1000 revisions and is not compacted.
 	// Link to failing test: https://github.com/kubernetes/kubernetes/blob/f2cfbf44b1fb482671aedbfff820ae2af256a389/test/e2e/apimachinery/chunking.go#L144
 	// To address this, we only ignore the last 100 revisions instead
-	end = end - SupersededCount
-
-	savedCursor := cursor
-	// Purposefully start at the current and redo the current as
-	// it could have failed before actually compacting
-	compactCnt.Add(ctx, 1)
-	span.AddEvent(fmt.Sprintf("start compaction from %d to %d", cursor, end))
-	for ; cursor <= end; cursor++ {
-		rows, err := s.d.GetRevision(ctx, cursor)
-		if err != nil {
-			logrus.Errorf("failed to get revision %d: %v", cursor, err)
-			return nextEnd, fmt.Errorf("failed to get revision %d: %v", cursor, err)
-		}
-
-		events, err := RowsToEvents(rows)
-		if err != nil {
-			logrus.Errorf("failed to convert to events: %v", err)
-			return nextEnd, fmt.Errorf("failed to convert to events: %v", err)
-		}
-
-		if len(events) == 0 {
-			continue
-		}
-
-		event := events[0]
-
-		if event.KV.Key == "compact_rev_key" {
-			span.AddEvent("skip compact_rev_key")
-			// don't compact the compact key
-			continue
-		}
-
-		setRev := false
-		if event.PrevKV != nil && event.PrevKV.ModRevision != 0 {
-			if savedCursor != cursor {
-				if err := s.d.SetCompactRevision(ctx, cursor); err != nil {
-					span.AddEvent(fmt.Sprintf("failed to record compact revision: %v", err))
-					logrus.Errorf("failed to record compact revision: %v", err)
-					return nextEnd, fmt.Errorf("failed to record compact revision: %v", err)
-				}
-				savedCursor = cursor
-				setRev = true
-			}
-
-			if err := s.d.DeleteRevision(ctx, event.PrevKV.ModRevision); err != nil {
-				span.AddEvent(fmt.Sprintf("failed to delete revision %d", event.PrevKV.ModRevision))
-				logrus.Errorf("failed to delete revision %d: %v", event.PrevKV.ModRevision, err)
-				return nextEnd, fmt.Errorf("failed to delete revision %d: %v", event.PrevKV.ModRevision, err)
-			}
-		}
-
-		if event.Delete {
-			if !setRev && savedCursor != cursor {
-				if err := s.d.SetCompactRevision(ctx, cursor); err != nil {
-					logrus.Errorf("failed to record compact revision: %v", err)
-					return nextEnd, fmt.Errorf("failed to record compact revision: %v", err)
-				}
-				savedCursor = cursor
-			}
-
-			if err := s.d.DeleteRevision(ctx, cursor); err != nil {
-				logrus.Errorf("failed to delete current revision %d: %v", cursor, err)
-				return nextEnd, fmt.Errorf("failed to delete current revision %d: %v", cursor, err)
-			}
-		}
+	rev, err := s.d.CurrentRevision(ctx)
+	if err != nil {
+		return err
 	}
-
-	if savedCursor != cursor {
-		if err := s.d.SetCompactRevision(ctx, cursor); err != nil {
-			logrus.Errorf("failed to record compact revision: %v", err)
-			return nextEnd, fmt.Errorf("failed to record compact revision: %v", err)
-		}
-	}
-	span.SetAttributes(attribute.Int64("new-nextEnd", nextEnd), attribute.Int64("cursor-ended:", cursor))
-	return nextEnd, nil
+	return s.d.Compact(ctx, rev-SupersededCount)
 }
 
-func (s *SQLLog) compact() {
-	var nextEnd int64
-	t := time.NewTicker(s.d.GetCompactInterval())
-	nextEnd, _ = s.d.CurrentRevision(s.ctx)
-
-	for {
-		select {
-		case <-s.ctx.Done():
-			return
-		case <-t.C:
-		}
-
-		nextEnd, _ = s.compactor(s.ctx, nextEnd)
+func (s *SQLLog) compact(ctx context.Context) error {
+	// When executing compaction as a background operation
+	// it's best not to take too much time away from query
+	// operation and similar. As such, we do compaction in
+	// small batches. Given that this logic runs every second,
+	// on regime it should take usually just a couple batches
+	// to keep the pace.
+	start, target, err := s.d.GetCompactRevision(ctx)
+	if err != nil {
+		return err
 	}
+	for start < target {
+		batchRevision := start + compactBatchSize
+		if err := s.d.Compact(s.ctx, batchRevision); err != nil {
+			return err
+		}
+		start = batchRevision
+	}
+	return nil
 }
 
 func (s *SQLLog) CurrentRevision(ctx context.Context) (int64, error) {
@@ -441,7 +345,19 @@ func (s *SQLLog) startWatch() (chan interface{}, error) {
 
 	go func() {
 		defer s.wg.Done()
-		s.compact()
+
+		t := time.NewTicker(s.d.GetCompactInterval())
+
+		for {
+			select {
+			case <-s.ctx.Done():
+				return
+			case <-t.C:
+				if err := s.compact(s.ctx); err != nil {
+					logrus.WithError(err).Trace("compaction failed")
+				}
+			}
+		}
 	}()
 
 	go func() {
