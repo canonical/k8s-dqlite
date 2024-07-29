@@ -108,21 +108,21 @@ var (
 			SELECT MAX(id) AS id
 			FROM kine
 			WHERE name >= ? AND name < ?
-				AND mkv.id <= ?
+				AND id <= ?
 			GROUP BY name
-			HAVING deleted <= ?
+			HAVING deleted = 0
 			ORDER BY name
 		)
 		SELECT kv.id, 
 			name, 
-			CASE 
+			CASE
 				WHEN kv.created THEN kv.id
 				ELSE kv.create_revision
 			END AS create_revision,
 			lease, 
 			value
 		FROM maxkv CROSS JOIN kine kv
-	    	ON maxkv.id = kv.id`
+			ON maxkv.id = kv.id`
 
 	revisionIntervalSQL = `
 		SELECT (
@@ -136,16 +136,15 @@ var (
 
 	countRevisionSQL = `
 		SELECT COUNT(*)
-		FROM kine AS kv
-		JOIN (
-			SELECT MAX(mkv.id) as id
-			FROM kine AS mkv
-			WHERE mkv.name >= ? AND mkv.name < ?
-				AND mkv.id <= ?
-			GROUP BY mkv.name
-		) AS maxkv
-	    	ON maxkv.id = kv.id
-		WHERE kv.deleted = 0`
+		FROM (
+			SELECT MAX(id) AS id
+			FROM kine
+			WHERE name >= ? AND name < ?
+				AND id <= ?
+			GROUP BY name
+			HAVING deleted = 0
+			ORDER BY name
+		)`
 
 	afterSQLPrefix = `
 		SELECT id, name, created, deleted, create_revision, prev_revision, lease, value, old_value
