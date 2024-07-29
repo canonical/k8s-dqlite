@@ -43,9 +43,7 @@ func TestCompaction(t *testing.T) {
 
 				finalSize, err := kine.backend.DbSize(ctx)
 				g.Expect(err).To(BeNil())
-
-				// Expecting no compaction
-				g.Expect(finalSize).To(BeNumerically("==", initialSize))
+				g.Expect(finalSize).To(BeNumerically("==", initialSize)) // Expecting no compaction.
 			})
 
 			t.Run("LargeDatabaseDeleteFivePercent", func(t *testing.T) {
@@ -76,11 +74,19 @@ func TestCompaction(t *testing.T) {
 				err = kine.backend.DoCompact(ctx)
 				g.Expect(err).To(BeNil())
 
+				// Expect compaction to reduce the size.
 				finalSize, err := kine.backend.DbSize(ctx)
 				g.Expect(err).To(BeNil())
-
-				// Expecting compaction
 				g.Expect(finalSize).To(BeNumerically("<", initialSize))
+
+				// Expect for keys to still be there.
+				rev, count, err := kine.backend.Count(ctx, "key/", "", 0)
+				g.Expect(err).To(BeNil())
+				g.Expect(count).To(Equal(int64(10_000 - 500)))
+
+				// Expect old revisions not to be there anymore.
+				_, _, err = kine.backend.List(ctx, "key/", "", 0, rev-400)
+				g.Expect(err).To(Not(BeNil()))
 			})
 		})
 	}
