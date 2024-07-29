@@ -392,7 +392,7 @@ func (d *Generic) CountCurrent(ctx context.Context, prefix string, startKey stri
 	if startKey != "" {
 		start = startKey + "\x01"
 	}
-	rows, err := d.query(ctx, "count_current", d.CountCurrentSQL, start, end, false)
+	rows, err := d.query(ctx, "count_current", d.CountCurrentSQL, start, end)
 	if err != nil {
 		return 0, 0, err
 	}
