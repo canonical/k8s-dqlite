@@ -3,6 +3,7 @@ package test
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"io"
 	"path"
@@ -24,8 +25,9 @@ func init() {
 }
 
 type kineServer struct {
-	client  *clientv3.Client
-	backend server.Backend
+	client         *clientv3.Client
+	backend        server.Backend
+	dqliteListener *instrument.Listener
 }
 
 type kineOptions struct {
@@ -40,26 +42,36 @@ type kineOptions struct {
 	// setup is a function to setup the database before a test or
 	// benchmark starts. It is called after the endpoint started,
 	// so that migration and database schema setup is already done.
-	setup func(*sql.DB) error
+	setup func(context.Context, *sql.Tx) error
 }
 
 // newKineServer spins up a new instance of kine. In case of an error, tb.Fatal is called.
 func newKineServer(ctx context.Context, tb testing.TB, options *kineOptions) *kineServer {
 	dir := tb.TempDir()
 
-	err := instrument.StartSQLiteMonitoring()
-	if err != nil {
+	if err := instrument.StartSQLiteMonitoring(); err != nil {
 		tb.Fatal(err)
 	}
 	tb.Cleanup(func() { instrument.StopSQLiteMonitoring() })
 
 	var endpointConfig *endpoint.Config
 	var db *sql.DB
+	var dqliteListener *instrument.Listener
 	switch options.backendType {
 	case endpoint.SQLiteBackend:
 		endpointConfig, db = startSqlite(ctx, tb, dir)
 	case endpoint.DQLiteBackend:
-		endpointConfig, db = startDqlite(ctx, tb, dir)
+		dqliteListener = instrument.NewListener("unix", path.Join(dir, "dqlite.sock"))
+		if err := dqliteListener.Listen(ctx); err != nil {
+			tb.Fatal(err)
+		}
+		tb.Cleanup(func() {
+			dqliteListener.Close()
+			if err := dqliteListener.Err(); err != nil {
+				tb.Error(err)
+			}
+		})
+		endpointConfig, db = startDqlite(ctx, tb, dir, dqliteListener)
 	default:
 		tb.Fatalf("Testing %s backend not supported", options.backendType)
 	}
@@ -80,7 +92,15 @@ func newKineServer(ctx context.Context, tb testing.TB, options *kineOptions) *ki
 	})
 
 	if options.setup != nil {
-		if err := options.setup(db); err != nil {
+		tx, err := db.BeginTx(ctx, nil)
+		if err != nil {
+			tb.Fatal(err)
+		}
+		if err := options.setup(ctx, tx); err != nil {
+			rollbackErr := tx.Rollback()
+			tb.Fatal(errors.Join(err, rollbackErr))
+		}
+		if err := tx.Commit(); err != nil {
 			tb.Fatal(err)
 		}
 	}
@@ -98,8 +118,9 @@ func newKineServer(ctx context.Context, tb testing.TB, options *kineOptions) *ki
 		tb.Fatal(err)
 	}
 	return &kineServer{
-		client:  client,
-		backend: backend,
+		client:         client,
+		backend:        backend,
+		dqliteListener: dqliteListener,
 	}
 }
 
@@ -117,12 +138,11 @@ func startSqlite(_ context.Context, tb testing.TB, dir string) (*endpoint.Config
 	}, db
 }
 
-var nextPort = 59090
-
-func startDqlite(ctx context.Context, tb testing.TB, dir string) (*endpoint.Config, *sql.DB) {
-	nextPort++
-
-	app, err := app.New(dir, app.WithAddress(fmt.Sprintf("127.0.0.1:%d", nextPort)))
+func startDqlite(ctx context.Context, tb testing.TB, dir string, listener *instrument.Listener) (*endpoint.Config, *sql.DB) {
+	app, err := app.New(dir,
+		app.WithAddress(listener.Address),
+		app.WithExternalConn(listener.Connect, listener.AcceptedChan),
+	)
 	if err != nil {
 		tb.Fatalf("failed to create dqlite app: %v", err)
 	}
@@ -152,19 +172,22 @@ func (ks *kineServer) ReportMetrics(b *testing.B) {
 	b.ReportMetric(float64(sqliteMetrics.PageCacheWrites)/float64(b.N), "page-writes/op")
 	b.ReportMetric(float64(sqliteMetrics.TransactionReadTime)/float64(time.Second)/float64(b.N), "sec-reading/op")
 	b.ReportMetric(float64(sqliteMetrics.TransactionWriteTime)/float64(time.Second)/float64(b.N), "sec-writing/op")
+
+	if ks.dqliteListener != nil {
+		dqliteMetrics := ks.dqliteListener.Metrics()
+		b.ReportMetric(float64(dqliteMetrics.BytesRead)/float64(b.N), "network-bytes-read/op")
+		b.ReportMetric(float64(dqliteMetrics.BytesWritten)/float64(b.N), "network-bytes-written/op")
+	}
 }
 
 func (ks *kineServer) ResetMetrics() {
 	instrument.ResetSQLiteMetrics()
+	if ks.dqliteListener != nil {
+		ks.dqliteListener.ResetMetrics()
+	}
 }
 
-func setupScenario(ctx context.Context, db *sql.DB, prefix string, numInsert, numUpdates, numDeletes int) error {
-	t, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer t.Rollback()
-
+func insertMany(ctx context.Context, tx *sql.Tx, prefix string, valueSize, n int) error {
 	insertManyQuery := `
 WITH RECURSIVE gen_id AS(
 	SELECT 1 AS id
@@ -181,51 +204,52 @@ WITH RECURSIVE gen_id AS(
 INSERT INTO kine(
 	id, name, created, deleted, create_revision, prev_revision, lease, value, old_value
 )
-SELECT id + revision.base, ?||'/'||id, 1, 0, id + revision.base, 0, 0, 'value-'||id, NULL
+SELECT id + revision.base, ?||'/'||id, 1, 0, id + revision.base, 0, 0, randomblob(?), NULL
 FROM gen_id, revision`
-	if _, err := t.ExecContext(ctx, insertManyQuery, numInsert, prefix); err != nil {
-		return err
-	}
+	_, err := tx.ExecContext(ctx, insertManyQuery, n, prefix, valueSize)
+	return err
+}
 
+func updateMany(ctx context.Context, tx *sql.Tx, prefix string, valueSize, n int) error {
 	updateManyQuery := fmt.Sprintf(`
+WITH maxkv AS (
+	SELECT MAX(id) AS id
+	FROM kine
+	WHERE
+		?||'/' <= name AND name < ?||'0'
+	GROUP BY name
+	HAVING deleted = 0
+	ORDER BY name
+)
 INSERT INTO kine(
 	name, created, deleted, create_revision, prev_revision, lease, value, old_value
 )
-SELECT kv.name, 0, 0, kv.create_revision, kv.id, 0, 'new-'||kv.value, kv.value
-FROM kine AS kv
-JOIN (
-	SELECT MAX(mkv.id) as id
-	FROM kine mkv
-	WHERE  ?||'/' <= mkv.name AND mkv.name < ?||'0'
-	GROUP BY mkv.name
-) maxkv ON maxkv.id = kv.id
-WHERE kv.deleted = 0
-ORDER BY kv.name
-LIMIT %d
-		`, numUpdates)
-	if _, err := t.ExecContext(ctx, updateManyQuery, prefix, prefix); err != nil {
-		return err
-	}
+SELECT kv.name, 0, 0, kv.create_revision, kv.id, 0, randomblob(?), kv.value
+FROM maxkv CROSS JOIN kine kv
+	ON maxkv.id = kv.id
+LIMIT %d`, n)
+	_, err := tx.ExecContext(ctx, updateManyQuery, valueSize, prefix, prefix)
+	return err
+}
 
+func deleteMany(ctx context.Context, tx *sql.Tx, prefix string, n int) error {
 	deleteManyQuery := fmt.Sprintf(`
+WITH maxkv AS (
+	SELECT MAX(id) AS id
+	FROM kine
+	WHERE
+		?||'/' <= name AND name < ?||'0'
+	GROUP BY name
+	HAVING deleted = 0
+	ORDER BY name
+)
 INSERT INTO kine(
 	name, created, deleted, create_revision, prev_revision, lease, value, old_value
 )
 SELECT kv.name, 0, 1, kv.create_revision, kv.id, 0, kv.value, kv.value
-FROM kine AS kv
-JOIN (
-	SELECT MAX(mkv.id) as id
-	FROM kine mkv
-	WHERE  ?||'/' <= mkv.name AND mkv.name < ?||'0'
-	GROUP BY mkv.name
-) maxkv ON maxkv.id = kv.id
-WHERE kv.deleted = 0
-ORDER BY kv.name
-LIMIT %d
-		`, numDeletes)
-	if _, err := t.ExecContext(ctx, deleteManyQuery, prefix, prefix); err != nil {
-		return err
-	}
-
-	return t.Commit()
+FROM maxkv CROSS JOIN kine kv
+	ON maxkv.id = kv.id
+LIMIT %d`, n)
+	_, err := tx.ExecContext(ctx, deleteManyQuery, prefix, prefix)
+	return err
 }

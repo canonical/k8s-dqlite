@@ -69,7 +69,7 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 		return nil, nil, err
 	}
 	for i := 0; i < retryAttempts; i++ {
-		err = setup(ctx, dialect.DB)
+		err = setup(ctx, dialect.DB.Underlying())
 		if err == nil {
 			break
 		}
@@ -90,10 +90,6 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 		return err
 	}
 	dialect.GetSizeSQL = `SELECT (page_count - freelist_count) * page_size FROM pragma_page_count(), pragma_page_size(), pragma_freelist_count()`
-
-	if err := dialect.Prepare(); err != nil {
-		return nil, nil, errors.Wrap(err, "query preparation failed")
-	}
 
 	dialect.CompactInterval = opts.compactInterval
 	dialect.PollInterval = opts.pollInterval
@@ -168,6 +164,11 @@ func migrate(ctx context.Context, txn *sql.Tx) error {
 	switch currentSchemaVersion {
 	case NewSchemaVersion(0, 0):
 		if err := applySchemaV0_1(ctx, txn); err != nil {
+			return err
+		}
+		fallthrough
+	case NewSchemaVersion(0, 1):
+		if err := applySchemaV0_2(ctx, txn); err != nil {
 			return err
 		}
 	default:

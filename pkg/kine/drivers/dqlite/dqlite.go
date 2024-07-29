@@ -37,7 +37,7 @@ func NewVariant(ctx context.Context, datasourceName string) (server.Backend, *ge
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "sqlite client")
 	}
-	if err := migrate(ctx, generic.DB); err != nil {
+	if err := migrate(ctx, generic.DB.Underlying()); err != nil {
 		return nil, nil, errors.Wrap(err, "failed to migrate DB from sqlite")
 	}
 	generic.LockWrites = true

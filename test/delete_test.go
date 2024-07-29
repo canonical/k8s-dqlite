@@ -66,8 +66,11 @@ func BenchmarkDelete(b *testing.B) {
 
 			kine := newKineServer(ctx, b, &kineOptions{
 				backendType: backendType,
-				setup: func(db *sql.DB) error {
-					return setupScenario(ctx, db, "key", b.N, 0, 0)
+				setup: func(ctx context.Context, tx *sql.Tx) error {
+					if err := insertMany(ctx, tx, "key", 100, b.N*2); err != nil {
+						return err
+					}
+					return nil
 				},
 			})
 
