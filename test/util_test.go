@@ -114,6 +114,9 @@ func newKineServer(ctx context.Context, tb testing.TB, options *kineOptions) *ki
 		DialTimeout: 5 * time.Second,
 		TLS:         tlsConfig,
 	})
+	tb.Cleanup(func() {
+		client.Close()
+	})
 	if err != nil {
 		tb.Fatal(err)
 	}
