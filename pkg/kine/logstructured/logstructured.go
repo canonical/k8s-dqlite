@@ -151,7 +151,7 @@ func (l *LogStructured) Create(ctx context.Context, key string, value []byte, le
 
 	}()
 
-	rev, prevEvent, err := l.get(ctx, key, "", 1, 0, true)
+	_, prevEvent, err := l.get(ctx, key, "", 1, 0, true)
 	if err != nil {
 		return 0, err
 	}
@@ -163,7 +163,7 @@ func (l *LogStructured) Create(ctx context.Context, key string, value []byte, le
 			Lease: lease,
 		},
 		PrevKV: &server.KeyValue{
-			ModRevision: rev,
+			ModRevision: 0,
 		},
 	}
 	if prevEvent != nil {

@@ -277,6 +277,17 @@ func (s *SQLLog) CurrentRevision(ctx context.Context) (int64, error) {
 }
 
 func (s *SQLLog) After(ctx context.Context, prefix string, revision, limit int64) (int64, []*server.Event, error) {
+	var err error
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.After", otelName))
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+	span.SetAttributes(
+		attribute.String("prefix", prefix),
+		attribute.Int64("revision", revision),
+		attribute.Int64("limit", limit),
+	)
 	rows, err := s.d.AfterPrefix(ctx, prefix, revision, limit)
 	if err != nil {
 		return 0, nil, err
@@ -304,6 +315,18 @@ func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revis
 	var (
 		rows *sql.Rows
 		err  error
+	)
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.List", otelName))
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+	span.SetAttributes(
+		attribute.String("prefix", prefix),
+		attribute.String("startKey", startKey),
+		attribute.Int64("limit", limit),
+		attribute.Int64("revision", revision),
+		attribute.Bool("includeDeleted", includeDeleted),
 	)
 
 	// It's assumed that when there is a start key that that key exists.
@@ -541,6 +564,17 @@ func canSkipRevision(rev, skip int64, skipTime time.Time) bool {
 }
 
 func (s *SQLLog) Count(ctx context.Context, prefix, startKey string, revision int64) (int64, int64, error) {
+	var err error
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Count", otelName))
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+	span.SetAttributes(
+		attribute.String("prefix", prefix),
+		attribute.String("startKey", startKey),
+		attribute.Int64("revision", revision),
+	)
 	if revision == 0 {
 		return s.d.CountCurrent(ctx, prefix, startKey)
 	}
@@ -549,6 +583,13 @@ func (s *SQLLog) Count(ctx context.Context, prefix, startKey string, revision in
 }
 
 func (s *SQLLog) Append(ctx context.Context, event *server.Event) (int64, error) {
+	var err error
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Append", otelName))
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+
 	e := *event
 	if e.KV == nil {
 		e.KV = &server.KeyValue{}
@@ -566,6 +607,8 @@ func (s *SQLLog) Append(ctx context.Context, event *server.Event) (int64, error)
 		e.KV.Value,
 		e.PrevKV.Value,
 	)
+	span.SetAttributes(attribute.Int64("revision", rev))
+
 	if err != nil {
 		return 0, err
 	}
@@ -604,5 +647,13 @@ func scan(rows *sql.Rows, event *server.Event) error {
 }
 
 func (s *SQLLog) DbSize(ctx context.Context) (int64, error) {
-	return s.d.GetSize(ctx)
+	var err error
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.DbSize", otelName))
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+	size, err := s.d.GetSize(ctx)
+	span.SetAttributes(attribute.Int64("size", size))
+	return size, err
 }
