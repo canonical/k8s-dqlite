@@ -21,8 +21,17 @@ func TestCompaction(t *testing.T) {
 
 				kine := newKineServer(ctx, t, &kineOptions{
 					backendType: backendType,
-					setup: func(db *sql.DB) error {
-						return setupScenario(ctx, db, "testkey", 2, 1, 1)
+					setup: func(ctx context.Context, tx *sql.Tx) error {
+						if err := insertMany(ctx, tx, "key", 100, 2); err != nil {
+							return err
+						}
+						if err := updateMany(ctx, tx, "key", 100, 1); err != nil {
+							return err
+						}
+						if err := deleteMany(ctx, tx, "key", 1); err != nil {
+							return err
+						}
+						return nil
 					},
 				})
 
@@ -34,9 +43,7 @@ func TestCompaction(t *testing.T) {
 
 				finalSize, err := kine.backend.DbSize(ctx)
 				g.Expect(err).To(BeNil())
-
-				// Expecting no compaction
-				g.Expect(finalSize).To(BeNumerically("==", initialSize))
+				g.Expect(finalSize).To(BeNumerically("==", initialSize)) // Expecting no compaction.
 			})
 
 			t.Run("LargeDatabaseDeleteFivePercent", func(t *testing.T) {
@@ -47,8 +54,17 @@ func TestCompaction(t *testing.T) {
 
 				kine := newKineServer(ctx, t, &kineOptions{
 					backendType: backendType,
-					setup: func(db *sql.DB) error {
-						return setupScenario(ctx, db, "testkey", 10_000, 500, 500)
+					setup: func(ctx context.Context, tx *sql.Tx) error {
+						if err := insertMany(ctx, tx, "key", 100, 10_000); err != nil {
+							return err
+						}
+						if err := updateMany(ctx, tx, "key", 100, 500); err != nil {
+							return err
+						}
+						if err := deleteMany(ctx, tx, "key", 500); err != nil {
+							return err
+						}
+						return nil
 					},
 				})
 
@@ -58,11 +74,19 @@ func TestCompaction(t *testing.T) {
 				err = kine.backend.DoCompact(ctx)
 				g.Expect(err).To(BeNil())
 
+				// Expect compaction to reduce the size.
 				finalSize, err := kine.backend.DbSize(ctx)
 				g.Expect(err).To(BeNil())
-
-				// Expecting compaction
 				g.Expect(finalSize).To(BeNumerically("<", initialSize))
+
+				// Expect for keys to still be there.
+				rev, count, err := kine.backend.Count(ctx, "key/", "", 0)
+				g.Expect(err).To(BeNil())
+				g.Expect(count).To(Equal(int64(10_000 - 500)))
+
+				// Expect old revisions not to be there anymore.
+				_, _, err = kine.backend.List(ctx, "key/", "", 0, rev-400)
+				g.Expect(err).To(Not(BeNil()))
 			})
 		})
 	}
@@ -74,10 +98,9 @@ func BenchmarkCompaction(b *testing.B) {
 			b.StopTimer()
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-
 			kine := newKineServer(ctx, b, &kineOptions{
 				backendType: backendType,
-				setup: func(db *sql.DB) error {
+				setup: func(ctx context.Context, tx *sql.Tx) error {
 					// Make sure there are enough rows deleted to have
 					// b.N rows to compact.
 					delCount := b.N + sqllog.SupersededCount
@@ -86,10 +109,15 @@ func BenchmarkCompaction(b *testing.B) {
 					// that the deleted rows are about 5% of the total.
 					addCount := delCount * 20
 
-					return setupScenario(ctx, db, "testkey", addCount, 0, delCount)
+					if err := insertMany(ctx, tx, "key", 100, addCount); err != nil {
+						return err
+					}
+					if err := deleteMany(ctx, tx, "key", delCount); err != nil {
+						return err
+					}
+					return nil
 				},
 			})
-
 			kine.ResetMetrics()
 			b.StartTimer()
 			if err := kine.backend.DoCompact(ctx); err != nil {

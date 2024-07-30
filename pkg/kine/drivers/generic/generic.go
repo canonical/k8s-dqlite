@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Rican7/retry/jitter"
+	"github.com/canonical/k8s-dqlite/pkg/kine/prepared"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
@@ -24,7 +24,7 @@ const otelName = "generic"
 var (
 	otelTracer       trace.Tracer
 	otelMeter        metric.Meter
-	setCompactRevCnt metric.Int64Counter
+	compactCnt       metric.Int64Counter
 	getRevisionCnt   metric.Int64Counter
 	deleteRevCnt     metric.Int64Counter
 	currentRevCnt    metric.Int64Counter
@@ -35,7 +35,7 @@ func init() {
 	var err error
 	otelTracer = otel.Tracer(otelName)
 	otelMeter = otel.Meter(otelName)
-	setCompactRevCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.compact", otelName), metric.WithDescription("Number of compact requests"))
+	compactCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.compact", otelName), metric.WithDescription("Number of compact requests"))
 	if err != nil {
 		logrus.WithError(err).Warning("Otel failed to create create counter")
 	}
@@ -62,56 +62,54 @@ var (
 	columns = "kv.id as theid, kv.name, kv.created, kv.deleted, kv.create_revision, kv.prev_revision, kv.lease, kv.value, kv.old_value"
 
 	revSQL = `
-		SELECT MAX(rkv.id) AS id
-		FROM kine AS rkv`
+		SELECT MAX(id) AS id
+		FROM kine`
 
+	// listSQL query looks for the latest version of every row in
+	// the range and returns all columns from it.
+	// The search for the "latest id" (table `maxkv` in the query)
+	// can be carried on quickly with a covering index (kine_name_index).
+	// The `deleted <= ?` is used to select deleted rows:
+	//  - when the argument is 0 (false), the only rows selected are
+	//    those with deleted = 0 (i.e. alive)
+	//  - when the argument is 1 (true), all rows will be selected,
+	//    including deleted ones.
+	// Unfortunately, using a normal JOIN operation will confuse
+	// SQLite planner and insert a SORT temp table at the end of
+	// the plan, forcing SQLite to load and sort the entire set
+	// before returning it (and making the cost of a paginated
+	// query very high) and returning an unsorted set would make
+	// pagination impossible.
+	// To workaround this silly misplan, a ORDER by in the first
+	// table forces ordering of `maxkv` (without paying for it
+	// as it is the same order as the index) and CROSS JOIN is
+	// used as it forces SQLite to keep the outer-loop order
+	// when joining tables. See https://www.sqlite.org/optoverview.html#crossjoin
+	// for more details.
 	listSQL = fmt.Sprintf(`
-		SELECT %s
-		FROM kine kv
-		JOIN (
-			SELECT MAX(mkv.id) as id
-			FROM kine mkv
+		WITH maxkv AS (
+			SELECT MAX(id) AS id
+			FROM kine
 			WHERE
-				mkv.name >= ? AND mkv.name < ?
+				name >= ? AND name < ?
 				%%s
-			GROUP BY mkv.name) maxkv
+			GROUP BY name
+			HAVING deleted <= ?
+			ORDER BY name
+		)
+		SELECT %s
+		FROM maxkv CROSS JOIN kine kv
 	    	ON maxkv.id = kv.id
-		WHERE
-			  (kv.deleted = 0 OR ?)
-		ORDER BY kv.name ASC, kv.id ASC
-	`, columns)
-
-	revisionAfterSQL = fmt.Sprintf(`
-		SELECT *
-		FROM (
-			SELECT %s
-			FROM kine AS kv
-			JOIN (
-				SELECT MAX(mkv.id) AS id
-				FROM kine AS mkv
-				WHERE mkv.name >= ? AND mkv.name < ?
-					AND mkv.id <= ?
-				GROUP BY mkv.name
-			) AS maxkv
-				ON maxkv.id = kv.id
-			WHERE
-				? OR kv.deleted = 0
-		) AS lkv
-		ORDER BY lkv.name ASC, lkv.theid ASC
 	`, columns)
 
 	revisionIntervalSQL = `
 		SELECT (
-			SELECT crkv.prev_revision
-			FROM kine AS crkv
-			WHERE crkv.name = 'compact_rev_key'
-			ORDER BY prev_revision
-			DESC LIMIT 1
-		) AS low, (
-			SELECT id
+			SELECT MAX(prev_revision)
 			FROM kine
-			ORDER BY id
-			DESC LIMIT 1
+			WHERE name = 'compact_rev_key'
+		) AS low, (
+			SELECT MAX(id)
+			FROM kine
 		) AS high`
 )
 
@@ -131,37 +129,27 @@ type ErrCode func(error) string
 type Generic struct {
 	sync.Mutex
 
-	LockWrites                    bool
-	LastInsertID                  bool
-	DB                            *sql.DB
-	GetCurrentSQL                 string
-	GetRevisionSQL                string
-	getRevisionSQLPrepared        *sql.Stmt
-	RevisionSQL                   string
-	ListRevisionStartSQL          string
-	GetRevisionAfterSQL           string
-	CountCurrentSQL               string
-	countCurrentSQLPrepared       *sql.Stmt
-	CountRevisionSQL              string
-	countRevisionSQLPrepared      *sql.Stmt
-	AfterSQLPrefix                string
-	afterSQLPrefixPrepared        *sql.Stmt
-	AfterSQL                      string
-	DeleteSQL                     string
-	deleteSQLPrepared             *sql.Stmt
-	UpdateCompactSQL              string
-	updateCompactSQLPrepared      *sql.Stmt
-	InsertSQL                     string
-	insertSQLPrepared             *sql.Stmt
-	FillSQL                       string
-	fillSQLPrepared               *sql.Stmt
-	InsertLastInsertIDSQL         string
-	insertLastInsertIDSQLPrepared *sql.Stmt
-	GetSizeSQL                    string
-	getSizeSQLPrepared            *sql.Stmt
-	Retry                         ErrRetry
-	TranslateErr                  TranslateErr
-	ErrCode                       ErrCode
+	LockWrites            bool
+	LastInsertID          bool
+	DB                    *prepared.DB
+	GetCurrentSQL         string
+	GetRevisionSQL        string
+	RevisionSQL           string
+	ListRevisionStartSQL  string
+	CountCurrentSQL       string
+	CountRevisionSQL      string
+	AfterSQLPrefix        string
+	AfterSQL              string
+	DeleteSQL             string
+	CompactSQL            string
+	UpdateCompactSQL      string
+	InsertSQL             string
+	FillSQL               string
+	InsertLastInsertIDSQL string
+	GetSizeSQL            string
+	Retry                 ErrRetry
+	TranslateErr          TranslateErr
+	ErrCode               ErrCode
 
 	AdmissionControlPolicy AdmissionControlPolicy
 
@@ -231,43 +219,57 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 	configureConnectionPooling(db)
 
 	return &Generic{
-		DB: db,
+		DB: prepared.New(db, 100),
 
 		GetRevisionSQL: q(fmt.Sprintf(`
-			SELECT
-			%s
-			FROM kine kv
-			WHERE kv.id = ?`, columns), paramCharacter, numbered),
+			SELECT %s
+			FROM kine AS kv
+			WHERE id = ?`, columns), paramCharacter, numbered),
 
 		GetCurrentSQL:        q(fmt.Sprintf(listSQL, ""), paramCharacter, numbered),
-		ListRevisionStartSQL: q(fmt.Sprintf(listSQL, "AND mkv.id <= ?"), paramCharacter, numbered),
-		GetRevisionAfterSQL:  q(revisionAfterSQL, paramCharacter, numbered),
+		ListRevisionStartSQL: q(fmt.Sprintf(listSQL, "AND id <= ?"), paramCharacter, numbered),
 
-		CountCurrentSQL: q(fmt.Sprintf(`
-			SELECT (%s), COUNT(*)
+		CountCurrentSQL: q(`
+			SELECT (
+				SELECT COALESCE(MAX(id), 0) AS id
+				FROM kine
+			), COUNT(*)
 			FROM (
-				%s
-			) c`, revSQL, fmt.Sprintf(listSQL, "")), paramCharacter, numbered),
+				SELECT MAX(id) AS id
+				FROM kine
+				WHERE
+					name >= ? AND name < ?
+				GROUP BY name
+				HAVING deleted = 0
+			) c`, paramCharacter, numbered),
 
-		CountRevisionSQL: q(fmt.Sprintf(`
-			SELECT (%s), COUNT(c.theid)
+		CountRevisionSQL: q(`
+			SELECT (
+				SELECT COALESCE(MAX(id), 0) AS id
+				FROM kine
+			), COUNT(*)
 			FROM (
-				%s
-			) c`, revSQL, fmt.Sprintf(listSQL, "AND mkv.id <= ?")), paramCharacter, numbered),
+				SELECT MAX(id) AS id
+				FROM kine
+				WHERE
+					name >= ? AND name < ?
+						AND id <= ?
+				GROUP BY name
+				HAVING deleted = 0
+			) c`, paramCharacter, numbered),
 
 		AfterSQLPrefix: q(fmt.Sprintf(`
 			SELECT %s
 			FROM kine AS kv
-			WHERE
-				kv.name >= ? AND kv.name < ?
-				AND kv.id > ?
-			ORDER BY kv.id ASC`, columns), paramCharacter, numbered),
+			WHERE name >= ? AND name < ?
+				AND id > ?
+			ORDER BY id ASC`, columns), paramCharacter, numbered),
 
 		AfterSQL: q(fmt.Sprintf(`
 			SELECT %s
-				FROM kine AS kv
-				WHERE kv.id > ?
-				ORDER BY kv.id ASC
+			FROM kine AS kv
+			WHERE id > ?
+			ORDER BY id ASC
 		`, columns), paramCharacter, numbered),
 
 		DeleteSQL: q(`
@@ -276,7 +278,7 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 
 		UpdateCompactSQL: q(`
 			UPDATE kine
-			SET prev_revision = ?
+			SET prev_revision = max(prev_revision, ?)
 			WHERE name = 'compact_rev_key'`, paramCharacter, numbered),
 
 		InsertLastInsertIDSQL: q(`INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
@@ -291,79 +293,8 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 	}, err
 }
 
-func (d *Generic) Prepare() error {
-	var err error
-
-	d.getRevisionSQLPrepared, err = d.DB.Prepare(d.GetRevisionSQL)
-	if err != nil {
-		return err
-	}
-
-	d.countCurrentSQLPrepared, err = d.DB.Prepare(d.CountCurrentSQL)
-	if err != nil {
-		return err
-	}
-
-	d.countRevisionSQLPrepared, err = d.DB.Prepare(d.CountRevisionSQL)
-	if err != nil {
-		return err
-	}
-
-	d.deleteSQLPrepared, err = d.DB.Prepare(d.DeleteSQL)
-	if err != nil {
-		return err
-	}
-
-	d.getSizeSQLPrepared, err = d.DB.Prepare(d.GetSizeSQL)
-	if err != nil {
-		return err
-	}
-
-	d.fillSQLPrepared, err = d.DB.Prepare(d.FillSQL)
-	if err != nil {
-		return err
-	}
-
-	if d.LastInsertID {
-		d.insertLastInsertIDSQLPrepared, err = d.DB.Prepare(d.InsertLastInsertIDSQL)
-		if err != nil {
-			return err
-		}
-	} else {
-		d.insertSQLPrepared, err = d.DB.Prepare(d.InsertSQL)
-		if err != nil {
-			return err
-		}
-	}
-
-	d.updateCompactSQLPrepared, err = d.DB.Prepare(d.UpdateCompactSQL)
-	if err != nil {
-		return err
-	}
-
-	d.afterSQLPrefixPrepared, err = d.DB.Prepare(d.AfterSQLPrefix)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (d *Generic) Close() {
-	d.getRevisionSQLPrepared.Close()
-	d.countCurrentSQLPrepared.Close()
-	d.countRevisionSQLPrepared.Close()
-	d.afterSQLPrefixPrepared.Close()
-	d.deleteSQLPrepared.Close()
-	d.updateCompactSQLPrepared.Close()
-	if d.LastInsertID {
-		d.insertLastInsertIDSQLPrepared.Close()
-	} else {
-		d.insertSQLPrepared.Close()
-	}
-	d.fillSQLPrepared.Close()
-	d.getSizeSQLPrepared.Close()
-	d.DB.Close()
+func (d *Generic) Close() error {
+	return d.DB.Close()
 }
 
 func getPrefixRange(prefix string) (start, end string) {
@@ -378,7 +309,7 @@ func getPrefixRange(prefix string) (start, end string) {
 	return start, end
 }
 
-func (d *Generic) query(ctx context.Context, txName, sql string, args ...interface{}) (rows *sql.Rows, err error) {
+func (d *Generic) query(ctx context.Context, txName, query string, args ...interface{}) (rows *sql.Rows, err error) {
 	i := 0
 	start := time.Now()
 
@@ -386,6 +317,7 @@ func (d *Generic) query(ctx context.Context, txName, sql string, args ...interfa
 	if err != nil {
 		return nil, fmt.Errorf("denied: %w", err)
 	}
+	defer done()
 
 	defer func() {
 		if err != nil {
@@ -394,92 +326,24 @@ func (d *Generic) query(ctx context.Context, txName, sql string, args ...interfa
 		recordOpResult(txName, err, start)
 	}()
 
-	strippedSQL := Stripped(sql)
+	strippedQuery := Stripped(query)
 	for ; i < retryCount; i++ {
 		if i > 2 {
-			logrus.Debugf("QUERY (try: %d) %v : %s", i, args, strippedSQL)
+			logrus.Debugf("QUERY (try: %d) %v : %s", i, args, strippedQuery)
 		} else {
-			logrus.Tracef("QUERY (try: %d) %v : %s", i, args, strippedSQL)
+			logrus.Tracef("QUERY (try: %d) %v : %s", i, args, strippedQuery)
 		}
-		rows, err = d.DB.QueryContext(ctx, sql, args...)
-		if err != nil && d.Retry != nil && d.Retry(err) {
-			time.Sleep(jitter.Deviation(nil, 0.3)(2 * time.Millisecond))
-			continue
+		rows, err = d.DB.QueryContext(ctx, query, args...)
+		if err == nil || d.Retry == nil || !d.Retry(err) {
+			break
 		}
-		done()
-		recordTxResult(txName, err)
-		return rows, err
 	}
-	done()
+
+	recordTxResult(txName, err)
 	return
 }
 
-func (d *Generic) queryPrepared(ctx context.Context, txName, sql string, prepared *sql.Stmt, args ...interface{}) (result *sql.Rows, err error) {
-	logrus.Tracef("QUERY %v : %s", args, Stripped(sql))
-
-	done, err := d.AdmissionControlPolicy.Admit(ctx, txName)
-	if err != nil {
-		return nil, fmt.Errorf("denied: %w", err)
-	}
-
-	start := time.Now()
-	r, err := prepared.QueryContext(ctx, args...)
-	done()
-
-	recordOpResult(txName, err, start)
-	recordTxResult(txName, err)
-	return r, err
-}
-
-func (d *Generic) CountCurrent(ctx context.Context, prefix string, startKey string) (int64, int64, error) {
-	var (
-		rev sql.NullInt64
-		id  int64
-	)
-
-	start, end := getPrefixRange(prefix)
-	if startKey != "" {
-		start = startKey + "\x01"
-	}
-	row := d.queryRowPrepared(ctx, "count_current", d.CountCurrentSQL, d.countCurrentSQLPrepared, start, end, false)
-	err := row.Scan(&rev, &id)
-	return rev.Int64, id, err
-}
-
-func (d *Generic) Count(ctx context.Context, prefix, startKey string, revision int64) (int64, int64, error) {
-	var (
-		rev sql.NullInt64
-		id  int64
-	)
-
-	start, end := getPrefixRange(prefix)
-	if startKey != "" {
-		start = startKey + "\x01"
-	}
-	row := d.queryRowPrepared(ctx, "count_revision", d.CountRevisionSQL, d.countRevisionSQLPrepared, start, end, revision, false)
-	err := row.Scan(&rev, &id)
-	return rev.Int64, id, err
-}
-
-func (d *Generic) queryRow(ctx context.Context, txName, sql string, args ...interface{}) (result *sql.Row) {
-	logrus.Tracef("QUERY ROW %v : %s", args, Stripped(sql))
-	start := time.Now()
-	r := d.DB.QueryRowContext(ctx, sql, args...)
-	recordOpResult(txName, r.Err(), start)
-	recordTxResult(txName, r.Err())
-	return r
-}
-
-func (d *Generic) queryRowPrepared(ctx context.Context, txName, sql string, prepared *sql.Stmt, args ...interface{}) (result *sql.Row) {
-	logrus.Tracef("QUERY ROW %v : %s", args, Stripped(sql))
-	start := time.Now()
-	r := prepared.QueryRowContext(ctx, args...)
-	recordOpResult(txName, r.Err(), start)
-	recordTxResult(txName, r.Err())
-	return r
-}
-
-func (d *Generic) executePrepared(ctx context.Context, txName, sql string, prepared *sql.Stmt, args ...interface{}) (result sql.Result, err error) {
+func (d *Generic) execute(ctx context.Context, txName, query string, args ...interface{}) (result sql.Result, err error) {
 	i := 0
 	start := time.Now()
 	defer func() {
@@ -493,30 +357,167 @@ func (d *Generic) executePrepared(ctx context.Context, txName, sql string, prepa
 	if err != nil {
 		return nil, fmt.Errorf("denied: %w", err)
 	}
+	defer done()
 
 	if d.LockWrites {
 		d.Lock()
 		defer d.Unlock()
 	}
 
-	strippedSQL := Stripped(sql)
+	strippedQuery := Stripped(query)
 	for ; i < retryCount; i++ {
 		if i > 2 {
-			logrus.Debugf("EXEC (try: %d) %v : %s", i, args, strippedSQL)
+			logrus.Debugf("EXEC (try: %d) %v : %s", i, args, strippedQuery)
 		} else {
-			logrus.Tracef("EXEC (try: %d) %v : %s", i, args, strippedSQL)
+			logrus.Tracef("EXEC (try: %d) %v : %s", i, args, strippedQuery)
 		}
-		result, err = prepared.ExecContext(ctx, args...)
-		if err != nil && d.Retry != nil && d.Retry(err) {
-			time.Sleep(jitter.Deviation(nil, 0.3)(2 * time.Millisecond))
-			continue
+		result, err = d.DB.ExecContext(ctx, query, args...)
+		if err == nil || d.Retry == nil || !d.Retry(err) {
+			break
 		}
-		done()
-		recordTxResult(txName, err)
-		return result, err
 	}
-	done()
+
+	recordTxResult(txName, err)
 	return
+}
+
+func (d *Generic) CountCurrent(ctx context.Context, prefix string, startKey string) (int64, int64, error) {
+	var (
+		rev sql.NullInt64
+		id  int64
+	)
+
+	start, end := getPrefixRange(prefix)
+	if startKey != "" {
+		start = startKey + "\x01"
+	}
+	rows, err := d.query(ctx, "count_current", d.CountCurrentSQL, start, end)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return 0, 0, err
+		}
+		return 0, 0, sql.ErrNoRows
+	}
+
+	if err := rows.Scan(&rev, &id); err != nil {
+		return 0, 0, err
+	}
+	return rev.Int64, id, nil
+}
+
+func (d *Generic) Count(ctx context.Context, prefix, startKey string, revision int64) (int64, int64, error) {
+	var (
+		rev sql.NullInt64
+		id  int64
+	)
+
+	start, end := getPrefixRange(prefix)
+	if startKey != "" {
+		start = startKey + "\x01"
+	}
+	rows, err := d.query(ctx, "count_revision", d.CountRevisionSQL, start, end, revision)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return 0, 0, err
+		}
+		return 0, 0, sql.ErrNoRows
+	}
+
+	if err := rows.Scan(&rev, &id); err != nil {
+		return 0, 0, err
+	}
+	return rev.Int64, id, err
+}
+
+// Compact compacts to revision the database. After the call,
+// any request for a version older than revision will return
+// a compacted error.
+func (d *Generic) Compact(ctx context.Context, revision int64) (err error) {
+	compactCnt.Add(ctx, 1)
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.compact", otelName))
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+	compactStart, currentRevision, err := d.GetCompactRevision(ctx)
+	if err != nil {
+		return err
+	}
+	if compactStart >= revision {
+		return nil // Nothing to compact.
+	}
+	if revision > currentRevision {
+		revision = currentRevision
+	}
+
+	for i := 0; i < retryCount; i++ {
+		err = d.tryCompact(ctx, compactStart, revision)
+		if err == nil || d.Retry == nil || !d.Retry(err) {
+			break
+		}
+	}
+	return err
+}
+
+func (d *Generic) tryCompact(ctx context.Context, start, end int64) error {
+	tx, err := d.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := tx.Rollback(); err != nil {
+			logrus.WithError(err).Trace("can't rollback compaction")
+		}
+	}()
+
+	// This query adds `created = 0` as a condition
+	// to mitigate a bug in vXXX where newly created
+	// keys had `prev_revision = max(id)` instead of 0.
+	// Even with the bug fixed, we still need to check
+	// for that in older rows and if older peers are
+	// still running. Given that we are not yet using
+	// an index, it won't change much in performance
+	// however, it should be included in a covering
+	// index if ever necessary.
+	_, err = tx.ExecContext(ctx, `
+		DELETE FROM kine
+		WHERE id IN (
+			SELECT prev_revision
+			FROM kine
+			WHERE name != 'compact_rev_key'
+				AND created = 0
+				AND prev_revision != 0
+				AND ? < id AND id <= ?
+		)
+	`, start, end)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.ExecContext(ctx, `
+		DELETE FROM kine
+		WHERE deleted = 1
+			AND ? < id AND id <= ?
+	`, start, end)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.ExecContext(ctx, d.UpdateCompactSQL, end)
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (d *Generic) GetCompactRevision(ctx context.Context) (int64, int64, error) {
@@ -526,9 +527,6 @@ func (d *Generic) GetCompactRevision(ctx context.Context) (int64, int64, error) 
 	start := time.Now()
 	var err error
 	defer func() {
-		if err == sql.ErrNoRows {
-			err = nil
-		}
 		span.RecordError(err)
 		recordOpResult("revision_interval_sql", err, start)
 		recordTxResult("revision_interval_sql", err)
@@ -539,41 +537,26 @@ func (d *Generic) GetCompactRevision(ctx context.Context) (int64, int64, error) 
 	if err != nil {
 		return 0, 0, fmt.Errorf("denied: %w", err)
 	}
+	defer done()
 
-	for i := 0; i < retryCount; i++ {
-		if i > 2 {
-			logrus.Debugf("EXEC (try: %d): %s", i, revisionIntervalSQL)
-		} else {
-			logrus.Tracef("EXEC (try: %d): %s", i, revisionIntervalSQL)
-		}
-		row := d.DB.QueryRow(revisionIntervalSQL)
-		err = row.Scan(&compact, &target)
-		if err != nil && d.Retry != nil && d.Retry(err) {
-			time.Sleep(jitter.Deviation(nil, 0.3)(2 * time.Millisecond))
-			continue
-		}
-		break
+	rows, err := d.query(ctx, "revision_interval_sql", revisionIntervalSQL)
+	if err != nil {
+		return 0, 0, err
 	}
-	done()
-	if err == sql.ErrNoRows {
-		return 0, 0, nil
+	defer rows.Close()
+
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return 0, 0, err
+		}
+		return 0, 0, fmt.Errorf("cannot get compact revision: aggregate query returned no rows")
+	}
+
+	if err := rows.Scan(&compact, &target); err != nil {
+		return 0, 0, err
 	}
 	span.SetAttributes(attribute.Int64("compact", compact.Int64), attribute.Int64("target", target.Int64))
 	return compact.Int64, target.Int64, err
-}
-
-func (d *Generic) SetCompactRevision(ctx context.Context, revision int64) error {
-	var err error
-	setCompactRevCnt.Add(ctx, 1)
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.set_compact_revision", otelName))
-	defer func() {
-		span.RecordError(err)
-		span.End()
-	}()
-	span.SetAttributes(attribute.Int64("revision", revision))
-
-	_, err = d.executePrepared(ctx, "update_compact_sql", d.UpdateCompactSQL, d.updateCompactSQLPrepared, revision)
-	return err
 }
 
 func (d *Generic) GetRevision(ctx context.Context, revision int64) (*sql.Rows, error) {
@@ -586,7 +569,7 @@ func (d *Generic) GetRevision(ctx context.Context, revision int64) (*sql.Rows, e
 	}()
 	span.SetAttributes(attribute.Int64("revision", revision))
 
-	result, err := d.queryPrepared(ctx, "get_revision_sql", d.GetRevisionSQL, d.getRevisionSQLPrepared, revision)
+	result, err := d.query(ctx, "get_revision_sql", d.GetRevisionSQL, revision)
 	return result, err
 }
 
@@ -600,7 +583,7 @@ func (d *Generic) DeleteRevision(ctx context.Context, revision int64) error {
 	}()
 	span.SetAttributes(attribute.Int64("revision", revision))
 
-	_, err = d.executePrepared(ctx, "delete_sql", d.DeleteSQL, d.deleteSQLPrepared, revision)
+	_, err = d.execute(ctx, "delete_sql", d.DeleteSQL, revision)
 	return err
 }
 
@@ -621,19 +604,15 @@ func (d *Generic) ListCurrent(ctx context.Context, prefix, startKey string, limi
 
 func (d *Generic) List(ctx context.Context, prefix, startKey string, limit, revision int64, includeDeleted bool) (*sql.Rows, error) {
 	start, end := getPrefixRange(prefix)
-	if startKey == "" {
-		sql := d.ListRevisionStartSQL
-		if limit > 0 {
-			sql = fmt.Sprintf("%s LIMIT %d", sql, limit)
-		}
-		return d.query(ctx, "list_revision_start_sql", sql, start, end, revision, includeDeleted)
+	if startKey != "" {
+		start = startKey + "\x01"
 	}
 
-	sql := d.GetRevisionAfterSQL
+	sql := d.ListRevisionStartSQL
 	if limit > 0 {
 		sql = fmt.Sprintf("%s LIMIT %d", sql, limit)
 	}
-	return d.query(ctx, "get_revision_after_sql", sql, startKey+"\x01", end, revision, includeDeleted)
+	return d.query(ctx, "list_revision_start_sql", sql, start, end, revision, includeDeleted)
 }
 
 func (d *Generic) CurrentRevision(ctx context.Context) (int64, error) {
@@ -651,16 +630,26 @@ func (d *Generic) CurrentRevision(ctx context.Context) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("denied: %w", err)
 	}
+	defer done()
 
-	row := d.queryRow(ctx, "rev_sql", revSQL)
-	done()
-	err = row.Scan(&id)
-	if err == sql.ErrNoRows {
-		span.AddEvent("no rows")
-		return 0, nil
+	rows, err := d.query(ctx, "rev_sql", revSQL)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return 0, err
+		}
+		return 0, fmt.Errorf("can't get current revision: aggregate query returned empty set")
+	}
+
+	if err := rows.Scan(&id); err != nil {
+		return 0, err
 	}
 	span.SetAttributes(attribute.Int64("id", id))
-	return id, err
+	return id, nil
 }
 
 func (d *Generic) AfterPrefix(ctx context.Context, prefix string, rev, limit int64) (*sql.Rows, error) {
@@ -681,7 +670,7 @@ func (d *Generic) After(ctx context.Context, rev, limit int64) (*sql.Rows, error
 }
 
 func (d *Generic) Fill(ctx context.Context, revision int64) error {
-	_, err := d.executePrepared(ctx, "fill_sql", d.FillSQL, d.fillSQLPrepared, revision, fmt.Sprintf("gap-%d", revision), 0, 1, 0, 0, 0, nil, nil)
+	_, err := d.execute(ctx, "fill_sql", d.FillSQL, revision, fmt.Sprintf("gap-%d", revision), 0, 1, 0, 0, 0, nil, nil)
 	return err
 }
 
@@ -708,26 +697,51 @@ func (d *Generic) Insert(ctx context.Context, key string, create, delete bool, c
 	}
 
 	if d.LastInsertID {
-		row, err := d.executePrepared(ctx, "insert_last_insert_id_sql", d.InsertLastInsertIDSQL, d.insertLastInsertIDSQLPrepared, key, cVal, dVal, createRevision, previousRevision, ttl, value, prevValue)
+		row, err := d.execute(ctx, "insert_last_insert_id_sql", d.InsertLastInsertIDSQL, key, cVal, dVal, createRevision, previousRevision, ttl, value, prevValue)
 		if err != nil {
 			return 0, err
 		}
 		return row.LastInsertId()
 	}
 
-	row := d.queryRowPrepared(ctx, "insert_sql", d.InsertSQL, d.insertSQLPrepared, key, cVal, dVal, createRevision, previousRevision, ttl, value, prevValue)
-	err = row.Scan(&id)
+	rows, err := d.query(ctx, "insert_sql", d.InsertSQL, key, cVal, dVal, createRevision, previousRevision, ttl, value, prevValue)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
 
-	return id, err
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return 0, err
+		}
+		return 0, sql.ErrNoRows
+	}
+
+	if err := rows.Scan(&id); err != nil {
+		return 0, err
+	}
+	return id, nil
 }
 
 func (d *Generic) GetSize(ctx context.Context) (int64, error) {
 	if d.GetSizeSQL == "" {
 		return 0, errors.New("driver does not support size reporting")
 	}
+	rows, err := d.query(ctx, "get_size_sql", d.GetSizeSQL)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return 0, err
+		}
+		return 0, sql.ErrNoRows
+	}
+
 	var size int64
-	row := d.queryRowPrepared(ctx, "get_size_sql", d.GetSizeSQL, d.getSizeSQLPrepared)
-	if err := row.Scan(&size); err != nil {
+	if err := rows.Scan(&size); err != nil {
 		return 0, err
 	}
 	return size, nil
