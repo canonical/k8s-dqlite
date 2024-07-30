@@ -221,7 +221,7 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 	configureConnectionPooling(db)
 
 	return &Generic{
-		DB: prepared.New(db, 100),
+		DB: prepared.New(db),
 
 		GetRevisionSQL: q(fmt.Sprintf(`
 			SELECT
