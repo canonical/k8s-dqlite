@@ -144,18 +144,6 @@ func (s *SQLLog) DoCompact(ctx context.Context) error {
 		return fmt.Errorf("failed to initialise compaction: %v", err)
 	}
 
-	// NOTE: Upstream is ignoring the last 1000 revisions, however that causes the following CNCF conformance test to fail.
-	// This is because of low activity, where the created list is part of the last 1000 revisions and is not compacted.
-	// Link to failing test: https://github.com/kubernetes/kubernetes/blob/f2cfbf44b1fb482671aedbfff820ae2af256a389/test/e2e/apimachinery/chunking.go#L144
-	// To address this, we only ignore the last 100 revisions instead
-	rev, err := s.d.CurrentRevision(ctx)
-	if err != nil {
-		return err
-	}
-	return s.d.Compact(ctx, rev-SupersededCount)
-}
-
-func (s *SQLLog) compact(ctx context.Context) error {
 	// When executing compaction as a background operation
 	// it's best not to take too much time away from query
 	// operation and similar. As such, we do compaction in
@@ -166,8 +154,16 @@ func (s *SQLLog) compact(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	// NOTE: Upstream is ignoring the last 1000 revisions, however that causes the following CNCF conformance test to fail.
+	// This is because of low activity, where the created list is part of the last 1000 revisions and is not compacted.
+	// Link to failing test: https://github.com/kubernetes/kubernetes/blob/f2cfbf44b1fb482671aedbfff820ae2af256a389/test/e2e/apimachinery/chunking.go#L144
+	// To address this, we only ignore the last 100 revisions instead
+	target -= SupersededCount
 	for start < target {
 		batchRevision := start + compactBatchSize
+		if batchRevision > target {
+			batchRevision = target
+		}
 		if err := s.d.Compact(s.ctx, batchRevision); err != nil {
 			return err
 		}
@@ -353,7 +349,7 @@ func (s *SQLLog) startWatch() (chan interface{}, error) {
 			case <-s.ctx.Done():
 				return
 			case <-t.C:
-				if err := s.compact(s.ctx); err != nil {
+				if err := s.DoCompact(s.ctx); err != nil {
 					logrus.WithError(err).Trace("compaction failed")
 				}
 			}
