@@ -298,49 +298,40 @@ func getPrefixRange(prefix string) (start, end string) {
 }
 
 func (d *Generic) query(ctx context.Context, txName, query string, args ...interface{}) (rows *sql.Rows, err error) {
-	i := 0
-	start := time.Now()
-
 	done, err := d.AdmissionControlPolicy.Admit(ctx, txName)
 	if err != nil {
 		return nil, fmt.Errorf("denied: %w", err)
 	}
 	defer done()
 
+	start := time.Now()
+	retryNum := 0
 	defer func() {
 		if err != nil {
-			err = fmt.Errorf("query (try: %d): %w", i, err)
+			err = fmt.Errorf("query (try: %d): %w", retryNum, err)
 		}
 		recordOpResult(txName, err, start)
 	}()
-
-	strippedQuery := Stripped(query)
-	for ; i < retryCount; i++ {
-		if i > 2 {
-			logrus.Debugf("QUERY (try: %d) %v : %s", i, args, strippedQuery)
+	for ; retryNum < retryCount; retryNum++ {
+		if retryNum == 0 {
+			logrus.Tracef("QUERY (try: %d) %v : %s", retryNum, args, Stripped(query))
 		} else {
-			logrus.Tracef("QUERY (try: %d) %v : %s", i, args, strippedQuery)
+			logrus.Debugf("QUERY (try: %d) %v : %s", retryNum, args, Stripped(query))
 		}
 		rows, err = d.DB.QueryContext(ctx, query, args...)
-		if err == nil || d.Retry == nil || !d.Retry(err) {
+		if err == nil {
+			break
+		}
+		if d.Retry == nil || !d.Retry(err) {
 			break
 		}
 	}
 
 	recordTxResult(txName, err)
-	return
+	return rows, err
 }
 
 func (d *Generic) execute(ctx context.Context, txName, query string, args ...interface{}) (result sql.Result, err error) {
-	i := 0
-	start := time.Now()
-	defer func() {
-		if err != nil {
-			err = fmt.Errorf("exec (try: %d): %w", i, err)
-		}
-		recordOpResult(txName, err, start)
-	}()
-
 	done, err := d.AdmissionControlPolicy.Admit(ctx, txName)
 	if err != nil {
 		return nil, fmt.Errorf("denied: %w", err)
@@ -352,21 +343,31 @@ func (d *Generic) execute(ctx context.Context, txName, query string, args ...int
 		defer d.Unlock()
 	}
 
-	strippedQuery := Stripped(query)
-	for ; i < retryCount; i++ {
-		if i > 2 {
-			logrus.Debugf("EXEC (try: %d) %v : %s", i, args, strippedQuery)
+	start := time.Now()
+	retryNum := 0
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("exec (try: %d): %w", retryNum, err)
+		}
+		recordOpResult(txName, err, start)
+	}()
+	for ; retryNum < retryCount; retryNum++ {
+		if retryNum > 2 {
+			logrus.Debugf("EXEC (try: %d) %v : %s", retryNum, args, Stripped(query))
 		} else {
-			logrus.Tracef("EXEC (try: %d) %v : %s", i, args, strippedQuery)
+			logrus.Tracef("EXEC (try: %d) %v : %s", retryNum, args, Stripped(query))
 		}
 		result, err = d.DB.ExecContext(ctx, query, args...)
-		if err == nil || d.Retry == nil || !d.Retry(err) {
+		if err == nil {
+			break
+		}
+		if d.Retry == nil || !d.Retry(err) {
 			break
 		}
 	}
 
 	recordTxResult(txName, err)
-	return
+	return result, err
 }
 
 func (d *Generic) CountCurrent(ctx context.Context, prefix string, startKey string) (int64, int64, error) {
