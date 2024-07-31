@@ -148,6 +148,7 @@ type Generic struct {
 	InsertSQL             string
 	FillSQL               string
 	InsertLastInsertIDSQL string
+	CreateSQL             string
 	GetSizeSQL            string
 	Retry                 ErrRetry
 	TranslateErr          TranslateErr
@@ -426,6 +427,37 @@ func (d *Generic) Count(ctx context.Context, prefix, startKey string, revision i
 		return 0, 0, err
 	}
 	return rev.Int64, id, err
+}
+
+func (d *Generic) Create(ctx context.Context, key string, value []byte, ttl int64) (int64, error) {
+	var err error
+
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.create", otelName))
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+
+	span.SetAttributes(
+		attribute.String("key", key),
+		attribute.Int64("ttl", ttl),
+		attribute.String("value", string(value)),
+	)
+	if d.TranslateErr != nil {
+		defer func() {
+			if err != nil {
+				span.RecordError(err)
+				err = d.TranslateErr(err)
+			}
+		}()
+	}
+
+	result, err := d.execute(ctx, "create_sql", d.CreateSQL, key, ttl, value)
+	if err != nil {
+		logrus.WithError(err).Error("failed to create key")
+		return 0, err
+	}
+	return result.LastInsertId()
 }
 
 func (d *Generic) GetCompactRevision(ctx context.Context) (int64, int64, error) {

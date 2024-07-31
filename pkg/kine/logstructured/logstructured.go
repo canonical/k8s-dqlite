@@ -29,6 +29,7 @@ type Log interface {
 	Wait()
 	CurrentRevision(ctx context.Context) (int64, error)
 	List(ctx context.Context, prefix, startKey string, limit, revision int64, includeDeletes bool) (int64, []*server.Event, error)
+	Create(ctx context.Context, key string, value []byte, lease int64) (int64, error)
 	After(ctx context.Context, prefix string, revision, limit int64) (int64, []*server.Event, error)
 	Watch(ctx context.Context, prefix string) <-chan []*server.Event
 	Count(ctx context.Context, prefix, startKey string, revision int64) (int64, int64, error)
@@ -151,30 +152,8 @@ func (l *LogStructured) Create(ctx context.Context, key string, value []byte, le
 
 	}()
 
-	_, prevEvent, err := l.get(ctx, key, "", 1, 0, true)
-	if err != nil {
-		return 0, err
-	}
-	createEvent := &server.Event{
-		Create: true,
-		KV: &server.KeyValue{
-			Key:   key,
-			Value: value,
-			Lease: lease,
-		},
-		PrevKV: &server.KeyValue{
-			ModRevision: 0,
-		},
-	}
-	if prevEvent != nil {
-		if !prevEvent.Delete {
-			return 0, server.ErrKeyExists
-		}
-		createEvent.PrevKV = prevEvent.KV
-	}
-
-	revRet, errRet = l.log.Append(ctx, createEvent)
-	return
+	rev, err := l.log.Create(ctx, key, value, lease)
+	return rev, err
 }
 
 func (l *LogStructured) Delete(ctx context.Context, key string, revision int64) (revRet int64, kvRet *server.KeyValue, deletedRet bool, errRet error) {
