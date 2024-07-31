@@ -69,6 +69,10 @@ func (db *DB) prepare(ctx context.Context, query string) (*sql.Stmt, error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
+	if db.underlying == nil {
+		return nil, errors.New("database is closed")
+	}
+
 	// Check again if the query was prepared during locking
 	stmt = db.store[query]
 	if stmt != nil {
