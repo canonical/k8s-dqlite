@@ -132,7 +132,7 @@ func startSqlite(_ context.Context, tb testing.TB, dir string) (*endpoint.Config
 func startDqlite(ctx context.Context, tb testing.TB, dir string, listener *instrument.Listener) (*endpoint.Config, *sql.DB) {
 	app, err := app.New(dir,
 		app.WithAddress(listener.Address),
-		app.WithExternalConn(listener.Connect, listener.AcceptedChan),
+		app.WithExternalConn(listener.Connect, listener.AcceptedConns),
 	)
 	if err != nil {
 		tb.Fatalf("failed to create dqlite app: %v", err)

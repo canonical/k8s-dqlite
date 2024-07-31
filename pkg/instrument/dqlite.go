@@ -12,7 +12,7 @@ import (
 
 type Listener struct {
 	Network, Address        string
-	AcceptedChan            chan net.Conn
+	AcceptedConns           chan net.Conn
 	netListener             net.Listener
 	bytesWritten, bytesRead atomic.Int64
 	wg                      sync.WaitGroup
@@ -26,10 +26,9 @@ type ListenerMetrics struct {
 
 func NewListener(network, address string) *Listener {
 	return &Listener{
-		Network:      network,
-		Address:      address,
-		AcceptedChan: make(chan net.Conn),
-		netListener:  nil,
+		Network:       network,
+		Address:       address,
+		AcceptedConns: make(chan net.Conn),
 	}
 }
 
@@ -37,8 +36,8 @@ func (l *Listener) Listen(ctx context.Context) error {
 	if l.netListener != nil {
 		return fmt.Errorf("listener already running")
 	}
-	var lc net.ListenConfig
-	netListener, err := lc.Listen(ctx, l.Network, l.Address)
+	netListenerConfig := &net.ListenConfig{}
+	netListener, err := netListenerConfig.Listen(ctx, l.Network, l.Address)
 	if err != nil {
 		return err
 	}
@@ -56,7 +55,7 @@ func (l *Listener) Listen(ctx context.Context) error {
 				l.err = errors.Join(l.err, err)
 				break
 			}
-			l.AcceptedChan <- conn
+			l.AcceptedConns <- conn
 		}
 	}()
 	return nil
@@ -71,7 +70,7 @@ func (l *Listener) Connect(ctx context.Context, _ string) (net.Conn, error) {
 	if conn, ok := conn.(fileConn); ok {
 		return &metredConn{conn, l}, nil
 	}
-	return nil, fmt.Errorf("can't setup probes")
+	return nil, fmt.Errorf("cannot setup probes")
 }
 
 func (l *Listener) Metrics() *ListenerMetrics {
@@ -97,7 +96,7 @@ func (l *Listener) Close() {
 
 	l.wg.Wait()
 	l.netListener = nil
-	close(l.AcceptedChan)
+	close(l.AcceptedConns)
 }
 
 func (l *Listener) Err() error { return l.err }
