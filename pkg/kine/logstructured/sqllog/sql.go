@@ -73,6 +73,7 @@ type Dialect interface {
 	IsFill(key string) bool
 	GetSize(ctx context.Context) (int64, error)
 	GetCompactInterval() time.Duration
+	MakeWatcher() server.Watcher
 	GetPollInterval() time.Duration
 	Close() error
 }
@@ -309,6 +310,10 @@ func (s *SQLLog) Watch(ctx context.Context, prefix string) <-chan []*server.Even
 	}()
 
 	return res
+}
+
+func (s *SQLLog) MakeWatcher() server.Watcher {
+	return s.d.MakeWatcher()
 }
 
 func filter(events interface{}, checkPrefix bool, prefix string) ([]*server.Event, bool) {

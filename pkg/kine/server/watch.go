@@ -2,8 +2,7 @@ package server
 
 import (
 	"context"
-	"sync"
-	"sync/atomic"
+	"errors"
 
 	"github.com/sirupsen/logrus"
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
@@ -15,12 +14,11 @@ var (
 )
 
 func (s *KVServerBridge) Watch(ws etcdserverpb.Watch_WatchServer) error {
-	w := watcher{
-		server:  ws,
-		backend: s.limited.backend,
-		watches: map[int64]func(){},
+	watcher := s.limited.backend.MakeWatcher()
+	if err := watcher.Start(ws.Context()); err != nil {
+		return err
 	}
-	defer w.Close()
+	defer watcher.Stop()
 
 	for {
 		msg, err := ws.Recv()
@@ -28,75 +26,64 @@ func (s *KVServerBridge) Watch(ws etcdserverpb.Watch_WatchServer) error {
 			return err
 		}
 
-		if msg.GetCreateRequest() != nil {
-			w.Start(ws.Context(), msg.GetCreateRequest())
-		} else if msg.GetCancelRequest() != nil {
-			logrus.Debugf("WATCH CANCEL REQ id=%d", msg.GetCancelRequest().GetWatchId())
-			w.Cancel(msg.GetCancelRequest().WatchId, nil)
+		if create := msg.GetCreateRequest(); create != nil {
+			listener := watcher.Watch(string(create.Key), string(create.RangeEnd), create.StartRevision)
+
+			if err := ws.Send(&etcdserverpb.WatchResponse{
+				Header:  &etcdserverpb.ResponseHeader{},
+				Created: true,
+				WatchId: listener.Id(),
+			}); err != nil {
+				listener.Close()
+				if closeErr := listener.Err(); closeErr != nil {
+					return errors.Join(err, closeErr)
+				}
+				return err
+			}
+
+			go func() {
+				for events := range listener.Events() {
+					if err := ws.Send(&etcdserverpb.WatchResponse{
+						Header:  txnHeader(events[len(events)-1].KV.ModRevision),
+						WatchId: listener.Id(),
+						Events:  toEvents(events),
+					}); err != nil {
+						listener.Close()
+						logrus.WithError(err).Error("cannot sent event notification")
+						return
+					}
+				}
+
+				err := listener.Err()
+				if err == nil {
+					return
+				}
+				if err == context.Canceled || err == context.DeadlineExceeded {
+					return
+				}
+				if err == ErrCompacted {
+					// TODO: send compacted error
+				}
+				logrus.WithError(err).Debug("error streaming events")
+				if sendErr := ws.Send(&etcdserverpb.WatchResponse{
+					Header:       &etcdserverpb.ResponseHeader{},
+					Canceled:     true,
+					CancelReason: err.Error(),
+					WatchId:      watchID,
+				}); sendErr != nil {
+					logrus.WithError(err).Debug("cannot close watcher")
+				}
+			}()
+		} else if cancel := msg.GetCancelRequest(); cancel != nil {
+			logrus.Debugf("WATCH CANCEL REQ id=%d", cancel.GetWatchId())
+			if l := watcher.Listener(cancel.GetWatchId()); l != nil {
+				l.Close()
+			}
 		}
 	}
 }
 
-type watcher struct {
-	sync.Mutex
-
-	wg      sync.WaitGroup
-	backend Backend
-	server  etcdserverpb.Watch_WatchServer
-	watches map[int64]func()
-}
-
-func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest) {
-	w.Lock()
-	defer w.Unlock()
-
-	ctx, cancel := context.WithCancel(ctx)
-
-	id := atomic.AddInt64(&watchID, 1)
-	w.watches[id] = cancel
-	w.wg.Add(1)
-
-	key := string(r.Key)
-
-	logrus.Debugf("WATCH START id=%d, count=%d, key=%s, revision=%d", id, len(w.watches), key, r.StartRevision)
-
-	go func() {
-		defer w.wg.Done()
-		if err := w.server.Send(&etcdserverpb.WatchResponse{
-			Header:  &etcdserverpb.ResponseHeader{},
-			Created: true,
-			WatchId: id,
-		}); err != nil {
-			w.Cancel(id, err)
-			return
-		}
-
-		for events := range w.backend.Watch(ctx, key, r.StartRevision) {
-			if len(events) == 0 {
-				continue
-			}
-
-			if logrus.IsLevelEnabled(logrus.DebugLevel) {
-				for _, event := range events {
-					logrus.Debugf("WATCH READ id=%d, key=%s, revision=%d", id, event.KV.Key, event.KV.ModRevision)
-				}
-			}
-
-			if err := w.server.Send(&etcdserverpb.WatchResponse{
-				Header:  txnHeader(events[len(events)-1].KV.ModRevision),
-				WatchId: id,
-				Events:  toEvents(events...),
-			}); err != nil {
-				w.Cancel(id, err)
-				continue
-			}
-		}
-		w.Cancel(id, nil)
-		logrus.Debugf("WATCH CLOSE id=%d, key=%s", id, key)
-	}()
-}
-
-func toEvents(events ...*Event) []*mvccpb.Event {
+func toEvents(events []*Event) []*mvccpb.Event {
 	ret := make([]*mvccpb.Event, 0, len(events))
 	for _, e := range events {
 		ret = append(ret, toEvent(e))
@@ -116,37 +103,4 @@ func toEvent(event *Event) *mvccpb.Event {
 	}
 
 	return e
-}
-
-func (w *watcher) Cancel(watchID int64, err error) {
-	w.Lock()
-	if cancel, ok := w.watches[watchID]; ok {
-		cancel()
-		delete(w.watches, watchID)
-	}
-	w.Unlock()
-
-	reason := ""
-	if err != nil {
-		reason = err.Error()
-	}
-	logrus.Debugf("WATCH CANCEL id=%d reason=%s", watchID, reason)
-	serr := w.server.Send(&etcdserverpb.WatchResponse{
-		Header:       &etcdserverpb.ResponseHeader{},
-		Canceled:     true,
-		CancelReason: "watch closed",
-		WatchId:      watchID,
-	})
-	if serr != nil && err != nil {
-		logrus.Errorf("WATCH Failed to send cancel response for watchID %d: %v", watchID, serr)
-	}
-}
-
-func (w *watcher) Close() {
-	w.Lock()
-	for _, v := range w.watches {
-		v()
-	}
-	w.Unlock()
-	w.wg.Wait()
 }

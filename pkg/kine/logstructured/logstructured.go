@@ -31,6 +31,7 @@ type Log interface {
 	List(ctx context.Context, prefix, startKey string, limit, revision int64, includeDeletes bool) (int64, []*server.Event, error)
 	After(ctx context.Context, prefix string, revision, limit int64) (int64, []*server.Event, error)
 	Watch(ctx context.Context, prefix string) <-chan []*server.Event
+	MakeWatcher() server.Watcher
 	Count(ctx context.Context, prefix, startKey string, revision int64) (int64, int64, error)
 	Append(ctx context.Context, event *server.Event) (int64, error)
 	DbSize(ctx context.Context) (int64, error)
@@ -484,6 +485,10 @@ func (l *LogStructured) Watch(ctx context.Context, prefix string, revision int64
 	}()
 
 	return result
+}
+
+func (l *LogStructured) MakeWatcher() server.Watcher {
+	return l.log.MakeWatcher()
 }
 
 func filter(events []*server.Event, rev int64) []*server.Event {

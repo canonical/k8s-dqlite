@@ -23,6 +23,7 @@ type Backend interface {
 	Watch(ctx context.Context, key string, revision int64) <-chan []*Event
 	DbSize(ctx context.Context) (int64, error)
 	DoCompact(ctx context.Context) error
+	MakeWatcher() Watcher
 }
 
 type KeyValue struct {
@@ -38,4 +39,20 @@ type Event struct {
 	Create bool
 	KV     *KeyValue
 	PrevKV *KeyValue
+}
+
+type Watcher interface {
+	Start(ctx context.Context) error
+	Listener(id int64) Listener
+	Watch(rangeStart, rangeEnd string, revision int64) Listener
+	Stop()
+}
+
+type Listener interface {
+	Events() <-chan []*Event
+	Id() int64
+	RangeStart() string
+	RangeEnd() string
+	Close()
+	Err() error
 }

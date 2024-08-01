@@ -3,6 +3,7 @@ package generic
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -11,7 +12,7 @@ import (
 	"time"
 
 	"github.com/canonical/k8s-dqlite/pkg/kine/prepared"
-	"github.com/pkg/errors"
+	"github.com/canonical/k8s-dqlite/pkg/kine/server"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -112,6 +113,8 @@ var (
 			FROM kine
 		) AS high`
 )
+
+var ErrCompacted = errors.New("version compacted")
 
 const retryCount = 500
 
@@ -759,4 +762,11 @@ func (d *Generic) GetPollInterval() time.Duration {
 		return v
 	}
 	return time.Second
+}
+
+func (d *Generic) MakeWatcher() server.Watcher {
+	return &genericWatcher{
+		dialect:   d,
+		listeners: make(map[int64]*genericListener),
+	}
 }
