@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/canonical/k8s-dqlite/pkg/kine/prepared"
+	"github.com/canonical/k8s-dqlite/pkg/kine/server"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
@@ -276,6 +277,24 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 		InsertSQL: q(`INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
 			VALUES(?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`, paramCharacter, numbered),
 
+		CreateSQL: q(`
+		INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
+		SELECT
+			?1, 
+			1, 
+			0, 
+			(SELECT MAX(id) FROM kine), 
+			coalesce(
+				(SELECT id FROM kine WHERE name = ?1 AND deleted = 1 ORDER BY id DESC LIMIT 1), 0), 
+			?2, 
+			?3, 
+			coalesce(
+				(SELECT id FROM kine WHERE name = ?1 AND deleted = 1 ORDER BY id DESC LIMIT 1),
+				?4)
+		WHERE
+			NOT EXISTS(SELECT 1 FROM kine WHERE name = ?1 AND deleted =0) 
+			RETURNING id`, paramCharacter, numbered),
+
 		FillSQL: q(`INSERT INTO kine(id, name, created, deleted, create_revision, prev_revision, lease, value, old_value)
 			VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`, paramCharacter, numbered),
 		AdmissionControlPolicy: &allowAllPolicy{},
@@ -452,7 +471,7 @@ func (d *Generic) Create(ctx context.Context, key string, value []byte, ttl int6
 		}()
 	}
 
-	result, err := d.execute(ctx, "create_sql", d.CreateSQL, key, ttl, value)
+	result, err := d.execute(ctx, "create_sql", d.CreateSQL, key, ttl, value, server.KeyValue{}.Value)
 	if err != nil {
 		logrus.WithError(err).Error("failed to create key")
 		return 0, err

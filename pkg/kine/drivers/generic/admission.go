@@ -31,6 +31,7 @@ var writeQueries = map[string]bool{
 	"fill_sql":                  true,
 	"insert_last_insert_id_sql": true,
 	"insert_sql":                true,
+	"create_sql":                true,
 }
 
 // allowAllPolicy always admits queries.
