@@ -278,22 +278,22 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 			VALUES(?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`, paramCharacter, numbered),
 
 		CreateSQL: q(`
-		INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
-		SELECT
-			?1, 
-			1, 
-			0, 
-			(SELECT MAX(id) FROM kine), 
-			coalesce(
-				(SELECT id FROM kine WHERE name = ?1 AND deleted = 1 ORDER BY id DESC LIMIT 1), 0), 
-			?2, 
-			?3, 
-			coalesce(
-				(SELECT id FROM kine WHERE name = ?1 AND deleted = 1 ORDER BY id DESC LIMIT 1),
-				?4)
-		WHERE
-			NOT EXISTS(SELECT 1 FROM kine WHERE name = ?1 AND deleted =0) 
-			RETURNING id`, paramCharacter, numbered),
+			INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
+			SELECT 
+				? AS name,
+				1 AS created,
+				0 AS deleted,
+				0 AS create_revision, 
+				COALESCE(id, 0) AS prev_revision, 
+				? AS lease, 
+				? AS value, 
+				NULL AS old_value
+			FROM (
+				SELECT MAX(id) AS id, deleted
+				FROM kine
+				WHERE name = ?
+			) maxkv
+			WHERE maxkv.deleted = 1 OR id IS NULL`, paramCharacter, numbered),
 
 		FillSQL: q(`INSERT INTO kine(id, name, created, deleted, create_revision, prev_revision, lease, value, old_value)
 			VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`, paramCharacter, numbered),
@@ -448,9 +448,7 @@ func (d *Generic) Count(ctx context.Context, prefix, startKey string, revision i
 	return rev.Int64, id, err
 }
 
-func (d *Generic) Create(ctx context.Context, key string, value []byte, ttl int64) (int64, error) {
-	var err error
-
+func (d *Generic) Create(ctx context.Context, key string, value []byte, ttl int64) (rev int64, err error) {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.create", otelName))
 	defer func() {
 		span.RecordError(err)
@@ -462,19 +460,25 @@ func (d *Generic) Create(ctx context.Context, key string, value []byte, ttl int6
 		attribute.Int64("ttl", ttl),
 		attribute.String("value", string(value)),
 	)
-	if d.TranslateErr != nil {
-		defer func() {
-			if err != nil {
-				span.RecordError(err)
+	defer func() {
+		if err != nil {
+			if d.TranslateErr != nil {
 				err = d.TranslateErr(err)
 			}
-		}()
-	}
+			span.RecordError(err)
+		}
+	}()
 
-	result, err := d.execute(ctx, "create_sql", d.CreateSQL, key, ttl, value, server.KeyValue{}.Value)
+	result, err := d.execute(ctx, "create_sql", d.CreateSQL, key, ttl, value, key)
 	if err != nil {
 		logrus.WithError(err).Error("failed to create key")
 		return 0, err
+	}
+
+	if insertCount, err := result.RowsAffected(); err != nil {
+		return 0, err
+	} else if insertCount == 0 {
+		return 0, server.ErrKeyExists
 	}
 	return result.LastInsertId()
 }
