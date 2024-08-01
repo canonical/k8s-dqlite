@@ -115,7 +115,7 @@ var (
 		) AS high`
 )
 
-const retryCount = 500
+const maxRetries = 500
 
 type Stripped string
 
@@ -305,18 +305,18 @@ func (d *Generic) query(ctx context.Context, txName, query string, args ...inter
 	defer done()
 
 	start := time.Now()
-	retryNum := 0
+	retryCount := 0
 	defer func() {
 		if err != nil {
-			err = fmt.Errorf("query (try: %d): %w", retryNum, err)
+			err = fmt.Errorf("query (try: %d): %w", retryCount, err)
 		}
 		recordOpResult(txName, err, start)
 	}()
-	for ; retryNum < retryCount; retryNum++ {
-		if retryNum == 0 {
-			logrus.Tracef("QUERY (try: %d) %v : %s", retryNum, args, Stripped(query))
+	for ; retryCount < maxRetries; retryCount++ {
+		if retryCount == 0 {
+			logrus.Tracef("QUERY (try: %d) %v : %s", retryCount, args, Stripped(query))
 		} else {
-			logrus.Debugf("QUERY (try: %d) %v : %s", retryNum, args, Stripped(query))
+			logrus.Debugf("QUERY (try: %d) %v : %s", retryCount, args, Stripped(query))
 		}
 		rows, err = d.DB.QueryContext(ctx, query, args...)
 		if err == nil {
@@ -344,18 +344,18 @@ func (d *Generic) execute(ctx context.Context, txName, query string, args ...int
 	}
 
 	start := time.Now()
-	retryNum := 0
+	retryCount := 0
 	defer func() {
 		if err != nil {
-			err = fmt.Errorf("exec (try: %d): %w", retryNum, err)
+			err = fmt.Errorf("exec (try: %d): %w", retryCount, err)
 		}
 		recordOpResult(txName, err, start)
 	}()
-	for ; retryNum < retryCount; retryNum++ {
-		if retryNum > 2 {
-			logrus.Debugf("EXEC (try: %d) %v : %s", retryNum, args, Stripped(query))
+	for ; retryCount < maxRetries; retryCount++ {
+		if retryCount > 2 {
+			logrus.Debugf("EXEC (try: %d) %v : %s", retryCount, args, Stripped(query))
 		} else {
-			logrus.Tracef("EXEC (try: %d) %v : %s", retryNum, args, Stripped(query))
+			logrus.Tracef("EXEC (try: %d) %v : %s", retryCount, args, Stripped(query))
 		}
 		result, err = d.DB.ExecContext(ctx, query, args...)
 		if err == nil {
