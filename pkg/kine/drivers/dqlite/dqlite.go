@@ -33,7 +33,7 @@ func New(ctx context.Context, datasourceName string, tlsInfo tls.Config) (server
 	if err != nil {
 		return nil, errors.Wrap(err, "sqlite client")
 	}
-	if err := migrate(ctx, generic.DB); err != nil {
+	if err := migrate(ctx, generic.DB.Underlying()); err != nil {
 		return nil, errors.Wrap(err, "failed to migrate DB from sqlite")
 	}
 	generic.LockWrites = true

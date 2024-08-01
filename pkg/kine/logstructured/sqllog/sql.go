@@ -45,6 +45,7 @@ type Dialect interface {
 	GetSize(ctx context.Context) (int64, error)
 	GetCompactInterval() time.Duration
 	GetPollInterval() time.Duration
+	Close() error
 }
 
 func (s *SQLLog) Start(ctx context.Context) (err error) {
