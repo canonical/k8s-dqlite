@@ -136,23 +136,11 @@ func (l *LogStructured) adjustRevision(ctx context.Context, rev *int64) {
 	}
 }
 
-func (l *LogStructured) Create(ctx context.Context, key string, value []byte, lease int64) (revRet int64, errRet error) {
+func (l *LogStructured) Create(ctx context.Context, key string, value []byte, lease int64) (rev int64, err error) {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Create", otelName))
-	span.SetAttributes(
-		attribute.String("key", key),
-		attribute.Int64("lease", lease),
-		attribute.Int64("value-size", int64(len(value))),
-	)
-	defer func() {
-		l.adjustRevision(ctx, &revRet)
-		logrus.Debugf("CREATE %s, size=%d, lease=%d => rev=%d, err=%v", key, len(value), lease, revRet, errRet)
-		span.SetAttributes(attribute.Int64("returned-revision", revRet))
-		span.RecordError(errRet)
-		span.End()
-
-	}()
-
-	rev, err := l.log.Create(ctx, key, value, lease)
+	defer span.End()
+	rev, err = l.log.Create(ctx, key, value, lease)
+	logrus.Debugf("CREATE %s, size=%d, lease=%d => rev=%d, err=%v", key, len(value), lease, rev, err)
 	return rev, err
 }
 

@@ -620,20 +620,19 @@ func (s *SQLLog) Append(ctx context.Context, event *server.Event) (int64, error)
 	return rev, nil
 }
 
-func (s *SQLLog) Create(ctx context.Context, key string, value []byte, lease int64) (int64, error) {
-	var err error
+func (s *SQLLog) Create(ctx context.Context, key string, value []byte, lease int64) (rev int64, err error) {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Create", otelName))
 	defer func() {
 		span.RecordError(err)
+		span.SetAttributes(attribute.Int64("revision", rev))
 		span.End()
 	}()
 	span.SetAttributes(attribute.String("key", key))
 
-	rev, err := s.d.Create(ctx, key, value, lease)
+	rev, err = s.d.Create(ctx, key, value, lease)
 	if err != nil {
 		return 0, err
 	}
-	span.SetAttributes(attribute.Int64("revision", rev))
 
 	select {
 	case s.notify <- rev:

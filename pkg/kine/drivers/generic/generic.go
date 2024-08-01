@@ -449,7 +449,7 @@ func (d *Generic) Count(ctx context.Context, prefix, startKey string, revision i
 }
 
 func (d *Generic) Create(ctx context.Context, key string, value []byte, ttl int64) (rev int64, err error) {
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.create", otelName))
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Create", otelName))
 	defer func() {
 		span.RecordError(err)
 		span.End()
