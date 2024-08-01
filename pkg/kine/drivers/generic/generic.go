@@ -458,7 +458,6 @@ func (d *Generic) Create(ctx context.Context, key string, value []byte, ttl int6
 	span.SetAttributes(
 		attribute.String("key", key),
 		attribute.Int64("ttl", ttl),
-		attribute.String("value", string(value)),
 	)
 	defer func() {
 		if err != nil {
