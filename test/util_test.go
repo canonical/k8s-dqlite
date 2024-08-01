@@ -207,7 +207,7 @@ FROM gen_id, revision`
 		return err
 	}
 
-	updateManyQuery := fmt.Sprintf(`
+	updateManyQuery := `
 INSERT INTO kine(
 	name, created, deleted, create_revision, prev_revision, lease, value, old_value
 )
@@ -221,13 +221,12 @@ JOIN (
 ) maxkv ON maxkv.id = kv.id
 WHERE kv.deleted = 0
 ORDER BY kv.name
-LIMIT %d
-		`, numUpdates)
-	if _, err := t.ExecContext(ctx, updateManyQuery, prefix, prefix); err != nil {
+LIMIT ?`
+	if _, err := t.ExecContext(ctx, updateManyQuery, prefix, prefix, numUpdates); err != nil {
 		return err
 	}
 
-	deleteManyQuery := fmt.Sprintf(`
+	deleteManyQuery := `
 INSERT INTO kine(
 	name, created, deleted, create_revision, prev_revision, lease, value, old_value
 )
@@ -241,9 +240,8 @@ JOIN (
 ) maxkv ON maxkv.id = kv.id
 WHERE kv.deleted = 0
 ORDER BY kv.name
-LIMIT %d
-		`, numDeletes)
-	if _, err := t.ExecContext(ctx, deleteManyQuery, prefix, prefix); err != nil {
+LIMIT ?`
+	if _, err := t.ExecContext(ctx, deleteManyQuery, prefix, prefix, numDeletes); err != nil {
 		return err
 	}
 

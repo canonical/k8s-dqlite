@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Rican7/retry/jitter"
+	"github.com/canonical/k8s-dqlite/pkg/kine/prepared"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
@@ -115,7 +115,7 @@ var (
 		) AS high`
 )
 
-const retryCount = 500
+const maxRetries = 500
 
 type Stripped string
 
@@ -131,37 +131,27 @@ type ErrCode func(error) string
 type Generic struct {
 	sync.Mutex
 
-	LockWrites                    bool
-	LastInsertID                  bool
-	DB                            *sql.DB
-	GetCurrentSQL                 string
-	GetRevisionSQL                string
-	getRevisionSQLPrepared        *sql.Stmt
-	RevisionSQL                   string
-	ListRevisionStartSQL          string
-	GetRevisionAfterSQL           string
-	CountCurrentSQL               string
-	countCurrentSQLPrepared       *sql.Stmt
-	CountRevisionSQL              string
-	countRevisionSQLPrepared      *sql.Stmt
-	AfterSQLPrefix                string
-	afterSQLPrefixPrepared        *sql.Stmt
-	AfterSQL                      string
-	DeleteSQL                     string
-	deleteSQLPrepared             *sql.Stmt
-	UpdateCompactSQL              string
-	updateCompactSQLPrepared      *sql.Stmt
-	InsertSQL                     string
-	insertSQLPrepared             *sql.Stmt
-	FillSQL                       string
-	fillSQLPrepared               *sql.Stmt
-	InsertLastInsertIDSQL         string
-	insertLastInsertIDSQLPrepared *sql.Stmt
-	GetSizeSQL                    string
-	getSizeSQLPrepared            *sql.Stmt
-	Retry                         ErrRetry
-	TranslateErr                  TranslateErr
-	ErrCode                       ErrCode
+	LockWrites            bool
+	LastInsertID          bool
+	DB                    *prepared.DB
+	GetCurrentSQL         string
+	GetRevisionSQL        string
+	RevisionSQL           string
+	ListRevisionStartSQL  string
+	GetRevisionAfterSQL   string
+	CountCurrentSQL       string
+	CountRevisionSQL      string
+	AfterSQLPrefix        string
+	AfterSQL              string
+	DeleteSQL             string
+	UpdateCompactSQL      string
+	InsertSQL             string
+	FillSQL               string
+	InsertLastInsertIDSQL string
+	GetSizeSQL            string
+	Retry                 ErrRetry
+	TranslateErr          TranslateErr
+	ErrCode               ErrCode
 
 	AdmissionControlPolicy AdmissionControlPolicy
 
@@ -231,7 +221,7 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 	configureConnectionPooling(db)
 
 	return &Generic{
-		DB: db,
+		DB: prepared.New(db),
 
 		GetRevisionSQL: q(fmt.Sprintf(`
 			SELECT
@@ -291,79 +281,8 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 	}, err
 }
 
-func (d *Generic) Prepare() error {
-	var err error
-
-	d.getRevisionSQLPrepared, err = d.DB.Prepare(d.GetRevisionSQL)
-	if err != nil {
-		return err
-	}
-
-	d.countCurrentSQLPrepared, err = d.DB.Prepare(d.CountCurrentSQL)
-	if err != nil {
-		return err
-	}
-
-	d.countRevisionSQLPrepared, err = d.DB.Prepare(d.CountRevisionSQL)
-	if err != nil {
-		return err
-	}
-
-	d.deleteSQLPrepared, err = d.DB.Prepare(d.DeleteSQL)
-	if err != nil {
-		return err
-	}
-
-	d.getSizeSQLPrepared, err = d.DB.Prepare(d.GetSizeSQL)
-	if err != nil {
-		return err
-	}
-
-	d.fillSQLPrepared, err = d.DB.Prepare(d.FillSQL)
-	if err != nil {
-		return err
-	}
-
-	if d.LastInsertID {
-		d.insertLastInsertIDSQLPrepared, err = d.DB.Prepare(d.InsertLastInsertIDSQL)
-		if err != nil {
-			return err
-		}
-	} else {
-		d.insertSQLPrepared, err = d.DB.Prepare(d.InsertSQL)
-		if err != nil {
-			return err
-		}
-	}
-
-	d.updateCompactSQLPrepared, err = d.DB.Prepare(d.UpdateCompactSQL)
-	if err != nil {
-		return err
-	}
-
-	d.afterSQLPrefixPrepared, err = d.DB.Prepare(d.AfterSQLPrefix)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (d *Generic) Close() {
-	d.getRevisionSQLPrepared.Close()
-	d.countCurrentSQLPrepared.Close()
-	d.countRevisionSQLPrepared.Close()
-	d.afterSQLPrefixPrepared.Close()
-	d.deleteSQLPrepared.Close()
-	d.updateCompactSQLPrepared.Close()
-	if d.LastInsertID {
-		d.insertLastInsertIDSQLPrepared.Close()
-	} else {
-		d.insertSQLPrepared.Close()
-	}
-	d.fillSQLPrepared.Close()
-	d.getSizeSQLPrepared.Close()
-	d.DB.Close()
+func (d *Generic) Close() error {
+	return d.DB.Close()
 }
 
 func getPrefixRange(prefix string) (start, end string) {
@@ -378,57 +297,77 @@ func getPrefixRange(prefix string) (start, end string) {
 	return start, end
 }
 
-func (d *Generic) query(ctx context.Context, txName, sql string, args ...interface{}) (rows *sql.Rows, err error) {
-	i := 0
-	start := time.Now()
-
+func (d *Generic) query(ctx context.Context, txName, query string, args ...interface{}) (rows *sql.Rows, err error) {
 	done, err := d.AdmissionControlPolicy.Admit(ctx, txName)
 	if err != nil {
 		return nil, fmt.Errorf("denied: %w", err)
 	}
+	defer done()
 
+	start := time.Now()
+	retryCount := 0
 	defer func() {
 		if err != nil {
-			err = fmt.Errorf("query (try: %d): %w", i, err)
+			err = fmt.Errorf("query (try: %d): %w", retryCount, err)
 		}
 		recordOpResult(txName, err, start)
 	}()
-
-	strippedSQL := Stripped(sql)
-	for ; i < retryCount; i++ {
-		if i > 2 {
-			logrus.Debugf("QUERY (try: %d) %v : %s", i, args, strippedSQL)
+	for ; retryCount < maxRetries; retryCount++ {
+		if retryCount == 0 {
+			logrus.Tracef("QUERY (try: %d) %v : %s", retryCount, args, Stripped(query))
 		} else {
-			logrus.Tracef("QUERY (try: %d) %v : %s", i, args, strippedSQL)
+			logrus.Debugf("QUERY (try: %d) %v : %s", retryCount, args, Stripped(query))
 		}
-		rows, err = d.DB.QueryContext(ctx, sql, args...)
-		if err != nil && d.Retry != nil && d.Retry(err) {
-			time.Sleep(jitter.Deviation(nil, 0.3)(2 * time.Millisecond))
-			continue
+		rows, err = d.DB.QueryContext(ctx, query, args...)
+		if err == nil {
+			break
 		}
-		done()
-		recordTxResult(txName, err)
-		return rows, err
+		if d.Retry == nil || !d.Retry(err) {
+			break
+		}
 	}
-	done()
-	return
+
+	recordTxResult(txName, err)
+	return rows, err
 }
 
-func (d *Generic) queryPrepared(ctx context.Context, txName, sql string, prepared *sql.Stmt, args ...interface{}) (result *sql.Rows, err error) {
-	logrus.Tracef("QUERY %v : %s", args, Stripped(sql))
-
+func (d *Generic) execute(ctx context.Context, txName, query string, args ...interface{}) (result sql.Result, err error) {
 	done, err := d.AdmissionControlPolicy.Admit(ctx, txName)
 	if err != nil {
 		return nil, fmt.Errorf("denied: %w", err)
 	}
+	defer done()
+
+	if d.LockWrites {
+		d.Lock()
+		defer d.Unlock()
+	}
 
 	start := time.Now()
-	r, err := prepared.QueryContext(ctx, args...)
-	done()
+	retryCount := 0
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("exec (try: %d): %w", retryCount, err)
+		}
+		recordOpResult(txName, err, start)
+	}()
+	for ; retryCount < maxRetries; retryCount++ {
+		if retryCount > 2 {
+			logrus.Debugf("EXEC (try: %d) %v : %s", retryCount, args, Stripped(query))
+		} else {
+			logrus.Tracef("EXEC (try: %d) %v : %s", retryCount, args, Stripped(query))
+		}
+		result, err = d.DB.ExecContext(ctx, query, args...)
+		if err == nil {
+			break
+		}
+		if d.Retry == nil || !d.Retry(err) {
+			break
+		}
+	}
 
-	recordOpResult(txName, err, start)
 	recordTxResult(txName, err)
-	return r, err
+	return result, err
 }
 
 func (d *Generic) CountCurrent(ctx context.Context, prefix string, startKey string) (int64, int64, error) {
@@ -441,9 +380,23 @@ func (d *Generic) CountCurrent(ctx context.Context, prefix string, startKey stri
 	if startKey != "" {
 		start = startKey + "\x01"
 	}
-	row := d.queryRowPrepared(ctx, "count_current", d.CountCurrentSQL, d.countCurrentSQLPrepared, start, end, false)
-	err := row.Scan(&rev, &id)
-	return rev.Int64, id, err
+	rows, err := d.query(ctx, "count_current", d.CountCurrentSQL, start, end, false)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return 0, 0, err
+		}
+		return 0, 0, sql.ErrNoRows
+	}
+
+	if err := rows.Scan(&rev, &id); err != nil {
+		return 0, 0, err
+	}
+	return rev.Int64, id, nil
 }
 
 func (d *Generic) Count(ctx context.Context, prefix, startKey string, revision int64) (int64, int64, error) {
@@ -456,67 +409,23 @@ func (d *Generic) Count(ctx context.Context, prefix, startKey string, revision i
 	if startKey != "" {
 		start = startKey + "\x01"
 	}
-	row := d.queryRowPrepared(ctx, "count_revision", d.CountRevisionSQL, d.countRevisionSQLPrepared, start, end, revision, false)
-	err := row.Scan(&rev, &id)
-	return rev.Int64, id, err
-}
-
-func (d *Generic) queryRow(ctx context.Context, txName, sql string, args ...interface{}) (result *sql.Row) {
-	logrus.Tracef("QUERY ROW %v : %s", args, Stripped(sql))
-	start := time.Now()
-	r := d.DB.QueryRowContext(ctx, sql, args...)
-	recordOpResult(txName, r.Err(), start)
-	recordTxResult(txName, r.Err())
-	return r
-}
-
-func (d *Generic) queryRowPrepared(ctx context.Context, txName, sql string, prepared *sql.Stmt, args ...interface{}) (result *sql.Row) {
-	logrus.Tracef("QUERY ROW %v : %s", args, Stripped(sql))
-	start := time.Now()
-	r := prepared.QueryRowContext(ctx, args...)
-	recordOpResult(txName, r.Err(), start)
-	recordTxResult(txName, r.Err())
-	return r
-}
-
-func (d *Generic) executePrepared(ctx context.Context, txName, sql string, prepared *sql.Stmt, args ...interface{}) (result sql.Result, err error) {
-	i := 0
-	start := time.Now()
-	defer func() {
-		if err != nil {
-			err = fmt.Errorf("exec (try: %d): %w", i, err)
-		}
-		recordOpResult(txName, err, start)
-	}()
-
-	done, err := d.AdmissionControlPolicy.Admit(ctx, txName)
+	rows, err := d.query(ctx, "count_revision", d.CountRevisionSQL, start, end, revision, false)
 	if err != nil {
-		return nil, fmt.Errorf("denied: %w", err)
+		return 0, 0, err
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return 0, 0, err
+		}
+		return 0, 0, sql.ErrNoRows
 	}
 
-	if d.LockWrites {
-		d.Lock()
-		defer d.Unlock()
+	if err := rows.Scan(&rev, &id); err != nil {
+		return 0, 0, err
 	}
-
-	strippedSQL := Stripped(sql)
-	for ; i < retryCount; i++ {
-		if i > 2 {
-			logrus.Debugf("EXEC (try: %d) %v : %s", i, args, strippedSQL)
-		} else {
-			logrus.Tracef("EXEC (try: %d) %v : %s", i, args, strippedSQL)
-		}
-		result, err = prepared.ExecContext(ctx, args...)
-		if err != nil && d.Retry != nil && d.Retry(err) {
-			time.Sleep(jitter.Deviation(nil, 0.3)(2 * time.Millisecond))
-			continue
-		}
-		done()
-		recordTxResult(txName, err)
-		return result, err
-	}
-	done()
-	return
+	return rev.Int64, id, err
 }
 
 func (d *Generic) GetCompactRevision(ctx context.Context) (int64, int64, error) {
@@ -539,24 +448,23 @@ func (d *Generic) GetCompactRevision(ctx context.Context) (int64, int64, error) 
 	if err != nil {
 		return 0, 0, fmt.Errorf("denied: %w", err)
 	}
+	defer done()
 
-	for i := 0; i < retryCount; i++ {
-		if i > 2 {
-			logrus.Debugf("EXEC (try: %d): %s", i, revisionIntervalSQL)
-		} else {
-			logrus.Tracef("EXEC (try: %d): %s", i, revisionIntervalSQL)
-		}
-		row := d.DB.QueryRow(revisionIntervalSQL)
-		err = row.Scan(&compact, &target)
-		if err != nil && d.Retry != nil && d.Retry(err) {
-			time.Sleep(jitter.Deviation(nil, 0.3)(2 * time.Millisecond))
-			continue
-		}
-		break
+	rows, err := d.query(ctx, "revision_interval_sql", revisionIntervalSQL)
+	if err != nil {
+		return 0, 0, err
 	}
-	done()
-	if err == sql.ErrNoRows {
+	defer rows.Close()
+
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return 0, 0, err
+		}
 		return 0, 0, nil
+	}
+
+	if err := rows.Scan(&compact, &target); err != nil {
+		return 0, 0, err
 	}
 	span.SetAttributes(attribute.Int64("compact", compact.Int64), attribute.Int64("target", target.Int64))
 	return compact.Int64, target.Int64, err
@@ -567,12 +475,12 @@ func (d *Generic) SetCompactRevision(ctx context.Context, revision int64) error 
 	setCompactRevCnt.Add(ctx, 1)
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.set_compact_revision", otelName))
 	defer func() {
-		span.RecordError(err)
 		span.End()
+		span.RecordError(err)
 	}()
 	span.SetAttributes(attribute.Int64("revision", revision))
 
-	_, err = d.executePrepared(ctx, "update_compact_sql", d.UpdateCompactSQL, d.updateCompactSQLPrepared, revision)
+	_, err = d.execute(ctx, "update_compact_sql", d.UpdateCompactSQL, revision)
 	return err
 }
 
@@ -586,7 +494,7 @@ func (d *Generic) GetRevision(ctx context.Context, revision int64) (*sql.Rows, e
 	}()
 	span.SetAttributes(attribute.Int64("revision", revision))
 
-	result, err := d.queryPrepared(ctx, "get_revision_sql", d.GetRevisionSQL, d.getRevisionSQLPrepared, revision)
+	result, err := d.query(ctx, "get_revision_sql", d.GetRevisionSQL, revision)
 	return result, err
 }
 
@@ -600,22 +508,22 @@ func (d *Generic) DeleteRevision(ctx context.Context, revision int64) error {
 	}()
 	span.SetAttributes(attribute.Int64("revision", revision))
 
-	_, err = d.executePrepared(ctx, "delete_sql", d.DeleteSQL, d.deleteSQLPrepared, revision)
+	_, err = d.execute(ctx, "delete_sql", d.DeleteSQL, revision)
 	return err
 }
 
 func (d *Generic) ListCurrent(ctx context.Context, prefix, startKey string, limit int64, includeDeleted bool) (*sql.Rows, error) {
 	sql := d.GetCurrentSQL
 	start, end := getPrefixRange(prefix)
-	if limit > 0 {
-		sql = fmt.Sprintf("%s LIMIT %d", sql, limit)
-	}
-
 	// NOTE(neoaggelos): don't ignore startKey if set
 	if startKey != "" {
 		start = startKey + "\x01"
 	}
 
+	if limit > 0 {
+		sql = fmt.Sprintf("%s LIMIT ?", sql)
+		return d.query(ctx, "get_current_sql_limit", sql, start, end, includeDeleted, limit)
+	}
 	return d.query(ctx, "get_current_sql", sql, start, end, includeDeleted)
 }
 
@@ -624,14 +532,16 @@ func (d *Generic) List(ctx context.Context, prefix, startKey string, limit, revi
 	if startKey == "" {
 		sql := d.ListRevisionStartSQL
 		if limit > 0 {
-			sql = fmt.Sprintf("%s LIMIT %d", sql, limit)
+			sql = fmt.Sprintf("%s LIMIT ?", sql)
+			return d.query(ctx, "list_revision_start_sql_limit", sql, start, end, revision, includeDeleted, limit)
 		}
 		return d.query(ctx, "list_revision_start_sql", sql, start, end, revision, includeDeleted)
 	}
 
 	sql := d.GetRevisionAfterSQL
 	if limit > 0 {
-		sql = fmt.Sprintf("%s LIMIT %d", sql, limit)
+		sql = fmt.Sprintf("%s LIMIT ?", sql)
+		return d.query(ctx, "get_revision_after_sql_limit", sql, startKey+"\x01", end, revision, includeDeleted, limit)
 	}
 	return d.query(ctx, "get_revision_after_sql", sql, startKey+"\x01", end, revision, includeDeleted)
 }
@@ -651,23 +561,34 @@ func (d *Generic) CurrentRevision(ctx context.Context) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("denied: %w", err)
 	}
+	defer done()
 
-	row := d.queryRow(ctx, "rev_sql", revSQL)
-	done()
-	err = row.Scan(&id)
-	if err == sql.ErrNoRows {
-		span.AddEvent("no rows")
-		return 0, nil
+	rows, err := d.query(ctx, "rev_sql", revSQL)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return 0, err
+		}
+		return 0, fmt.Errorf("can't get current revision: aggregate query returned empty set")
+	}
+
+	if err := rows.Scan(&id); err != nil {
+		return 0, err
 	}
 	span.SetAttributes(attribute.Int64("id", id))
-	return id, err
+	return id, nil
 }
 
 func (d *Generic) AfterPrefix(ctx context.Context, prefix string, rev, limit int64) (*sql.Rows, error) {
 	start, end := getPrefixRange(prefix)
 	sql := d.AfterSQLPrefix
 	if limit > 0 {
-		sql = fmt.Sprintf("%s LIMIT %d", sql, limit)
+		sql = fmt.Sprintf("%s LIMIT ?", sql)
+		return d.query(ctx, "after_sql_prefix_limit", sql, start, end, rev, limit)
 	}
 	return d.query(ctx, "after_sql_prefix", sql, start, end, rev)
 }
@@ -675,13 +596,14 @@ func (d *Generic) AfterPrefix(ctx context.Context, prefix string, rev, limit int
 func (d *Generic) After(ctx context.Context, rev, limit int64) (*sql.Rows, error) {
 	sql := d.AfterSQL
 	if limit > 0 {
-		sql = fmt.Sprintf("%s LIMIT %d", sql, limit)
+		sql = fmt.Sprintf("%s LIMIT ?", sql)
+		return d.query(ctx, "after_sql_limit", sql, rev, limit)
 	}
 	return d.query(ctx, "after_sql", sql, rev)
 }
 
 func (d *Generic) Fill(ctx context.Context, revision int64) error {
-	_, err := d.executePrepared(ctx, "fill_sql", d.FillSQL, d.fillSQLPrepared, revision, fmt.Sprintf("gap-%d", revision), 0, 1, 0, 0, 0, nil, nil)
+	_, err := d.execute(ctx, "fill_sql", d.FillSQL, revision, fmt.Sprintf("gap-%d", revision), 0, 1, 0, 0, 0, nil, nil)
 	return err
 }
 
@@ -708,26 +630,51 @@ func (d *Generic) Insert(ctx context.Context, key string, create, delete bool, c
 	}
 
 	if d.LastInsertID {
-		row, err := d.executePrepared(ctx, "insert_last_insert_id_sql", d.InsertLastInsertIDSQL, d.insertLastInsertIDSQLPrepared, key, cVal, dVal, createRevision, previousRevision, ttl, value, prevValue)
+		row, err := d.execute(ctx, "insert_last_insert_id_sql", d.InsertLastInsertIDSQL, key, cVal, dVal, createRevision, previousRevision, ttl, value, prevValue)
 		if err != nil {
 			return 0, err
 		}
 		return row.LastInsertId()
 	}
 
-	row := d.queryRowPrepared(ctx, "insert_sql", d.InsertSQL, d.insertSQLPrepared, key, cVal, dVal, createRevision, previousRevision, ttl, value, prevValue)
-	err = row.Scan(&id)
+	rows, err := d.query(ctx, "insert_sql", d.InsertSQL, key, cVal, dVal, createRevision, previousRevision, ttl, value, prevValue)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
 
-	return id, err
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return 0, err
+		}
+		return 0, sql.ErrNoRows
+	}
+
+	if err := rows.Scan(&id); err != nil {
+		return 0, err
+	}
+	return id, nil
 }
 
 func (d *Generic) GetSize(ctx context.Context) (int64, error) {
 	if d.GetSizeSQL == "" {
 		return 0, errors.New("driver does not support size reporting")
 	}
+	rows, err := d.query(ctx, "get_size_sql", d.GetSizeSQL)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return 0, err
+		}
+		return 0, sql.ErrNoRows
+	}
+
 	var size int64
-	row := d.queryRowPrepared(ctx, "get_size_sql", d.GetSizeSQL, d.getSizeSQLPrepared)
-	if err := row.Scan(&size); err != nil {
+	if err := rows.Scan(&size); err != nil {
 		return 0, err
 	}
 	return size, nil
