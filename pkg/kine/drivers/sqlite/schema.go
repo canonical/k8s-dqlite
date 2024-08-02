@@ -99,6 +99,10 @@ func applySchemaV0_2(ctx context.Context, txn *sql.Tx) error {
 		return err
 	}
 
+	if _, err := txn.ExecContext(ctx, `CREATE UNIQUE INDEX kine_id_name_partial_index ON kine(id / 1024, name, id)`); err != nil {
+		return err
+	}
+
 	return nil
 }
 
