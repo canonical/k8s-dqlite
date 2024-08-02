@@ -212,7 +212,7 @@ func BenchmarkList(b *testing.B) {
 			size: 5000,
 		}}
 		for _, payload := range payloads {
-			b.Run(fmt.Sprintf("%s-%d", backendType, payload.name), func(b *testing.B) {
+			b.Run(fmt.Sprintf("%s-%s", backendType, payload.name), func(b *testing.B) {
 				b.Run("all", func(b *testing.B) {
 					b.StopTimer()
 					g := NewWithT(b)
