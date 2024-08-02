@@ -92,7 +92,7 @@ func (w *genericWatcher) connect(ctx context.Context) (conn *sql.Conn, err error
 }
 
 func (w *genericWatcher) run(ctx context.Context) {
-	pollTicker := time.NewTicker(w.dialect.PollInterval)
+	pollTicker := time.NewTicker(w.dialect.GetPollInterval())
 	defer pollTicker.Stop()
 
 	for {
