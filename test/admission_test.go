@@ -47,9 +47,9 @@ func TestAdmissionControl(t *testing.T) {
 			var numSuccessfulWriterTxn = atomic.Uint64{}
 			var numSuccessfulReaderTxn = atomic.Uint64{}
 
-			read := func(first int, last int) {
+			read := func(firstKeyNum, lastKeyNum int) {
 				defer wg.Done()
-				for i := first; i < last; i++ {
+				for i := firstKeyNum; i < lastKeyNum; i++ {
 					key := fmt.Sprintf("Key/%d", i+1)
 					_, err := kine.client.Get(ctx, key, clientv3.WithRange(""))
 					if err == nil {
@@ -58,9 +58,9 @@ func TestAdmissionControl(t *testing.T) {
 				}
 			}
 
-			write := func(first int, last int) {
+			write := func(firstKeyNum, lastKeyNum int) {
 				defer wg.Done()
-				for i := first; i < last; i++ {
+				for i := firstKeyNum; i < lastKeyNum; i++ {
 					key := fmt.Sprintf("Key/%d", i+1)
 					new_value := fmt.Sprintf("New-Value-%d", i+1)
 					resp, err := kine.client.Get(ctx, key, clientv3.WithRange(""))
@@ -87,6 +87,7 @@ func TestAdmissionControl(t *testing.T) {
 
 			writers := writeLimit * 4
 			write_entries := 20
+
 			wg.Add(readers + writers)
 
 			start := time.Now()

@@ -180,13 +180,13 @@ func TestList(t *testing.T) {
 
 func BenchmarkList(b *testing.B) {
 	setup := func(ctx context.Context, tx *sql.Tx, payloadSize, n int) error {
-		if err := insertMany(ctx, tx, "key", payloadSize, n); err != nil {
+		if err := insertMany(ctx, tx, "key", payloadSize, n*2); err != nil {
 			return err
 		}
-		if err := updateMany(ctx, tx, "key", payloadSize, n/2); err != nil {
+		if err := updateMany(ctx, tx, "key", payloadSize, n); err != nil {
 			return err
 		}
-		if err := deleteMany(ctx, tx, "key", n/2); err != nil {
+		if err := deleteMany(ctx, tx, "key", n); err != nil {
 			return err
 		}
 		return nil
@@ -200,10 +200,10 @@ func BenchmarkList(b *testing.B) {
 			name: "tiny",
 			size: 100,
 		}, {
-			name: "page-fitting",
+			name: "fits-in-page",
 			size: 1000,
 		}, {
-			name: "page-overflowing",
+			name: "overflows-page",
 			size: 5000,
 		}}
 		for _, payload := range payloads {
