@@ -183,17 +183,12 @@ func BenchmarkList(b *testing.B) {
 		if err := insertMany(ctx, tx, "key", payloadSize, n); err != nil {
 			return err
 		}
-		b.Log("insert", n)
-
 		if err := updateMany(ctx, tx, "key", payloadSize, n/2); err != nil {
 			return err
 		}
-		b.Log("update", n)
-
 		if err := deleteMany(ctx, tx, "key", n/2); err != nil {
 			return err
 		}
-		b.Log("delete", n)
 		return nil
 	}
 	backends := []string{endpoint.SQLiteBackend, endpoint.DQLiteBackend}

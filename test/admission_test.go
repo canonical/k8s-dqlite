@@ -47,7 +47,7 @@ func TestAdmissionControl(t *testing.T) {
 			var numSuccessfulWriterTxn = atomic.Uint64{}
 			var numSuccessfulReaderTxn = atomic.Uint64{}
 
-			reader := func(first int, last int) {
+			read := func(first int, last int) {
 				defer wg.Done()
 				for i := first; i < last; i++ {
 					key := fmt.Sprintf("Key/%d", i+1)
@@ -58,7 +58,7 @@ func TestAdmissionControl(t *testing.T) {
 				}
 			}
 
-			writer := func(first int, last int) {
+			write := func(first int, last int) {
 				defer wg.Done()
 				for i := first; i < last; i++ {
 					key := fmt.Sprintf("Key/%d", i+1)
@@ -91,10 +91,10 @@ func TestAdmissionControl(t *testing.T) {
 
 			start := time.Now()
 			for i := 0; i < readers; i++ {
-				go reader(i*read_entries, (i+1)*read_entries)
+				go read(i*read_entries, (i+1)*read_entries)
 			}
 			for i := 0; i < writers; i++ {
-				go writer(i*write_entries, (i+1)*write_entries)
+				go write(i*write_entries, (i+1)*write_entries)
 			}
 
 			wg.Wait()
