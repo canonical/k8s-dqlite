@@ -3,6 +3,7 @@ package test
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"io"
 	"path"
@@ -41,7 +42,7 @@ type kineOptions struct {
 	// setup is a function to setup the database before a test or
 	// benchmark starts. It is called after the endpoint started,
 	// so that migration and database schema setup is already done.
-	setup func(*sql.DB) error
+	setup func(context.Context, *sql.Tx) error
 }
 
 // newKineServer spins up a new instance of kine. In case of an error, tb.Fatal is called.
@@ -91,7 +92,15 @@ func newKineServer(ctx context.Context, tb testing.TB, options *kineOptions) *ki
 	})
 
 	if options.setup != nil {
-		if err := options.setup(db); err != nil {
+		tx, err := db.BeginTx(ctx, nil)
+		if err != nil {
+			tb.Fatal(err)
+		}
+		if err := options.setup(ctx, tx); err != nil {
+			rollbackErr := tx.Rollback()
+			tb.Fatal(errors.Join(err, rollbackErr))
+		}
+		if err := tx.Commit(); err != nil {
 			tb.Fatal(err)
 		}
 	}
@@ -178,13 +187,7 @@ func (ks *kineServer) ResetMetrics() {
 	}
 }
 
-func setupScenario(ctx context.Context, db *sql.DB, prefix string, numInsert, numUpdates, numDeletes int) error {
-	t, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer t.Rollback()
-
+func insertMany(ctx context.Context, tx *sql.Tx, prefix string, valueSize, n int) error {
 	insertManyQuery := `
 WITH RECURSIVE gen_id AS(
 	SELECT 1 AS id
@@ -201,17 +204,18 @@ WITH RECURSIVE gen_id AS(
 INSERT INTO kine(
 	id, name, created, deleted, create_revision, prev_revision, lease, value, old_value
 )
-SELECT id + revision.base, ?||'/'||id, 1, 0, id + revision.base, 0, 0, 'value-'||id, NULL
+SELECT id + revision.base, ?||'/'||id, 1, 0, id + revision.base, 0, 0, randomblob(?), NULL
 FROM gen_id, revision`
-	if _, err := t.ExecContext(ctx, insertManyQuery, numInsert, prefix); err != nil {
-		return err
-	}
+	_, err := tx.ExecContext(ctx, insertManyQuery, n, prefix, valueSize)
+	return err
+}
 
+func updateMany(ctx context.Context, tx *sql.Tx, prefix string, valueSize, n int) error {
 	updateManyQuery := `
 INSERT INTO kine(
 	name, created, deleted, create_revision, prev_revision, lease, value, old_value
 )
-SELECT kv.name, 0, 0, kv.create_revision, kv.id, 0, 'new-'||kv.value, kv.value
+SELECT kv.name, 0, 0, kv.create_revision, kv.id, 0, randomblob(?), kv.value
 FROM kine AS kv
 JOIN (
 	SELECT MAX(mkv.id) as id
@@ -222,11 +226,12 @@ JOIN (
 WHERE kv.deleted = 0
 ORDER BY kv.name
 LIMIT ?`
-	if _, err := t.ExecContext(ctx, updateManyQuery, prefix, prefix, numUpdates); err != nil {
-		return err
-	}
+	_, err := tx.ExecContext(ctx, updateManyQuery, valueSize, prefix, prefix, n)
+	return err
+}
 
-	deleteManyQuery := `
+func deleteMany(ctx context.Context, tx *sql.Tx, prefix string, n int) error {
+	const deleteManyQuery = `
 INSERT INTO kine(
 	name, created, deleted, create_revision, prev_revision, lease, value, old_value
 )
@@ -241,9 +246,6 @@ JOIN (
 WHERE kv.deleted = 0
 ORDER BY kv.name
 LIMIT ?`
-	if _, err := t.ExecContext(ctx, deleteManyQuery, prefix, prefix, numDeletes); err != nil {
-		return err
-	}
-
-	return t.Commit()
+	_, err := tx.ExecContext(ctx, deleteManyQuery, prefix, prefix, n)
+	return err
 }

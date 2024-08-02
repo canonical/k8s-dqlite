@@ -20,6 +20,8 @@ import (
 func TestAdmissionControl(t *testing.T) {
 	for _, backendType := range []string{endpoint.SQLiteBackend, endpoint.DQLiteBackend} {
 		t.Run(backendType, func(t *testing.T) {
+			const writeLimit = 10
+
 			g := NewWithT(t)
 
 			ctx, cancel := context.WithCancel(context.Background())
@@ -29,11 +31,14 @@ func TestAdmissionControl(t *testing.T) {
 				backendType: backendType,
 				endpointParameters: []string{
 					"admission-control-policy=limit",
-					"admission-control-policy-limit-max-concurrent-txn=600",
+					fmt.Sprintf("admission-control-policy-limit-max-concurrent-txn=%d", writeLimit),
 					"admission-control-only-write-queries=true",
 				},
-				setup: func(db *sql.DB) error {
-					return setupScenario(ctx, db, "Key", 1000, 0, 0)
+				setup: func(ctx context.Context, tx *sql.Tx) error {
+					if err := insertMany(ctx, tx, "Key", 100, 1000); err != nil {
+						return err
+					}
+					return nil
 				},
 			})
 
@@ -42,9 +47,9 @@ func TestAdmissionControl(t *testing.T) {
 			var numSuccessfulWriterTxn = atomic.Uint64{}
 			var numSuccessfulReaderTxn = atomic.Uint64{}
 
-			reader := func(first int, last int) {
+			read := func(firstKeyNum, lastKeyNum int) {
 				defer wg.Done()
-				for i := first; i < last; i++ {
+				for i := firstKeyNum; i < lastKeyNum; i++ {
 					key := fmt.Sprintf("Key/%d", i+1)
 					_, err := kine.client.Get(ctx, key, clientv3.WithRange(""))
 					if err == nil {
@@ -53,9 +58,9 @@ func TestAdmissionControl(t *testing.T) {
 				}
 			}
 
-			writer := func(first int, last int) {
+			write := func(firstKeyNum, lastKeyNum int) {
 				defer wg.Done()
-				for i := first; i < last; i++ {
+				for i := firstKeyNum; i < lastKeyNum; i++ {
 					key := fmt.Sprintf("Key/%d", i+1)
 					new_value := fmt.Sprintf("New-Value-%d", i+1)
 					resp, err := kine.client.Get(ctx, key, clientv3.WithRange(""))
@@ -77,24 +82,20 @@ func TestAdmissionControl(t *testing.T) {
 				}
 			}
 
-			readers := 50
-			readers_replication := 3
-			read_entries := 1000 / readers
-			writers := 500
-			writers_replication := 10
-			write_entries := 1000 / writers
-			wg.Add(readers*readers_replication + writers*writers_replication)
+			readers := writeLimit * 4
+			read_entries := 20
+
+			writers := writeLimit * 4
+			write_entries := 20
+
+			wg.Add(readers + writers)
 
 			start := time.Now()
 			for i := 0; i < readers; i++ {
-				for j := 0; j < readers_replication; j++ {
-					go reader(i*read_entries, (i+1)*read_entries)
-				}
+				go read(i*read_entries, (i+1)*read_entries)
 			}
 			for i := 0; i < writers; i++ {
-				for j := 0; j < writers_replication; j++ {
-					go writer(i*write_entries, (i+1)*write_entries)
-				}
+				go write(i*write_entries, (i+1)*write_entries)
 			}
 
 			wg.Wait()
@@ -102,10 +103,10 @@ func TestAdmissionControl(t *testing.T) {
 
 			t.Logf("Executed 1000 queries in %.2f seconds\n", duration.Seconds())
 			// It is expected that some queries are denied by the admission control due to the load.
-			g.Expect(numSuccessfulWriterTxn.Load()).To(BeNumerically("<", writers*writers_replication*write_entries))
+			g.Expect(numSuccessfulWriterTxn.Load()).To(BeNumerically("<", writers*write_entries))
 
 			// read queries should be ignored by the admission control
-			g.Expect(numSuccessfulReaderTxn.Load()).To(BeNumerically("==", readers*readers_replication*read_entries))
+			g.Expect(numSuccessfulReaderTxn.Load()).To(BeNumerically("==", readers*read_entries))
 		})
 	}
 }
