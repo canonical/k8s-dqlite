@@ -140,7 +140,12 @@ func (s *SQLLog) compactStart(ctx context.Context) error {
 
 // DoCompact makes a single compaction run when called. It is intended to be called
 // from test functions that have access to the backend.
-func (s *SQLLog) DoCompact(ctx context.Context) error {
+func (s *SQLLog) DoCompact(ctx context.Context) (err error) {
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.DoCompact", otelName))
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 	if err := s.compactStart(ctx); err != nil {
 		return fmt.Errorf("failed to initialise compaction: %v", err)
 	}
@@ -155,11 +160,13 @@ func (s *SQLLog) DoCompact(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	span.SetAttributes(attribute.Int64("start", start))
 	// NOTE: Upstream is ignoring the last 1000 revisions, however that causes the following CNCF conformance test to fail.
 	// This is because of low activity, where the created list is part of the last 1000 revisions and is not compacted.
 	// Link to failing test: https://github.com/kubernetes/kubernetes/blob/f2cfbf44b1fb482671aedbfff820ae2af256a389/test/e2e/apimachinery/chunking.go#L144
 	// To address this, we only ignore the last 100 revisions instead
 	target -= SupersededCount
+	span.SetAttributes(attribute.Int64("target", target))
 	for start < target {
 		batchRevision := start + compactBatchSize
 		if batchRevision > target {

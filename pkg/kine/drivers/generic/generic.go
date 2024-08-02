@@ -481,7 +481,7 @@ func (d *Generic) Create(ctx context.Context, key string, value []byte, ttl int6
 // a compacted error.
 func (d *Generic) Compact(ctx context.Context, revision int64) (err error) {
 	compactCnt.Add(ctx, 1)
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.compact", otelName))
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Compact", otelName))
 	defer func() {
 		span.RecordError(err)
 		span.End()
@@ -490,6 +490,10 @@ func (d *Generic) Compact(ctx context.Context, revision int64) (err error) {
 	if err != nil {
 		return err
 	}
+	span.SetAttributes(
+		attribute.Int64("compact_start", compactStart),
+		attribute.Int64("current_revision", currentRevision), attribute.Int64("revision", revision),
+	)
 	if compactStart >= revision {
 		return nil // Nothing to compact.
 	}
@@ -506,7 +510,14 @@ func (d *Generic) Compact(ctx context.Context, revision int64) (err error) {
 	return err
 }
 
-func (d *Generic) tryCompact(ctx context.Context, start, end int64) error {
+func (d *Generic) tryCompact(ctx context.Context, start, end int64) (err error) {
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.tryCompact", otelName))
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+	span.SetAttributes(attribute.Int64("start", start), attribute.Int64("end", end))
+
 	tx, err := d.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return err
