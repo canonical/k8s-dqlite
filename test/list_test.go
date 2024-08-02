@@ -197,10 +197,22 @@ func BenchmarkList(b *testing.B) {
 		return nil
 	}
 	backends := []string{endpoint.SQLiteBackend, endpoint.DQLiteBackend}
-	payloadSizes := []int{100, 1000, 5000}
 	for _, backendType := range backends {
-		for _, payloadSize := range payloadSizes {
-			b.Run(fmt.Sprintf("%s-%d", backendType, payloadSize), func(b *testing.B) {
+		payloads := []struct {
+			name string
+			size int
+		}{{
+			name: "tiny",
+			size: 100,
+		}, {
+			name: "page-fitting",
+			size: 1000,
+		}, {
+			name: "page-overflowing",
+			size: 5000,
+		}}
+		for _, payload := range payloads {
+			b.Run(fmt.Sprintf("%s-%d", backendType, payload.name), func(b *testing.B) {
 				b.Run("all", func(b *testing.B) {
 					b.StopTimer()
 					g := NewWithT(b)
@@ -211,7 +223,7 @@ func BenchmarkList(b *testing.B) {
 					kine := newKineServer(ctx, b, &kineOptions{
 						backendType: backendType,
 						setup: func(ctx context.Context, tx *sql.Tx) error {
-							return setup(ctx, tx, payloadSize, b.N)
+							return setup(ctx, tx, payload.size, b.N)
 						},
 					})
 
@@ -234,7 +246,7 @@ func BenchmarkList(b *testing.B) {
 					kine := newKineServer(ctx, b, &kineOptions{
 						backendType: backendType,
 						setup: func(ctx context.Context, tx *sql.Tx) error {
-							return setup(ctx, tx, payloadSize, b.N)
+							return setup(ctx, tx, payload.size, b.N)
 						},
 					})
 
