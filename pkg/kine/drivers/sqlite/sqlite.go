@@ -166,6 +166,11 @@ func migrate(ctx context.Context, txn *sql.Tx) error {
 		if err := applySchemaV0_1(ctx, txn); err != nil {
 			return err
 		}
+		fallthrough
+	case NewSchemaVersion(0, 1):
+		if err := applySchemaV0_2(ctx, txn); err != nil {
+			return err
+		}
 	default:
 		return nil
 	}

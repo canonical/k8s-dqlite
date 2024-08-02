@@ -188,7 +188,7 @@ func (ks *kineServer) ResetMetrics() {
 }
 
 func insertMany(ctx context.Context, tx *sql.Tx, prefix string, valueSize, n int) error {
-	insertManyQuery := `
+	const insertManyQuery = `
 WITH RECURSIVE gen_id AS(
 	SELECT 1 AS id
 
@@ -211,20 +211,22 @@ FROM gen_id, revision`
 }
 
 func updateMany(ctx context.Context, tx *sql.Tx, prefix string, valueSize, n int) error {
-	updateManyQuery := `
+	const updateManyQuery = `
+WITH maxkv AS (
+	SELECT MAX(id) AS id
+	FROM kine
+	WHERE
+		?||'/' <= name AND name < ?||'0'
+	GROUP BY name
+	HAVING deleted = 0
+	ORDER BY name
+)
 INSERT INTO kine(
 	name, created, deleted, create_revision, prev_revision, lease, value, old_value
 )
 SELECT kv.name, 0, 0, kv.create_revision, kv.id, 0, randomblob(?), kv.value
-FROM kine AS kv
-JOIN (
-	SELECT MAX(mkv.id) as id
-	FROM kine mkv
-	WHERE  ?||'/' <= mkv.name AND mkv.name < ?||'0'
-	GROUP BY mkv.name
-) maxkv ON maxkv.id = kv.id
-WHERE kv.deleted = 0
-ORDER BY kv.name
+FROM maxkv CROSS JOIN kine kv
+	ON maxkv.id = kv.id
 LIMIT ?`
 	_, err := tx.ExecContext(ctx, updateManyQuery, valueSize, prefix, prefix, n)
 	return err
@@ -232,19 +234,21 @@ LIMIT ?`
 
 func deleteMany(ctx context.Context, tx *sql.Tx, prefix string, n int) error {
 	const deleteManyQuery = `
+WITH maxkv AS (
+	SELECT MAX(id) AS id
+	FROM kine
+	WHERE
+		?||'/' <= name AND name < ?||'0'
+	GROUP BY name
+	HAVING deleted = 0
+	ORDER BY name
+)
 INSERT INTO kine(
 	name, created, deleted, create_revision, prev_revision, lease, value, old_value
 )
 SELECT kv.name, 0, 1, kv.create_revision, kv.id, 0, kv.value, kv.value
-FROM kine AS kv
-JOIN (
-	SELECT MAX(mkv.id) as id
-	FROM kine mkv
-	WHERE  ?||'/' <= mkv.name AND mkv.name < ?||'0'
-	GROUP BY mkv.name
-) maxkv ON maxkv.id = kv.id
-WHERE kv.deleted = 0
-ORDER BY kv.name
+FROM maxkv CROSS JOIN kine kv
+	ON maxkv.id = kv.id
 LIMIT ?`
 	_, err := tx.ExecContext(ctx, deleteManyQuery, prefix, prefix, n)
 	return err
