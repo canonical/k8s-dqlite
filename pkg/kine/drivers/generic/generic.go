@@ -476,8 +476,8 @@ func (d *Generic) Create(ctx context.Context, key string, value []byte, ttl int6
 	return result.LastInsertId()
 }
 
-// Compact compacts to revision the database. After the call,
-// any request for a version older than revision will return
+// Compact compacts the database up to the revision provided in the method's call.
+// After the call, any request for a version older than the given revision will return
 // a compacted error.
 func (d *Generic) Compact(ctx context.Context, revision int64) (err error) {
 	compactCnt.Add(ctx, 1)
@@ -537,7 +537,7 @@ func (d *Generic) tryCompact(ctx context.Context, start, end int64) (err error) 
 	// an index, it won't change much in performance
 	// however, it should be included in a covering
 	// index if ever necessary.
-	_, err = tx.ExecContext(ctx, `
+	if _, err = tx.ExecContext(ctx, `
 		DELETE FROM kine
 		WHERE id IN (
 			SELECT prev_revision
@@ -547,22 +547,19 @@ func (d *Generic) tryCompact(ctx context.Context, start, end int64) (err error) 
 				AND prev_revision != 0
 				AND ? < id AND id <= ?
 		)
-	`, start, end)
-	if err != nil {
+	`, start, end); err != nil {
 		return err
 	}
 
-	_, err = tx.ExecContext(ctx, `
+	if _, err = tx.ExecContext(ctx, `
 		DELETE FROM kine
 		WHERE deleted = 1
 			AND ? < id AND id <= ?
-	`, start, end)
-	if err != nil {
+	`, start, end); err != nil {
 		return err
 	}
 
-	_, err = tx.ExecContext(ctx, d.UpdateCompactSQL, end)
-	if err != nil {
+	if _, err = tx.ExecContext(ctx, d.UpdateCompactSQL, end); err != nil {
 		return err
 	}
 	return tx.Commit()
