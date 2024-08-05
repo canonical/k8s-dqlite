@@ -64,6 +64,7 @@ type Dialect interface {
 	AfterPrefix(ctx context.Context, prefix string, rev, limit int64) (*sql.Rows, error)
 	After(ctx context.Context, rev, limit int64) (*sql.Rows, error)
 	Insert(ctx context.Context, key string, create, delete bool, createRevision, previousRevision int64, ttl int64, value, prevValue []byte) (int64, error)
+	Create(ctx context.Context, key string, value []byte, lease int64) (int64, error)
 	GetRevision(ctx context.Context, revision int64) (*sql.Rows, error)
 	DeleteRevision(ctx context.Context, revision int64) error
 	GetCompactRevision(ctx context.Context) (int64, int64, error)
@@ -612,6 +613,27 @@ func (s *SQLLog) Append(ctx context.Context, event *server.Event) (int64, error)
 	if err != nil {
 		return 0, err
 	}
+	select {
+	case s.notify <- rev:
+	default:
+	}
+	return rev, nil
+}
+
+func (s *SQLLog) Create(ctx context.Context, key string, value []byte, lease int64) (rev int64, err error) {
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Create", otelName))
+	defer func() {
+		span.RecordError(err)
+		span.SetAttributes(attribute.Int64("revision", rev))
+		span.End()
+	}()
+	span.SetAttributes(attribute.String("key", key))
+
+	rev, err = s.d.Create(ctx, key, value, lease)
+	if err != nil {
+		return 0, err
+	}
+
 	select {
 	case s.notify <- rev:
 	default:

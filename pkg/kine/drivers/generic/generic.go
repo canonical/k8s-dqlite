@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/canonical/k8s-dqlite/pkg/kine/prepared"
+	"github.com/canonical/k8s-dqlite/pkg/kine/server"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
@@ -148,6 +149,7 @@ type Generic struct {
 	InsertSQL             string
 	FillSQL               string
 	InsertLastInsertIDSQL string
+	CreateSQL             string
 	GetSizeSQL            string
 	Retry                 ErrRetry
 	TranslateErr          TranslateErr
@@ -274,6 +276,24 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 
 		InsertSQL: q(`INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
 			VALUES(?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`, paramCharacter, numbered),
+
+		CreateSQL: q(`
+			INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
+			SELECT 
+				? AS name,
+				1 AS created,
+				0 AS deleted,
+				0 AS create_revision, 
+				COALESCE(id, 0) AS prev_revision, 
+				? AS lease, 
+				? AS value, 
+				NULL AS old_value
+			FROM (
+				SELECT MAX(id) AS id, deleted
+				FROM kine
+				WHERE name = ?
+			) maxkv
+			WHERE maxkv.deleted = 1 OR id IS NULL`, paramCharacter, numbered),
 
 		FillSQL: q(`INSERT INTO kine(id, name, created, deleted, create_revision, prev_revision, lease, value, old_value)
 			VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`, paramCharacter, numbered),
@@ -426,6 +446,37 @@ func (d *Generic) Count(ctx context.Context, prefix, startKey string, revision i
 		return 0, 0, err
 	}
 	return rev.Int64, id, err
+}
+
+func (d *Generic) Create(ctx context.Context, key string, value []byte, ttl int64) (rev int64, err error) {
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Create", otelName))
+
+	defer func() {
+		if err != nil {
+			if d.TranslateErr != nil {
+				err = d.TranslateErr(err)
+			}
+			span.RecordError(err)
+		}
+		span.End()
+	}()
+	span.SetAttributes(
+		attribute.String("key", key),
+		attribute.Int64("ttl", ttl),
+	)
+
+	result, err := d.execute(ctx, "create_sql", d.CreateSQL, key, ttl, value, key)
+	if err != nil {
+		logrus.WithError(err).Error("failed to create key")
+		return 0, err
+	}
+
+	if insertCount, err := result.RowsAffected(); err != nil {
+		return 0, err
+	} else if insertCount == 0 {
+		return 0, server.ErrKeyExists
+	}
+	return result.LastInsertId()
 }
 
 func (d *Generic) GetCompactRevision(ctx context.Context) (int64, int64, error) {
