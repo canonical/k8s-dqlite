@@ -23,19 +23,19 @@ func New(db *sql.DB) *DB {
 func (db *DB) Underlying() *sql.DB { return db.underlying }
 
 func (db *DB) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
-	stms, err := db.prepare(ctx, query)
+	stmt, err := db.prepare(ctx, query)
 	if err != nil {
 		return nil, err
 	}
-	return stms.ExecContext(ctx, args...)
+	return stmt.ExecContext(ctx, args...)
 }
 
 func (db *DB) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
-	stms, err := db.prepare(ctx, query)
+	stmt, err := db.prepare(ctx, query)
 	if err != nil {
 		return nil, err
 	}
-	return stms.QueryContext(ctx, args...)
+	return stmt.QueryContext(ctx, args...)
 }
 
 func (db *DB) Close() error {
@@ -86,4 +86,16 @@ func (db *DB) prepare(ctx context.Context, query string) (*sql.Stmt, error) {
 
 	db.store[query] = prepared
 	return prepared, nil
+}
+
+func (db *DB) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
+	tx, err := db.underlying.BeginTx(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Tx{
+		db: db,
+		tx: tx,
+	}, nil
 }
