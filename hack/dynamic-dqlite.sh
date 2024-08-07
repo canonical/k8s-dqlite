@@ -70,27 +70,6 @@ if [ ! -f "${BUILD_DIR}/lz4/lib/liblz4.a" ] || [ ! -f "${BUILD_DIR}/lz4/lib/libl
   )
 fi
 
-# build raft
-if [ ! -f "${BUILD_DIR}/raft/libraft.la" ]; then
-  (
-    cd "${BUILD_DIR}"
-    rm -rf raft
-    git clone "${REPO_RAFT}" --depth 1 --branch "${TAG_RAFT}" > /dev/null
-    cd raft
-    autoreconf -i > /dev/null
-    ./configure \
-      CFLAGS="-I${BUILD_DIR}/libuv/include -I${BUILD_DIR}/lz4/lib" \
-      LDFLAGS="-L${BUILD_DIR}/libuv/.libs -L${BUILD_DIR}/lz4/lib" \
-      UV_CFLAGS="-I${BUILD_DIR}/libuv/include" \
-      UV_LIBS="-L${BUILD_DIR}/libuv/.libs" \
-      LZ4_CFLAGS="-I${BUILD_DIR}/lz4/lib" \
-      LZ4_LIBS="-L${BUILD_DIR}/lz4/lib" \
-      > /dev/null
-
-    make -j > /dev/null
-  )
-fi
-
 # build sqlite3
 if [ ! -f "${BUILD_DIR}/sqlite/libsqlite3.la" ]; then
   (
@@ -112,14 +91,14 @@ if [ ! -f "${BUILD_DIR}/dqlite/libdqlite.la" ]; then
     git clone "${REPO_DQLITE}" --depth 1 --branch "${TAG_DQLITE}" > /dev/null
     cd dqlite
     autoreconf -i > /dev/null
-    ./configure \
-      CFLAGS="-I${BUILD_DIR}/raft/include -I${BUILD_DIR}/sqlite -I${BUILD_DIR}/libuv/include -I${BUILD_DIR}/lz4/lib -Werror=implicit-function-declaration" \
-      LDFLAGS="-L${BUILD_DIR}/raft/.libs -L${BUILD_DIR}/libuv/.libs -L${BUILD_DIR}/lz4/lib -L${BUILD_DIR}/libnsl/src" \
-      RAFT_CFLAGS="-I${BUILD_DIR}/raft/include" \
-      RAFT_LIBS="-L${BUILD_DIR}/raft/.libs" \
+    ./configure --enable-build-raft \
+      CFLAGS="-I${BUILD_DIR}/sqlite -I${BUILD_DIR}/libuv/include -I${BUILD_DIR}/lz4/lib -Werror=implicit-function-declaration" \
+      LDFLAGS=" -L${BUILD_DIR}/libuv/.libs -L${BUILD_DIR}/lz4/lib -L${BUILD_DIR}/libnsl/src" \
       UV_CFLAGS="-I${BUILD_DIR}/libuv/include" \
       UV_LIBS="-L${BUILD_DIR}/libuv/.libs" \
       SQLITE_CFLAGS="-I${BUILD_DIR}/sqlite" \
+      LZ4_CFLAGS="-I${BUILD_DIR}/lz4/lib" \
+      LZ4_LIBS="-L${BUILD_DIR}/lz4/lib" \
       > /dev/null
 
     make -j > /dev/null
@@ -131,7 +110,6 @@ fi
   cd "${BUILD_DIR}"
   cp libuv/.libs/* "${INSTALL_DIR}/lib"
   cp lz4/lib/*.so* "${INSTALL_DIR}/lib"
-  cp raft/.libs/* "${INSTALL_DIR}/lib"
   cp sqlite/.libs/* "${INSTALL_DIR}/lib"
   cp dqlite/.libs/* "${INSTALL_DIR}/lib"
 )
@@ -140,13 +118,12 @@ fi
 (
   cd "${BUILD_DIR}"
   cp -r libuv/include/* "${INSTALL_DIR}/include"
-  cp -r raft/include/* "${INSTALL_DIR}/include"
   cp -r sqlite/*.h "${INSTALL_DIR}/include"
   cp -r dqlite/include/* "${INSTALL_DIR}/include"
 )
 
 export CGO_CFLAGS="-I${INSTALL_DIR}/include"
-export CGO_LDFLAGS="-L${INSTALL_DIR}/lib -ldqlite -lraft -luv -llz4 -lsqlite3"
+export CGO_LDFLAGS="-L${INSTALL_DIR}/lib -ldqlite -luv -llz4 -lsqlite3"
 export LD_LIBRARY_PATH="${INSTALL_DIR}/lib"
 
 echo "Libraries are in '${INSTALL_DIR}/lib'"
