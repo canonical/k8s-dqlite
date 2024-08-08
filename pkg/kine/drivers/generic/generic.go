@@ -377,7 +377,7 @@ func (d *Generic) execute(ctx context.Context, txName, query string, args ...int
 	if d.LockWrites {
 		d.Lock()
 		defer d.Unlock()
-		span.AddEvent("aquired write lock")
+		span.AddEvent("acquired write lock")
 	}
 
 	start := time.Now()
