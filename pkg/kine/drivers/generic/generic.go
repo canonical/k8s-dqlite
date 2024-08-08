@@ -322,7 +322,6 @@ func (d *Generic) query(ctx context.Context, txName, query string, args ...inter
 	}()
 	span.SetAttributes(
 		attribute.String("tx_name", txName),
-		attribute.String("query", query),
 	)
 
 	done, err := d.AdmissionControlPolicy.Admit(ctx, txName)
@@ -346,15 +345,10 @@ func (d *Generic) query(ctx context.Context, txName, query string, args ...inter
 			logrus.Debugf("QUERY (try: %d) %v : %s", retryCount, args, Stripped(query))
 		}
 
-		ctx, execSpan := otelTracer.Start(ctx, fmt.Sprintf("%s.execute.ExecContext", otelName))
-		defer execSpan.End()
 		rows, err = d.DB.QueryContext(ctx, query, args...)
-		execSpan.RecordError(err)
-		execSpan.End()
 		if err == nil {
 			break
 		}
-
 		if d.Retry == nil || !d.Retry(err) {
 			break
 		}
@@ -373,7 +367,6 @@ func (d *Generic) execute(ctx context.Context, txName, query string, args ...int
 	}()
 	span.SetAttributes(
 		attribute.String("tx_name", txName),
-		attribute.String("query", query),
 	)
 
 	done, err := d.AdmissionControlPolicy.Admit(ctx, txName)
@@ -403,15 +396,10 @@ func (d *Generic) execute(ctx context.Context, txName, query string, args ...int
 			logrus.Tracef("EXEC (try: %d) %v : %s", retryCount, args, Stripped(query))
 		}
 
-		ctx, execSpan := otelTracer.Start(ctx, fmt.Sprintf("%s.execute.ExecContext", otelName))
-		defer execSpan.End()
 		result, err = d.DB.ExecContext(ctx, query, args...)
-		execSpan.RecordError(err)
-		execSpan.End()
 		if err == nil {
 			break
 		}
-
 		if d.Retry == nil || !d.Retry(err) {
 			break
 		}

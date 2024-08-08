@@ -4,8 +4,21 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"sync"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
+
+const otelName = "prepared"
+
+var otelTracer trace.Tracer
+
+func init() {
+	otelTracer = otel.Tracer(otelName)
+}
 
 type DB struct {
 	underlying *sql.DB
@@ -22,7 +35,13 @@ func New(db *sql.DB) *DB {
 
 func (db *DB) Underlying() *sql.DB { return db.underlying }
 
-func (db *DB) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+func (db *DB) ExecContext(ctx context.Context, query string, args ...any) (result sql.Result, err error) {
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.ExecContext", otelName))
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+
 	stmt, err := db.prepare(ctx, query)
 	if err != nil {
 		return nil, err
@@ -30,7 +49,13 @@ func (db *DB) ExecContext(ctx context.Context, query string, args ...any) (sql.R
 	return stmt.ExecContext(ctx, args...)
 }
 
-func (db *DB) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+func (db *DB) QueryContext(ctx context.Context, query string, args ...any) (rows *sql.Rows, err error) {
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.QueryContext", otelName))
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+
 	stmt, err := db.prepare(ctx, query)
 	if err != nil {
 		return nil, err
@@ -58,15 +83,24 @@ func (db *DB) Close() error {
 	return errors.Join(errs...)
 }
 
-func (db *DB) prepare(ctx context.Context, query string) (*sql.Stmt, error) {
+func (db *DB) prepare(ctx context.Context, query string) (stmt *sql.Stmt, err error) {
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.prepare", otelName))
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+	span.SetAttributes(attribute.String("query", query))
+
 	db.mu.RLock()
-	stmt := db.store[query]
+	span.AddEvent("acquired read lock")
+	stmt = db.store[query]
 	db.mu.RUnlock()
 	if stmt != nil {
 		return stmt, nil
 	}
 
 	db.mu.Lock()
+	span.AddEvent("acquired read-write lock")
 	defer db.mu.Unlock()
 
 	if db.underlying == nil {
