@@ -155,4 +155,4 @@ fi
 )
 
 export CGO_CFLAGS="-I${INSTALL_DIR}/include"
-export CGO_LDFLAGS="-L${INSTALL_DIR}/lib -luv -ldqlite -llz4 -lsqlite3"
+export CGO_LDFLAGS="-L${INSTALL_DIR}/lib -luv -ldqlite -llz4 -lsqlite3 -Wl,-z,stack-size=1048576"
