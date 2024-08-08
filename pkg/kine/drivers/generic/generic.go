@@ -344,7 +344,6 @@ func (d *Generic) query(ctx context.Context, txName, query string, args ...inter
 		} else {
 			logrus.Debugf("QUERY (try: %d) %v : %s", retryCount, args, Stripped(query))
 		}
-
 		rows, err = d.DB.QueryContext(ctx, query, args...)
 		if err == nil {
 			break
@@ -395,7 +394,6 @@ func (d *Generic) execute(ctx context.Context, txName, query string, args ...int
 		} else {
 			logrus.Tracef("EXEC (try: %d) %v : %s", retryCount, args, Stripped(query))
 		}
-
 		result, err = d.DB.ExecContext(ctx, query, args...)
 		if err == nil {
 			break
