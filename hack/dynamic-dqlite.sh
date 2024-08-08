@@ -123,7 +123,7 @@ fi
 )
 
 export CGO_CFLAGS="-I${INSTALL_DIR}/include"
-export CGO_LDFLAGS="-L${INSTALL_DIR}/lib -ldqlite -luv -llz4 -lsqlite3"
+export CGO_LDFLAGS="-L${INSTALL_DIR}/lib -ldqlite -luv -llz4 -lsqlite3 -Wl,-z,stack-size=1048576"
 export LD_LIBRARY_PATH="${INSTALL_DIR}/lib"
 
 echo "Libraries are in '${INSTALL_DIR}/lib'"
