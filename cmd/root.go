@@ -79,14 +79,19 @@ var (
 					Addr:    rootCmdOpts.metricsAddress,
 					Handler: http.NewServeMux(),
 				}
-				metricsServer.Handler.(*http.ServeMux).Handle("/metrics", promhttp.Handler())
+				mux, ok := metricsServer.Handler.(*http.ServeMux)
+				if !ok {
+					logrus.Fatal("Failed to create metrics endpoint")
+				} else {
+					mux.Handle("/metrics", promhttp.Handler())
 
-				go func() {
-					logrus.WithField("address", rootCmdOpts.metricsAddress).Print("Enable metrics endpoint")
-					if err := metricsServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-						logrus.WithError(err).Fatal("Failed to start metrics endpoint")
-					}
-				}()
+					go func() {
+						logrus.WithField("address", rootCmdOpts.metricsAddress).Print("Enable metrics endpoint")
+						if err := metricsServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+							logrus.WithError(err).Fatal("Failed to start metrics endpoint")
+						}
+					}()
+				}
 			}
 
 			instance, err := server.New(
