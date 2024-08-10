@@ -394,7 +394,7 @@ func (s *SQLLog) poll(result chan interface{}, pollStart int64) {
 			case check := <-s.notify:
 				logrus.Debug("received a notification")
 				if check <= last {
-					logrus.Debug("skipping notification as we already have it %d <= %d", check, last)
+					logrus.Debug("skipping notification as we already have it ", check, " <= ", last)
 					continue
 				}
 			case <-wait.C:
@@ -402,7 +402,9 @@ func (s *SQLLog) poll(result chan interface{}, pollStart int64) {
 		}
 		waitForMore = true
 
+		logrus.Debug("listing changes")
 		rows, err := s.d.After(s.ctx, last, 500)
+		logrus.Debug("listed changes")
 		if err != nil {
 			logrus.Errorf("fail to list latest changes: %v", err)
 			continue
