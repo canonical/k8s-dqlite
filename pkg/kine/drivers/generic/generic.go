@@ -329,15 +329,13 @@ func (d *Generic) query(ctx context.Context, txName, query string, args ...inter
 		}
 		recordOpResult(txName, err, start)
 	}()
-	timectx, cancel := context.WithTimeout(ctx, time.Duration(time.Second*20))
-	defer cancel()
 	for ; retryCount < maxRetries; retryCount++ {
 		if retryCount == 0 {
 			logrus.Tracef("QUERY (try: %d) %v : %s", retryCount, args, Stripped(query))
 		} else {
 			logrus.Debugf("QUERY (try: %d) %v : %s", retryCount, args, Stripped(query))
 		}
-		rows, err = d.DB.QueryContext(timectx, query, args...)
+		rows, err = d.DB.QueryContext(ctx, query, args...)
 		if err == nil {
 			logrus.Debug("done with query")
 			break

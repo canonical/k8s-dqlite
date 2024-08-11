@@ -402,8 +402,11 @@ func (s *SQLLog) poll(result chan interface{}, pollStart int64) {
 		}
 		waitForMore = true
 
+		timectx, cancel := context.WithTimeout(context.Background(), time.Duration(time.Second*20))
+		defer cancel()
+
 		logrus.Debug("listing changes")
-		rows, err := s.d.After(s.ctx, last, 500)
+		rows, err := s.d.After(timectx, last, 500)
 		logrus.Debug("listed changes")
 		if err != nil {
 			logrus.Errorf("fail to list latest changes: %v", err)
