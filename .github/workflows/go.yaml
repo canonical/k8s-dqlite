@@ -2,8 +2,9 @@ name: Go
 
 on:
   push:
-    branches: [master]
+    branches: [master, 1.29]
   pull_request:
+    branches: [master, default, 1.29]
 
 jobs:
   code-quality:
