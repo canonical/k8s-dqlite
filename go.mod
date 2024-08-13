@@ -3,7 +3,6 @@ module github.com/canonical/k8s-dqlite
 go 1.21
 
 require (
-	github.com/Rican7/retry v0.3.1
 	github.com/canonical/go-dqlite v1.20.0
 	github.com/mattn/go-sqlite3 v2.0.3+incompatible
 	github.com/onsi/gomega v1.27.10
