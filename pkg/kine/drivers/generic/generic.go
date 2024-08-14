@@ -315,7 +315,9 @@ func getPrefixRange(prefix string) (start, end string) {
 }
 
 func (d *Generic) query(ctx context.Context, txName, query string, args ...interface{}) (rows *sql.Rows, err error) {
-	done, err := d.AdmissionControlPolicy.Admit(ctx, txName)
+	queryCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	done, err := d.AdmissionControlPolicy.Admit(queryCtx, txName)
 	if err != nil {
 		return nil, fmt.Errorf("denied: %w", err)
 	}
@@ -335,7 +337,7 @@ func (d *Generic) query(ctx context.Context, txName, query string, args ...inter
 		} else {
 			logrus.Debugf("QUERY (try: %d) %v : %s", retryCount, args, Stripped(query))
 		}
-		rows, err = d.DB.QueryContext(ctx, query, args...)
+		rows, err = d.DB.QueryContext(queryCtx, query, args...)
 		if err == nil {
 			break
 		}
@@ -349,7 +351,9 @@ func (d *Generic) query(ctx context.Context, txName, query string, args ...inter
 }
 
 func (d *Generic) execute(ctx context.Context, txName, query string, args ...interface{}) (result sql.Result, err error) {
-	done, err := d.AdmissionControlPolicy.Admit(ctx, txName)
+	execCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	done, err := d.AdmissionControlPolicy.Admit(execCtx, txName)
 	if err != nil {
 		return nil, fmt.Errorf("denied: %w", err)
 	}
@@ -374,7 +378,7 @@ func (d *Generic) execute(ctx context.Context, txName, query string, args ...int
 		} else {
 			logrus.Tracef("EXEC (try: %d) %v : %s", retryCount, args, Stripped(query))
 		}
-		result, err = d.DB.ExecContext(ctx, query, args...)
+		result, err = d.DB.ExecContext(execCtx, query, args...)
 		if err == nil {
 			break
 		}
@@ -511,14 +515,16 @@ func (d *Generic) Compact(ctx context.Context, revision int64) (err error) {
 }
 
 func (d *Generic) tryCompact(ctx context.Context, start, end int64) (err error) {
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.tryCompact", otelName))
+	compactCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	compactCtx, span := otelTracer.Start(compactCtx, fmt.Sprintf("%s.tryCompact", otelName))
 	defer func() {
 		span.RecordError(err)
 		span.End()
 	}()
 	span.SetAttributes(attribute.Int64("start", start), attribute.Int64("end", end))
 
-	tx, err := d.DB.BeginTx(ctx, nil)
+	tx, err := d.DB.BeginTx(compactCtx, nil)
 	if err != nil {
 		return err
 	}
@@ -537,7 +543,7 @@ func (d *Generic) tryCompact(ctx context.Context, start, end int64) (err error) 
 	// an index, it won't change much in performance
 	// however, it should be included in a covering
 	// index if ever necessary.
-	if _, err = tx.ExecContext(ctx, `
+	if _, err = tx.ExecContext(compactCtx, `
 		DELETE FROM kine
 		WHERE id IN (
 			SELECT prev_revision
@@ -551,7 +557,7 @@ func (d *Generic) tryCompact(ctx context.Context, start, end int64) (err error) 
 		return err
 	}
 
-	if _, err = tx.ExecContext(ctx, `
+	if _, err = tx.ExecContext(compactCtx, `
 		DELETE FROM kine
 		WHERE deleted = 1
 			AND ? < id AND id <= ?
@@ -559,7 +565,7 @@ func (d *Generic) tryCompact(ctx context.Context, start, end int64) (err error) 
 		return err
 	}
 
-	if _, err = tx.ExecContext(ctx, d.UpdateCompactSQL, end); err != nil {
+	if _, err = tx.ExecContext(compactCtx, d.UpdateCompactSQL, end); err != nil {
 		return err
 	}
 	return tx.Commit()
