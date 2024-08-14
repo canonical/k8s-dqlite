@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/dqlite"
+	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/generic"
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/sqlite"
 	"github.com/canonical/k8s-dqlite/pkg/kine/server"
 	"github.com/canonical/k8s-dqlite/pkg/kine/tls"
@@ -26,9 +27,10 @@ const (
 )
 
 type Config struct {
-	GRPCServer *grpc.Server
-	Listener   string
-	Endpoint   string
+	GRPCServer           *grpc.Server
+	Listener             string
+	Endpoint             string
+	ConnectionPoolConfig generic.ConnectionPoolConfig
 
 	tls.Config
 }
@@ -180,9 +182,9 @@ func getKineStorageBackend(ctx context.Context, driver, dsn string, cfg Config) 
 	switch driver {
 	case SQLiteBackend:
 		leaderElect = false
-		backend, err = sqlite.New(ctx, dsn)
+		backend, err = sqlite.New(ctx, dsn, cfg.ConnectionPoolConfig)
 	case DQLiteBackend:
-		backend, err = dqlite.New(ctx, dsn, cfg.Config)
+		backend, err = dqlite.New(ctx, dsn, cfg.Config, cfg.ConnectionPoolConfig)
 	default:
 		return false, nil, fmt.Errorf("storage backend is not defined")
 	}

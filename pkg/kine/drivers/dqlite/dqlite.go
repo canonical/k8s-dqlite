@@ -24,16 +24,16 @@ func init() {
 	}
 }
 
-func New(ctx context.Context, datasourceName string, tlsInfo tls.Config) (server.Backend, error) {
-	backend, _, err := NewVariant(ctx, datasourceName)
+func New(ctx context.Context, datasourceName string, tlsInfo tls.Config, connectionPoolConfig generic.ConnectionPoolConfig) (server.Backend, error) {
+	backend, _, err := NewVariant(ctx, datasourceName, connectionPoolConfig)
 	return backend, err
 }
 
-func NewVariant(ctx context.Context, datasourceName string) (server.Backend, *generic.Generic, error) {
+func NewVariant(ctx context.Context, datasourceName string, connectionPoolConfig generic.ConnectionPoolConfig) (server.Backend, *generic.Generic, error) {
 	logrus.Printf("New kine for dqlite")
 
 	// Driver name will be extracted from query parameters
-	backend, generic, err := sqlite.NewVariant(ctx, "", datasourceName)
+	backend, generic, err := sqlite.NewVariant(ctx, "", datasourceName, connectionPoolConfig)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "sqlite client")
 	}

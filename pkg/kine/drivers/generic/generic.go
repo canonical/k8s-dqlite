@@ -162,10 +162,23 @@ type Generic struct {
 	WatchQueryTimeout time.Duration
 }
 
-func configureConnectionPooling(db *sql.DB) {
-	db.SetMaxIdleConns(5)
-	db.SetMaxOpenConns(5)
-	db.SetConnMaxLifetime(60 * time.Second)
+type ConnectionPoolConfig struct {
+	MaxIdle     int
+	MaxOpen     int
+	MaxLifetime time.Duration
+	MaxIdleTime time.Duration
+}
+
+func configureConnectionPooling(connPoolConfig ConnectionPoolConfig, db *sql.DB) {
+	// behavior copied from database/sql - zero means defaultMaxIdleConns; negative means 0
+	if connPoolConfig.MaxIdle < 0 {
+		connPoolConfig.MaxIdle = 0
+	}
+
+	logrus.Infof("Configuring database connection pooling: maxIdleConns=%d, maxOpenConns=%d, connMaxLifetime=%s", connPoolConfig.MaxIdle, connPoolConfig.MaxOpen, connPoolConfig.MaxLifetime)
+	db.SetMaxIdleConns(connPoolConfig.MaxIdle)
+	db.SetMaxOpenConns(connPoolConfig.MaxOpen)
+	db.SetConnMaxLifetime(connPoolConfig.MaxLifetime)
 }
 
 func q(sql, param string, numbered bool) string {
@@ -200,7 +213,7 @@ func openAndTest(driverName, dataSourceName string) (*sql.DB, error) {
 	return db, nil
 }
 
-func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter string, numbered bool) (*Generic, error) {
+func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig ConnectionPoolConfig, paramCharacter string, numbered bool) (*Generic, error) {
 	var (
 		db  *sql.DB
 		err error
@@ -219,7 +232,7 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 		}
 	}
 
-	configureConnectionPooling(db)
+	configureConnectionPooling(connPoolConfig, db)
 
 	return &Generic{
 		DB: prepared.New(db),

@@ -32,6 +32,11 @@ var (
 		otel                   bool
 		otelAddress            string
 
+		datastoreMaxIdleConnections    int
+		datastoreMaxOpenConnections    int
+		datastoreConnectionMaxLifetime time.Duration
+		datastoreConnectionMaxIdleTime time.Duration
+
 		watchAvailableStorageInterval time.Duration
 		watchAvailableStorageMinBytes uint64
 		lowAvailableStorageAction     string
@@ -108,6 +113,10 @@ var (
 				rootCmdOpts.admissionControlPolicy,
 				rootCmdOpts.acpLimitMaxConcurrentTxn,
 				rootCmdOpts.acpOnlyWriteQueries,
+				rootCmdOpts.datastoreMaxIdleConnections,
+				rootCmdOpts.datastoreMaxOpenConnections,
+				rootCmdOpts.datastoreConnectionMaxLifetime,
+				rootCmdOpts.datastoreConnectionMaxIdleTime,
 				rootCmdOpts.watchQueryTimeout,
 			)
 			if err != nil {
@@ -176,6 +185,10 @@ func init() {
 	rootCmd.Flags().BoolVar(&rootCmdOpts.otel, "otel", false, "enable traces endpoint")
 	rootCmd.Flags().StringVar(&rootCmdOpts.otelAddress, "otel-listen", "127.0.0.1:4317", "listen address for OpenTelemetry endpoint")
 	rootCmd.Flags().StringVar(&rootCmdOpts.metricsAddress, "metrics-listen", "127.0.0.1:9042", "listen address for metrics endpoint")
+	rootCmd.Flags().IntVar(&rootCmdOpts.datastoreMaxIdleConnections, "datastore-max-idle-connections", 5, "Maximum number of idle connections retained by datastore. If value = 0, the system default will be used. If value < 0, idle connections will not be reused.")
+	rootCmd.Flags().IntVar(&rootCmdOpts.datastoreMaxOpenConnections, "datastore-max-open-connections", 5, "Maximum number of open connections used by datastore. If value <= 0, then there is no limit")
+	rootCmd.Flags().DurationVar(&rootCmdOpts.datastoreConnectionMaxLifetime, "datastore-connection-max-lifetime", 60*time.Second, "Maximum amount of time a connection may be reused. If value <= 0, then there is no limit.")
+	rootCmd.Flags().DurationVar(&rootCmdOpts.datastoreConnectionMaxIdleTime, "datastore-connection-max-idle-time", 0*time.Second, "Maximum amount of time a connection may be idle before being closed. If value <= 0, then there is no limit.")
 	rootCmd.Flags().DurationVar(&rootCmdOpts.watchAvailableStorageInterval, "watch-storage-available-size-interval", 5*time.Second, "Interval to check if the disk is running low on space. Set to 0 to disable the periodic disk size check")
 	rootCmd.Flags().Uint64Var(&rootCmdOpts.watchAvailableStorageMinBytes, "watch-storage-available-size-min-bytes", 10*1024*1024, "Minimum required available disk size (in bytes) to continue operation. If available disk space gets below this threshold, then the --low-available-storage-action is performed")
 	rootCmd.Flags().StringVar(&rootCmdOpts.lowAvailableStorageAction, "low-available-storage-action", "none", "Action to perform in case the available storage is low. One of (none|handover|terminate). none means no action is performed. handover means the dqlite node will handover its leadership role, if any. terminate means this dqlite node will shutdown")

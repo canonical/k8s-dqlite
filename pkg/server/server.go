@@ -69,6 +69,10 @@ func New(
 	admissionControlPolicy string,
 	admissionControlPolicyLimitMaxConcurrentTxn int64,
 	admissionControlOnlyWriteQueries bool,
+	datastoreMaxIdleConnections int,
+	datastoreMaxOpenConnections int,
+	datastoreConnectionMaxLifetime time.Duration,
+	datastoreConnectionMaxIdleTime time.Duration,
 	watchQueryTimeout time.Duration,
 ) (*Server, error) {
 	var (
@@ -221,7 +225,11 @@ func New(
 		}
 		options = append(options, app.WithTLS(listen, dial))
 	}
-
+	// set datastore connection pool options
+	kineConfig.ConnectionPoolConfig.MaxIdle = datastoreMaxIdleConnections
+	kineConfig.ConnectionPoolConfig.MaxOpen = datastoreMaxOpenConnections
+	kineConfig.ConnectionPoolConfig.MaxLifetime = datastoreConnectionMaxLifetime
+	kineConfig.ConnectionPoolConfig.MaxIdleTime = datastoreConnectionMaxIdleTime
 	// handle tuning parameters
 	if exists, err := fileExists(dir, "tuning.yaml"); err != nil {
 		return nil, fmt.Errorf("failed to check for tuning.yaml: %w", err)
