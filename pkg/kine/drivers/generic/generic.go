@@ -315,6 +315,15 @@ func getPrefixRange(prefix string) (start, end string) {
 }
 
 func (d *Generic) query(ctx context.Context, txName, query string, args ...interface{}) (rows *sql.Rows, err error) {
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.query", otelName))
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+	span.SetAttributes(
+		attribute.String("tx_name", txName),
+	)
+
 	done, err := d.AdmissionControlPolicy.Admit(ctx, txName)
 	if err != nil {
 		return nil, fmt.Errorf("denied: %w", err)
@@ -349,6 +358,16 @@ func (d *Generic) query(ctx context.Context, txName, query string, args ...inter
 }
 
 func (d *Generic) execute(ctx context.Context, txName, query string, args ...interface{}) (result sql.Result, err error) {
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.execute", otelName))
+	defer func() {
+		span.RecordError(err)
+		span.End()
+
+	}()
+	span.SetAttributes(
+		attribute.String("tx_name", txName),
+	)
+
 	done, err := d.AdmissionControlPolicy.Admit(ctx, txName)
 	if err != nil {
 		return nil, fmt.Errorf("denied: %w", err)
@@ -358,6 +377,7 @@ func (d *Generic) execute(ctx context.Context, txName, query string, args ...int
 	if d.LockWrites {
 		d.Lock()
 		defer d.Unlock()
+		span.AddEvent("acquired write lock")
 	}
 
 	start := time.Now()
