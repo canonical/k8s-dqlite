@@ -23,16 +23,17 @@ type opts struct {
 	dsn        string
 	driverName string // If not empty, use a pre-registered dqlite driver
 
-	compactInterval time.Duration
-	pollInterval    time.Duration
+	compactInterval   time.Duration
+	pollInterval      time.Duration
+	watchQueryTimeout time.Duration
 
 	admissionControlPolicy                      string
 	admissionControlPolicyLimitMaxConcurrentTxn int64
 	admissionControlOnlyWriteQueries            bool
 }
 
-func New(ctx context.Context, dataSourceName string, pollAfterTimeout time.Duration) (server.Backend, error) {
-	backend, _, err := NewVariant(ctx, "sqlite3", dataSourceName, pollAfterTimeout)
+func New(ctx context.Context, dataSourceName string) (server.Backend, error) {
+	backend, _, err := NewVariant(ctx, "sqlite3", dataSourceName)
 	if err != nil {
 		return nil, err
 	}
@@ -40,7 +41,7 @@ func New(ctx context.Context, dataSourceName string, pollAfterTimeout time.Durat
 	return backend, err
 }
 
-func NewVariant(ctx context.Context, driverName, dataSourceName string, pollAfterTimeout time.Duration) (server.Backend, *generic.Generic, error) {
+func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.Backend, *generic.Generic, error) {
 	const retryAttempts = 300
 
 	opts, err := parseOpts(dataSourceName)
@@ -64,7 +65,7 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string, pollAfte
 		dataSourceName = "./db/state.db?_journal=WAL&cache=shared"
 	}
 
-	dialect, err := generic.Open(ctx, driverName, opts.dsn, "?", false, pollAfterTimeout)
+	dialect, err := generic.Open(ctx, driverName, opts.dsn, "?", false)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -97,6 +98,7 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string, pollAfte
 
 	dialect.CompactInterval = opts.compactInterval
 	dialect.PollInterval = opts.pollInterval
+	dialect.WatchQueryTimeout = opts.watchQueryTimeout
 	dialect.AdmissionControlPolicy = generic.NewAdmissionControlPolicy(
 		opts.admissionControlPolicy,
 		opts.admissionControlOnlyWriteQueries,
@@ -202,6 +204,12 @@ func parseOpts(dsn string) (opts, error) {
 				return opts{}, fmt.Errorf("failed to parse poll-interval duration value %q: %w", vs[0], err)
 			}
 			result.pollInterval = d
+		case "poll-after-timeout":
+			d, err := time.ParseDuration(vs[0])
+			if err != nil {
+				return opts{}, fmt.Errorf("failed to parse poll-after-timeout duration value %q: %w", vs[0], err)
+			}
+			result.watchQueryTimeout = d
 		case "admission-control-policy":
 			result.admissionControlPolicy = vs[0]
 		case "admission-control-policy-limit-max-concurrent-txn":

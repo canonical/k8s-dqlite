@@ -183,9 +183,9 @@ func getKineStorageBackend(ctx context.Context, driver, dsn string, cfg Config) 
 	switch driver {
 	case SQLiteBackend:
 		leaderElect = false
-		backend, err = sqlite.New(ctx, dsn, cfg.PollAfterTimeout)
+		backend, err = sqlite.New(ctx, dsn)
 	case DQLiteBackend:
-		backend, err = dqlite.New(ctx, dsn, cfg.Config, cfg.PollAfterTimeout)
+		backend, err = dqlite.New(ctx, dsn, cfg.Config)
 	default:
 		return false, nil, fmt.Errorf("storage backend is not defined")
 	}

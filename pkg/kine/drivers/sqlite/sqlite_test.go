@@ -6,7 +6,6 @@ import (
 	"os"
 	"path"
 	"testing"
-	"time"
 
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/sqlite"
 )
@@ -51,8 +50,7 @@ func TestMigration(t *testing.T) {
 	setupV0(db)
 
 	ctx := context.Background()
-	pollAfterTimeout := 20 * time.Second
-	if _, err := sqlite.New(ctx, dbPath, pollAfterTimeout); err != nil {
+	if _, err := sqlite.New(ctx, dbPath); err != nil {
 		t.Fatal(err)
 	}
 
