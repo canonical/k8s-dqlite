@@ -204,10 +204,10 @@ func parseOpts(dsn string) (opts, error) {
 				return opts{}, fmt.Errorf("failed to parse poll-interval duration value %q: %w", vs[0], err)
 			}
 			result.pollInterval = d
-		case "poll-after-timeout":
+		case "watch-query-timeout":
 			d, err := time.ParseDuration(vs[0])
 			if err != nil {
-				return opts{}, fmt.Errorf("failed to parse poll-after-timeout duration value %q: %w", vs[0], err)
+				return opts{}, fmt.Errorf("failed to parse watch-query-timeout duration value %q: %w", vs[0], err)
 			}
 			result.watchQueryTimeout = d
 		case "admission-control-policy":
