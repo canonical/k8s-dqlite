@@ -31,8 +31,8 @@ type opts struct {
 	admissionControlOnlyWriteQueries            bool
 }
 
-func New(ctx context.Context, dataSourceName string) (server.Backend, error) {
-	backend, _, err := NewVariant(ctx, "sqlite3", dataSourceName)
+func New(ctx context.Context, dataSourceName string, pollAfterTimeout time.Duration) (server.Backend, error) {
+	backend, _, err := NewVariant(ctx, "sqlite3", dataSourceName, pollAfterTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -40,7 +40,7 @@ func New(ctx context.Context, dataSourceName string) (server.Backend, error) {
 	return backend, err
 }
 
-func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.Backend, *generic.Generic, error) {
+func NewVariant(ctx context.Context, driverName, dataSourceName string, pollAfterTimeout time.Duration) (server.Backend, *generic.Generic, error) {
 	const retryAttempts = 300
 
 	opts, err := parseOpts(dataSourceName)
@@ -64,7 +64,7 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 		dataSourceName = "./db/state.db?_journal=WAL&cache=shared"
 	}
 
-	dialect, err := generic.Open(ctx, driverName, opts.dsn, "?", false)
+	dialect, err := generic.Open(ctx, driverName, opts.dsn, "?", false, pollAfterTimeout)
 	if err != nil {
 		return nil, nil, err
 	}

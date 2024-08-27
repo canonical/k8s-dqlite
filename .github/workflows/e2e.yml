@@ -2,7 +2,7 @@ name: End To End
 
 on:
   push:
-    branches: [master]
+    branches: [master, 1.29]
   pull_request:
 
 jobs:

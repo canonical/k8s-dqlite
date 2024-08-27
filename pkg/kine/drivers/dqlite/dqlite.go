@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/canonical/go-dqlite"
 	"github.com/canonical/go-dqlite/driver"
@@ -25,11 +26,11 @@ func init() {
 	}
 }
 
-func New(ctx context.Context, datasourceName string, tlsInfo tls.Config) (server.Backend, error) {
+func New(ctx context.Context, datasourceName string, tlsInfo tls.Config, pollAfterTimeout time.Duration) (server.Backend, error) {
 	logrus.Printf("New kine for dqlite")
 
 	// Driver name will be extracted from query parameters
-	backend, generic, err := sqlite.NewVariant(ctx, "", datasourceName)
+	backend, generic, err := sqlite.NewVariant(ctx, "", datasourceName, pollAfterTimeout)
 	if err != nil {
 		return nil, errors.Wrap(err, "sqlite client")
 	}

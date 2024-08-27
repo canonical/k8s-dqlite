@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/canonical/go-dqlite/app"
 	"github.com/canonical/k8s-dqlite/pkg/kine/endpoint"
@@ -31,7 +32,8 @@ func makeEndpointConfig(ctx context.Context, tb testing.TB) endpoint.Config {
 	})
 
 	return endpoint.Config{
-		Listener: fmt.Sprintf("unix://%s/listen.sock", dir),
-		Endpoint: fmt.Sprintf("dqlite://k8s-%d?driver-name=%s", nextIdx, app.Driver()),
+		Listener:         fmt.Sprintf("unix://%s/listen.sock", dir),
+		Endpoint:         fmt.Sprintf("dqlite://k8s-%d?driver-name=%s", nextIdx, app.Driver()),
+		PollAfterTimeout: 20 * time.Second,
 	}
 }
