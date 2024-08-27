@@ -627,7 +627,7 @@ func (d *Generic) GetCompactInterval() time.Duration {
 	return 5 * time.Minute
 }
 
-func (d *Generic) GetPollAfterQueryTimeout() time.Duration {
+func (d *Generic) GetWatchQueryTimeout() time.Duration {
 	if v := d.WatchQueryTimeout; v > 0 {
 		return v
 	}

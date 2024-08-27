@@ -66,7 +66,7 @@ func New(
 	admissionControlPolicy string,
 	admissionControlPolicyLimitMaxConcurrentTxn int64,
 	admissionControlOnlyWriteQueries bool,
-	pollAfterTimeout time.Duration,
+	watchQueryTimeout time.Duration,
 ) (*Server, error) {
 	var (
 		options         []app.Option
@@ -271,7 +271,7 @@ func New(
 	params["admission-control-policy"] = []string{admissionControlPolicy}
 	params["admission-control-policy-limit-max-concurrent-txn"] = []string{fmt.Sprintf("%v", admissionControlPolicyLimitMaxConcurrentTxn)}
 	params["admission-control-only-write-queries"] = []string{fmt.Sprintf("%v", admissionControlOnlyWriteQueries)}
-	params["poll-after-timeout"] = []string{fmt.Sprintf("%v", pollAfterTimeout)}
+	params["poll-after-timeout"] = []string{fmt.Sprintf("%v", watchQueryTimeout)}
 
 	kineConfig.Listener = listen
 	kineConfig.Endpoint = fmt.Sprintf("dqlite://k8s?%s", params.Encode())

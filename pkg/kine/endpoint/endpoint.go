@@ -6,7 +6,6 @@ import (
 	"net"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/dqlite"
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/sqlite"
@@ -27,10 +26,9 @@ const (
 )
 
 type Config struct {
-	GRPCServer       *grpc.Server
-	Listener         string
-	Endpoint         string
-	PollAfterTimeout time.Duration
+	GRPCServer *grpc.Server
+	Listener   string
+	Endpoint   string
 	tls.Config
 }
 
