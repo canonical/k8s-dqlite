@@ -32,7 +32,7 @@ var (
 	defaultKineEp = "tcp://127.0.0.1:12379"
 )
 
-func New(dir string, listen string, enableTLS bool, diskMode bool, clientSessionCacheSize uint) (*Server, error) {
+func New(dir string, listen string, enableTLS bool, diskMode bool, clientSessionCacheSize uint, watchQueryTimeout time.Duration) (*Server, error) {
 	// Check if we're initializing a new node (i.e. there's an init.yaml).
 	// dir: the directory where data will be stored as well as where the init.yaml
 	//       and certificates should be found
@@ -183,8 +183,8 @@ func New(dir string, listen string, enableTLS bool, diskMode bool, clientSession
 	if v := cfg.DqliteTuning.KinePollInterval; v != nil {
 		e = fmt.Sprintf("%s&poll-interval=%v", e, *v)
 	}
-
-	log.Printf("Connecting to kine endpoint: %s", e)
+	// Watch query timeout
+	e = fmt.Sprintf("%s&watch-query-timeout=%v", e, watchQueryTimeout)
 
 	config := endpoint.Config{
 		Listener: ep,
