@@ -628,7 +628,7 @@ func (d *Generic) GetCompactInterval() time.Duration {
 }
 
 func (d *Generic) GetWatchQueryTimeout() time.Duration {
-	if v := d.WatchQueryTimeout; v > 0 {
+	if v := d.WatchQueryTimeout; v >= 5*time.Second {
 		return v
 	}
 	return 20 * time.Second
