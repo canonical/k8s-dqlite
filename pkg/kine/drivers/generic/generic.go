@@ -126,6 +126,8 @@ type Generic struct {
 	CompactInterval time.Duration
 	// PollInterval is the event poll interval used by kine.
 	PollInterval time.Duration
+	// WatchQueryTimeout is the timeout on the after query in the poll loop.
+	WatchQueryTimeout time.Duration
 }
 
 func configureConnectionPooling(db *sql.DB) {
@@ -654,6 +656,13 @@ func (d *Generic) GetCompactInterval() time.Duration {
 		return v
 	}
 	return 5 * time.Minute
+}
+
+func (d *Generic) GetWatchQueryTimeout() time.Duration {
+	if v := d.WatchQueryTimeout; v >= 5*time.Second {
+		return v
+	}
+	return 20 * time.Second
 }
 
 func (d *Generic) GetPollInterval() time.Duration {

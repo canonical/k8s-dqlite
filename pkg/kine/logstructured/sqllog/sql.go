@@ -3,6 +3,7 @@ package sqllog
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -48,6 +49,7 @@ type Dialect interface {
 	IsFill(key string) bool
 	GetSize(ctx context.Context) (int64, error)
 	GetCompactInterval() time.Duration
+	GetWatchQueryTimeout() time.Duration
 	GetPollInterval() time.Duration
 	Close()
 }
@@ -414,10 +416,14 @@ func (s *SQLLog) poll(result chan interface{}, pollStart int64) {
 			}
 		}
 		waitForMore = true
+		watchCtx, cancel := context.WithTimeout(s.ctx, s.d.GetWatchQueryTimeout())
+		defer cancel()
 
-		rows, err := s.d.After(s.ctx, last, 500)
+		rows, err := s.d.After(watchCtx, last, 500)
 		if err != nil {
-			logrus.Errorf("fail to list latest changes: %v", err)
+			if !errors.Is(err, context.DeadlineExceeded) {
+				logrus.Errorf("fail to list latest changes: %v", err)
+			}
 			continue
 		}
 
