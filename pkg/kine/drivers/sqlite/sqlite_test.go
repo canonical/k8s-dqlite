@@ -57,7 +57,7 @@ func TestMigration(t *testing.T) {
 		MaxIdle:     5,
 		MaxOpen:     5,
 		MaxLifetime: 60 * time.Second,
-		MaxIdleTime: 0 * time.Second,
+		MaxIdleTime: 60 * time.Second,
 	}
 	if _, err := sqlite.New(ctx, dbPath, connPoolConfig); err != nil {
 		t.Fatal(err)
