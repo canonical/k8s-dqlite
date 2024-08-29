@@ -180,13 +180,13 @@ func TestList(t *testing.T) {
 
 func BenchmarkList(b *testing.B) {
 	setup := func(ctx context.Context, tx *sql.Tx, payloadSize, n int) error {
-		if err := insertMany(ctx, tx, "key", payloadSize, n*2); err != nil {
+		if err := insertMany(ctx, tx, "key", payloadSize, n); err != nil {
 			return err
 		}
-		if err := updateMany(ctx, tx, "key", payloadSize, n); err != nil {
+		if err := updateMany(ctx, tx, "key", payloadSize, (n+1)/2); err != nil {
 			return err
 		}
-		if err := deleteMany(ctx, tx, "key", n); err != nil {
+		if err := deleteMany(ctx, tx, "key", (n+1)/2); err != nil {
 			return err
 		}
 		return nil
@@ -227,7 +227,7 @@ func BenchmarkList(b *testing.B) {
 					resp, err := kine.client.Get(ctx, "key/", clientv3.WithPrefix())
 
 					g.Expect(err).To(BeNil())
-					g.Expect(resp.Kvs).To(HaveLen(b.N))
+					g.Expect(resp.Kvs).To(HaveLen((b.N + 1) / 2))
 					kine.ReportMetrics(b)
 				})
 
@@ -263,7 +263,7 @@ func BenchmarkList(b *testing.B) {
 						nextKey = string(resp.Kvs[len(resp.Kvs)-1].Key) + "\x01"
 					}
 
-					g.Expect(count).To(Equal(b.N))
+					g.Expect(count).To(Equal((b.N + 1) / 2))
 					kine.ReportMetrics(b)
 				})
 			})
