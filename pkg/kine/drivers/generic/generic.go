@@ -180,7 +180,13 @@ func configureConnectionPooling(connPoolConfig ConnectionPoolConfig, db *sql.DB)
 		connPoolConfig.MaxIdle = defaultMaxIdleConns
 	}
 
-	logrus.Infof("Configuring database connection pooling: maxIdleConns=%d, maxOpenConns=%d, connMaxLifetime=%s, connMaxIdleTime=%s ", connPoolConfig.MaxIdle, connPoolConfig.MaxOpen, connPoolConfig.MaxLifetime, connPoolConfig.MaxIdleTime)
+	logrus.Infof(
+		"Configuring database connection pooling: maxIdleConns=%d, maxOpenConns=%d, connMaxLifetime=%s, connMaxIdleTime=%s ",
+		connPoolConfig.MaxIdle,
+		connPoolConfig.MaxOpen,
+		connPoolConfig.MaxLifetime,
+		connPoolConfig.MaxIdleTime,
+	)
 	db.SetMaxIdleConns(connPoolConfig.MaxIdle)
 	db.SetMaxOpenConns(connPoolConfig.MaxOpen)
 	db.SetConnMaxLifetime(connPoolConfig.MaxLifetime)

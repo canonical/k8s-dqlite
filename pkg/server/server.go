@@ -13,6 +13,7 @@ import (
 	"github.com/canonical/go-dqlite"
 	"github.com/canonical/go-dqlite/app"
 	"github.com/canonical/go-dqlite/client"
+	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/generic"
 	"github.com/canonical/k8s-dqlite/pkg/kine/endpoint"
 	"github.com/canonical/k8s-dqlite/pkg/kine/server"
 	kine_tls "github.com/canonical/k8s-dqlite/pkg/kine/tls"
@@ -69,10 +70,7 @@ func New(
 	admissionControlPolicy string,
 	admissionControlPolicyLimitMaxConcurrentTxn int64,
 	admissionControlOnlyWriteQueries bool,
-	datastoreMaxIdleConnections int,
-	datastoreMaxOpenConnections int,
-	datastoreConnectionMaxLifetime time.Duration,
-	datastoreConnectionMaxIdleTime time.Duration,
+	connectionPoolConfig generic.ConnectionPoolConfig,
 	watchQueryTimeout time.Duration,
 ) (*Server, error) {
 	var (
@@ -226,10 +224,7 @@ func New(
 		options = append(options, app.WithTLS(listen, dial))
 	}
 	// set datastore connection pool options
-	kineConfig.ConnectionPoolConfig.MaxIdle = datastoreMaxIdleConnections
-	kineConfig.ConnectionPoolConfig.MaxOpen = datastoreMaxOpenConnections
-	kineConfig.ConnectionPoolConfig.MaxLifetime = datastoreConnectionMaxLifetime
-	kineConfig.ConnectionPoolConfig.MaxIdleTime = datastoreConnectionMaxIdleTime
+	kineConfig.ConnectionPoolConfig = connectionPoolConfig
 	// handle tuning parameters
 	if exists, err := fileExists(dir, "tuning.yaml"); err != nil {
 		return nil, fmt.Errorf("failed to check for tuning.yaml: %w", err)
