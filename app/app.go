@@ -111,5 +111,5 @@ func init() {
 	dqliteCmd.Flags().StringVar(&opts.ProfilingListen, "profiling-listen", opts.ProfilingListen, "listen address for pprof endpoint")
 	dqliteCmd.Flags().BoolVar(&opts.DiskMode, "disk-mode", opts.DiskMode, "(experimental) run dqlite store in disk mode")
 	dqliteCmd.Flags().UintVar(&opts.ClientSessionCacheSize, "tls-client-session-cache-size", opts.ClientSessionCacheSize, "ClientCacheSession size for dial TLS config")
-	dqliteCmd.Flags().DurationVar(&opts.WatchQueryTimeout, "watch-query-timeout", opts.WatchQueryTimeout, "timeout for watch query")
+	dqliteCmd.Flags().DurationVar(&opts.WatchQueryTimeout, "watch-query-timeout", opts.WatchQueryTimeout, "timeout for querying events in the watch poll loop. If timeout is reached, the poll loop will be re-triggered. The minimum value is 5 seconds.")
 }
