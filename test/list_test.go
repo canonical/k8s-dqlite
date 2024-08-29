@@ -183,10 +183,10 @@ func BenchmarkList(b *testing.B) {
 		if err := insertMany(ctx, tx, "key", payloadSize, n); err != nil {
 			return err
 		}
-		if err := updateMany(ctx, tx, "key", payloadSize, (n+1)/2); err != nil {
+		if err := updateMany(ctx, tx, "key", payloadSize, n/2); err != nil {
 			return err
 		}
-		if err := deleteMany(ctx, tx, "key", (n+1)/2); err != nil {
+		if err := deleteMany(ctx, tx, "key", n/2); err != nil {
 			return err
 		}
 		return nil
