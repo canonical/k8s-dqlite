@@ -23,8 +23,9 @@ type opts struct {
 	dsn        string
 	driverName string // If not empty, use a pre-registered dqlite driver
 
-	compactInterval time.Duration
-	pollInterval    time.Duration
+	compactInterval   time.Duration
+	pollInterval      time.Duration
+	watchQueryTimeout time.Duration
 
 	admissionControlPolicy                      string
 	admissionControlPolicyLimitMaxConcurrentTxn int64
@@ -93,6 +94,7 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 
 	dialect.CompactInterval = opts.compactInterval
 	dialect.PollInterval = opts.pollInterval
+	dialect.WatchQueryTimeout = opts.watchQueryTimeout
 	dialect.AdmissionControlPolicy = generic.NewAdmissionControlPolicy(
 		opts.admissionControlPolicy,
 		opts.admissionControlOnlyWriteQueries,
@@ -213,6 +215,12 @@ func parseOpts(dsn string) (opts, error) {
 				return opts{}, fmt.Errorf("failed to parse poll-interval duration value %q: %w", vs[0], err)
 			}
 			result.pollInterval = d
+		case "watch-query-timeout":
+			d, err := time.ParseDuration(vs[0])
+			if err != nil {
+				return opts{}, fmt.Errorf("failed to parse watch-query-timeout duration value %q: %w", vs[0], err)
+			}
+			result.watchQueryTimeout = d
 		case "admission-control-policy":
 			result.admissionControlPolicy = vs[0]
 		case "admission-control-policy-limit-max-concurrent-txn":
