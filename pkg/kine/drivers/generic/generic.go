@@ -20,7 +20,10 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-const otelName = "generic"
+const (
+	otelName            = "generic"
+	defaultMaxIdleConns = 2 // default from database/sql
+)
 
 var (
 	otelTracer       trace.Tracer
@@ -170,15 +173,18 @@ type ConnectionPoolConfig struct {
 }
 
 func configureConnectionPooling(connPoolConfig ConnectionPoolConfig, db *sql.DB) {
-	// behavior copied from database/sql - zero means defaultMaxIdleConns; negative means 0
+	// behavior of database/sql - zero means defaultMaxIdleConns; negative means 0
 	if connPoolConfig.MaxIdle < 0 {
 		connPoolConfig.MaxIdle = 0
+	} else if connPoolConfig.MaxIdle == 0 {
+		connPoolConfig.MaxIdle = defaultMaxIdleConns
 	}
 
-	logrus.Infof("Configuring database connection pooling: maxIdleConns=%d, maxOpenConns=%d, connMaxLifetime=%s", connPoolConfig.MaxIdle, connPoolConfig.MaxOpen, connPoolConfig.MaxLifetime)
+	logrus.Infof("Configuring database connection pooling: maxIdleConns=%d, maxOpenConns=%d, connMaxLifetime=%s, connMaxIdleTime=%s ", connPoolConfig.MaxIdle, connPoolConfig.MaxOpen, connPoolConfig.MaxLifetime, connPoolConfig.MaxIdleTime)
 	db.SetMaxIdleConns(connPoolConfig.MaxIdle)
 	db.SetMaxOpenConns(connPoolConfig.MaxOpen)
 	db.SetConnMaxLifetime(connPoolConfig.MaxLifetime)
+	db.SetConnMaxIdleTime(connPoolConfig.MaxIdleTime)
 }
 
 func q(sql, param string, numbered bool) string {
