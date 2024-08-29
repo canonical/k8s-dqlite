@@ -186,6 +186,8 @@ func New(dir string, listen string, enableTLS bool, diskMode bool, clientSession
 	// Watch query timeout
 	e = fmt.Sprintf("%s&watch-query-timeout=%v", e, watchQueryTimeout)
 
+	log.Printf("Connecting to kine endpoint: %s", e)
+
 	config := endpoint.Config{
 		Listener: ep,
 		Endpoint: e,
