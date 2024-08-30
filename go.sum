@@ -89,8 +89,8 @@ github.com/bketelsen/crypt v0.0.4/go.mod h1:aI6NrJ0pMGgvZKL1iVgXLnfIFJtfV+bKCoqO
 github.com/blang/semver v3.5.0+incompatible/go.mod h1:kRBLl5iJ+tD4TcOOxsy/0fnwebNt5EWlYSAyrTnjyyk=
 github.com/canonical/go-dqlite v1.11.8 h1:yRnVotjd7xUXdVvTW2RoVWeUlBM7oF+/ylQfQlu9bQ8=
 github.com/canonical/go-dqlite v1.11.8/go.mod h1:Uvy943N8R4CFUAs59A1NVaziWY9nJ686lScY7ywurfg=
-github.com/canonical/kine v0.4.1-k8s-dqlite.10 h1:4R7m9tGV9RW6zwWWOSlCQEzww/0W5GpIRyZ1xvlA198=
-github.com/canonical/kine v0.4.1-k8s-dqlite.10/go.mod h1:0xLHwFfgn9loFiIQTch7KBo7e0D2FHdCEei+9Vq5F04=
+github.com/canonical/kine v0.4.1-k8s-dqlite.11 h1:1bOhb9j/F0cogBjNIaOqzXQ9hsJDDEwDP4WSKU1KUPY=
+github.com/canonical/kine v0.4.1-k8s-dqlite.11/go.mod h1:0xLHwFfgn9loFiIQTch7KBo7e0D2FHdCEei+9Vq5F04=
 github.com/census-instrumentation/opencensus-proto v0.2.1/go.mod h1:f6KPmirojxKA12rnyqOA5BBL4O983OfeGPqjHWSTneU=
 github.com/certifi/gocertifi v0.0.0-20191021191039-0944d244cd40/go.mod h1:sGbDF6GwGcLpkNXPUTkMRoywsNa/ol15pxFe6ERfguA=
 github.com/certifi/gocertifi v0.0.0-20200922220541-2c3bb06c6054 h1:uH66TXeswKn5PW5zdZ39xEwfS9an067BirqA+P4QaLI=

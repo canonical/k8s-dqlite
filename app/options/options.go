@@ -16,6 +16,8 @@ limitations under the License.
 
 package options
 
+import "time"
+
 // Options is the list of options for running k8s-dqlite.
 type Options struct {
 	StorageDir             string
@@ -26,4 +28,5 @@ type Options struct {
 	ProfilingListen        string
 	DiskMode               bool
 	ClientSessionCacheSize uint
+	WatchQueryTimeout      time.Duration
 }

@@ -40,6 +40,7 @@ var opts = options.Options{
 	ProfilingListen:        "127.0.0.1:40000",
 	DiskMode:               false,
 	ClientSessionCacheSize: 0,
+	WatchQueryTimeout:      20 * time.Second,
 }
 
 // liteCmd represents the base command when called without any subcommands
@@ -67,6 +68,7 @@ var dqliteCmd = &cobra.Command{
 			opts.EnableTLS,
 			opts.DiskMode,
 			opts.ClientSessionCacheSize,
+			opts.WatchQueryTimeout,
 		)
 		if err != nil {
 			log.Fatalf("Failed to start server: %s\n", err)
@@ -109,4 +111,5 @@ func init() {
 	dqliteCmd.Flags().StringVar(&opts.ProfilingListen, "profiling-listen", opts.ProfilingListen, "listen address for pprof endpoint")
 	dqliteCmd.Flags().BoolVar(&opts.DiskMode, "disk-mode", opts.DiskMode, "(experimental) run dqlite store in disk mode")
 	dqliteCmd.Flags().UintVar(&opts.ClientSessionCacheSize, "tls-client-session-cache-size", opts.ClientSessionCacheSize, "ClientCacheSession size for dial TLS config")
+	dqliteCmd.Flags().DurationVar(&opts.WatchQueryTimeout, "watch-query-timeout", opts.WatchQueryTimeout, "timeout for querying events in the watch poll loop. If the timeout is reached, the poll loop will be re-triggered. The minimum value is 5 seconds.")
 }

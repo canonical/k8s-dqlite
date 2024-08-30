@@ -7,6 +7,7 @@ on:
   pull_request:
     branches:
       - master
+      - 1.28
 
 jobs:
   build:
@@ -22,7 +23,7 @@ jobs:
           sudo usermod --append --groups lxd $USER
           sg lxd -c 'lxc version'
       - name: Install snapcraft
-        run: sudo snap install snapcraft --classic
+        run: sudo snap install snapcraft --classic --channel=7.x/stable
       - name: Build snap
         run: |
           sg lxd -c 'snapcraft --use-lxd'
@@ -41,7 +42,7 @@ jobs:
         run: |
           set -x
           sudo snap install k8s-dqlite.snap --classic --dangerous
-          sudo snap install go --channel 1.18/stable --classic
+          sudo snap install go --channel 1.21/stable --classic
           sudo apt install git
           git clone https://github.com/etcd-io/etcd.git
           cd etcd
