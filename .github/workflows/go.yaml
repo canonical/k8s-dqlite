@@ -102,7 +102,9 @@ jobs:
       - name: Run benchmarks
         id: bench
         run: |
+          set -o pipefail
           go test                           \
+              -timeout 1h                   \
               -tags libsqlite3 -v -p 1 ./...  \
               -benchmem -count $BENCH_COUNT   \
               -run "^$$" -bench .             \
@@ -118,9 +120,11 @@ jobs:
       - name: Run benchmark for base code
         if: steps.bench-cache.outputs.cache-hit != 'true'
         run: |
+          set -o pipefail
           git fetch origin $BASE_BRANCH
           git reset --hard $BASE_SHA
           go test                           \
+              -timeout 1h                   \
               -tags libsqlite3 -v -p 1 ./...  \
               -benchmem -count $BENCH_COUNT   \
               -run "^$$" -bench .             \
