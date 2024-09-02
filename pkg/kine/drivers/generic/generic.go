@@ -132,7 +132,6 @@ type Generic struct {
 	LastInsertID          bool
 	DB                    *prepared.DB
 	GetCurrentSQL         string
-	GetRevisionSQL        string
 	RevisionSQL           string
 	ListRevisionStartSQL  string
 	GetRevisionAfterSQL   string
@@ -223,12 +222,6 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 
 	return &Generic{
 		DB: prepared.New(db),
-
-		GetRevisionSQL: q(fmt.Sprintf(`
-			SELECT
-			%s
-			FROM kine kv
-			WHERE kv.id = ?`, columns), paramCharacter, numbered),
 
 		GetCurrentSQL:        q(fmt.Sprintf(listSQL, ""), paramCharacter, numbered),
 		ListRevisionStartSQL: q(fmt.Sprintf(listSQL, "AND mkv.id <= ?"), paramCharacter, numbered),
@@ -624,20 +617,6 @@ func (d *Generic) GetCompactRevision(ctx context.Context) (int64, int64, error) 
 	}
 	span.SetAttributes(attribute.Int64("compact", compact.Int64), attribute.Int64("target", target.Int64))
 	return compact.Int64, target.Int64, err
-}
-
-func (d *Generic) GetRevision(ctx context.Context, revision int64) (*sql.Rows, error) {
-	var err error
-	getRevisionCnt.Add(ctx, 1)
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.get_revision", otelName))
-	defer func() {
-		span.RecordError(err)
-		span.End()
-	}()
-	span.SetAttributes(attribute.Int64("revision", revision))
-
-	result, err := d.query(ctx, "get_revision_sql", d.GetRevisionSQL, revision)
-	return result, err
 }
 
 func (d *Generic) DeleteRevision(ctx context.Context, revision int64) error {
