@@ -67,7 +67,6 @@ type Dialect interface {
 	After(ctx context.Context, rev, limit int64) (*sql.Rows, error)
 	Insert(ctx context.Context, key string, create, delete bool, createRevision, previousRevision int64, ttl int64, value, prevValue []byte) (int64, error)
 	Create(ctx context.Context, key string, value []byte, lease int64) (int64, error)
-	GetRevision(ctx context.Context, revision int64) (*sql.Rows, error)
 	DeleteRevision(ctx context.Context, revision int64) error
 	GetCompactRevision(ctx context.Context) (int64, int64, error)
 	Compact(ctx context.Context, revision int64) error
