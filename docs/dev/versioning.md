@@ -12,10 +12,11 @@ of three numbers: `MAJOR.MINOR.PATCH`. The version number is incremented based o
 K8s-dqlite versions are associated with one or more Kubernetes versions in use by the [microk8s](https://github.com/canonical/microk8s) and [Canonical Kubernetes](https://github.com/canonical/k8s-snap) project.
 Here is an overview that shows which k8s-dqlite version aligns with which supported Kubernetes version:
 
-| K8s-dqlite Version | Kubernetes Version |
-|--------------------|--------------------|
-| 1.28 (branch)      | 1.28               |
-| 1.1.11             | 1.29-1.30          |
-| 1.2.0              | 1.31               |
+| K8s-dqlite Version | K8s-dqlite branch  | Kubernetes Version |
+|--------------------|--------------------|--------------------|
+| NA                 | 1.28               | 1.28               |
+| 1.1.11             | v1.1               | 1.29-1.30          |
+| 1.2.0              | master             | 1.31               |
 
-Note: K8s-dqlite `v1.1.7` and branch `1.28` are prior to the major refactor from https://github.com/canonical/kine.
+Note: K8s-dqlite tag `v1.1.7` and branch `1.28` are prior to the major refactor from https://github.com/canonical/kine. Patches are tracked in the `1.28` branch.
+
