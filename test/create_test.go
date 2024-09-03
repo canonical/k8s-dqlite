@@ -39,6 +39,7 @@ func BenchmarkCreate(b *testing.B) {
 	for _, backendType := range []string{endpoint.SQLiteBackend, endpoint.DQLiteBackend} {
 		b.Run(backendType, func(b *testing.B) {
 			g := NewWithT(b)
+			b.StopTimer()
 
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
