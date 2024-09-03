@@ -75,12 +75,14 @@ func BenchmarkDelete(b *testing.B) {
 			})
 
 			kine.ResetMetrics()
-			b.StartTimer()
 			for i := 0; i < b.N; i++ {
 				key := fmt.Sprintf("key/%d", i)
-				deleteKey(ctx, g, kine.client, key)
+				b.StartTimer()
+				resp, err := deleteKey(ctx, g, kine.client, key)
+				b.StopTimer()
+				g.Expect(err).To(BeNil())
+				g.Expect(resp.Succeeded).To(BeTrue())
 			}
-			b.StopTimer()
 			kine.ReportMetrics(b)
 		})
 	}
@@ -93,14 +95,11 @@ func assertMissingKey(ctx context.Context, g Gomega, client *clientv3.Client, ke
 	g.Expect(resp.Kvs).To(HaveLen(0))
 }
 
-func deleteKey(ctx context.Context, g Gomega, client *clientv3.Client, key string) {
+func deleteKey(ctx context.Context, g Gomega, client *clientv3.Client, key string) (resp *clientv3.TxnResponse, err error) {
 	// The Get before the Delete is to trick kine to accept the transaction
-	resp, err := client.Txn(ctx).
+	return client.Txn(ctx).
 		Then(clientv3.OpGet(key), clientv3.OpDelete(key)).
 		Commit()
-
-	g.Expect(err).To(BeNil())
-	g.Expect(resp.Succeeded).To(BeTrue())
 }
 
 func assertKey(ctx context.Context, g Gomega, client *clientv3.Client, key string, value string) {

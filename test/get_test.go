@@ -101,7 +101,9 @@ func TestGet(t *testing.T) {
 				key := "testKeyFailNotFound"
 
 				// Delete key
-				deleteKey(ctx, g, kine.client, key)
+				respDel, err := deleteKey(ctx, g, kine.client, key)
+				g.Expect(err).To(BeNil())
+				g.Expect(respDel.Succeeded).To(BeTrue())
 
 				// Get key
 				resp, err := kine.client.Get(ctx, key, clientv3.WithRange(""))
