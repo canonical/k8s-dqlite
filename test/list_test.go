@@ -210,6 +210,7 @@ func BenchmarkList(b *testing.B) {
 			b.Run(fmt.Sprintf("%s-%s", backendType, payload.name), func(b *testing.B) {
 				b.Run("all", func(b *testing.B) {
 					g := NewWithT(b)
+					b.StopTimer()
 
 					ctx, cancel := context.WithCancel(context.Background())
 					defer cancel()
@@ -224,15 +225,16 @@ func BenchmarkList(b *testing.B) {
 					kine.ResetMetrics()
 					b.StartTimer()
 					resp, err := kine.client.Get(ctx, "key/", clientv3.WithPrefix())
-
+					b.StopTimer()
 					g.Expect(err).To(BeNil())
 					g.Expect(resp.Kvs).To(HaveLen((b.N + 1) / 2))
-					b.StopTimer()
+
 					kine.ReportMetrics(b)
 				})
 
 				b.Run("pagination", func(b *testing.B) {
 					g := NewWithT(b)
+					b.StopTimer()
 
 					ctx, cancel := context.WithCancel(context.Background())
 					defer cancel()
@@ -261,9 +263,9 @@ func BenchmarkList(b *testing.B) {
 						count += len(resp.Kvs)
 						nextKey = string(resp.Kvs[len(resp.Kvs)-1].Key) + "\x01"
 					}
-
-					g.Expect(count).To(Equal((b.N + 1) / 2))
 					b.StopTimer()
+					g.Expect(count).To(Equal((b.N + 1) / 2))
+
 					kine.ReportMetrics(b)
 				})
 			})
