@@ -58,7 +58,6 @@ func TestDelete(t *testing.T) {
 func BenchmarkDelete(b *testing.B) {
 	for _, backendType := range []string{endpoint.SQLiteBackend, endpoint.DQLiteBackend} {
 		b.Run(backendType, func(b *testing.B) {
-			b.StopTimer()
 			g := NewWithT(b)
 
 			ctx, cancel := context.WithCancel(context.Background())
@@ -80,6 +79,7 @@ func BenchmarkDelete(b *testing.B) {
 				key := fmt.Sprintf("key/%d", i)
 				deleteKey(ctx, g, kine.client, key)
 			}
+			b.StopTimer()
 			kine.ReportMetrics(b)
 		})
 	}

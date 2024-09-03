@@ -38,7 +38,6 @@ func TestCreate(t *testing.T) {
 func BenchmarkCreate(b *testing.B) {
 	for _, backendType := range []string{endpoint.SQLiteBackend, endpoint.DQLiteBackend} {
 		b.Run(backendType, func(b *testing.B) {
-			b.StopTimer()
 			g := NewWithT(b)
 
 			ctx, cancel := context.WithCancel(context.Background())
@@ -53,6 +52,7 @@ func BenchmarkCreate(b *testing.B) {
 				value := fmt.Sprintf("value-%d", i)
 				createKey(ctx, g, kine.client, key, value)
 			}
+			b.StopTimer()
 			kine.ReportMetrics(b)
 		})
 	}

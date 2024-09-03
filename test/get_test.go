@@ -116,7 +116,6 @@ func TestGet(t *testing.T) {
 func BenchmarkGet(b *testing.B) {
 	for _, backendType := range []string{endpoint.SQLiteBackend, endpoint.DQLiteBackend} {
 		b.Run(backendType, func(b *testing.B) {
-			b.StopTimer()
 			g := NewWithT(b)
 
 			ctx, cancel := context.WithCancel(context.Background())
@@ -142,6 +141,7 @@ func BenchmarkGet(b *testing.B) {
 				g.Expect(err).To(BeNil())
 				g.Expect(resp.Kvs).To(HaveLen(1))
 			}
+			b.StopTimer()
 			kine.ReportMetrics(b)
 		})
 	}

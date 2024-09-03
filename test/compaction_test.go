@@ -95,7 +95,6 @@ func TestCompaction(t *testing.T) {
 func BenchmarkCompaction(b *testing.B) {
 	for _, backendType := range []string{endpoint.SQLiteBackend, endpoint.DQLiteBackend} {
 		b.Run(backendType, func(b *testing.B) {
-			b.StopTimer()
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			kine := newKineServer(ctx, b, &kineOptions{
@@ -123,6 +122,7 @@ func BenchmarkCompaction(b *testing.B) {
 			if err := kine.backend.DoCompact(ctx); err != nil {
 				b.Fatal(err)
 			}
+			b.StopTimer()
 			kine.ReportMetrics(b)
 		})
 	}

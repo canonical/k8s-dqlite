@@ -84,7 +84,6 @@ func TestLease(t *testing.T) {
 func BenchmarkLease(b *testing.B) {
 	for _, backendType := range []string{endpoint.SQLiteBackend, endpoint.DQLiteBackend} {
 		b.Run(backendType, func(b *testing.B) {
-			b.StopTimer()
 			g := NewWithT(b)
 
 			ctx, cancel := context.WithCancel(context.Background())
@@ -102,6 +101,7 @@ func BenchmarkLease(b *testing.B) {
 				g.Expect(resp.ID).To(Equal(clientv3.LeaseID(ttl)))
 				g.Expect(resp.TTL).To(Equal(ttl))
 			}
+			b.StopTimer()
 			kine.ReportMetrics(b)
 		})
 	}

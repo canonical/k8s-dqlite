@@ -209,7 +209,6 @@ func BenchmarkList(b *testing.B) {
 		for _, payload := range payloads {
 			b.Run(fmt.Sprintf("%s-%s", backendType, payload.name), func(b *testing.B) {
 				b.Run("all", func(b *testing.B) {
-					b.StopTimer()
 					g := NewWithT(b)
 
 					ctx, cancel := context.WithCancel(context.Background())
@@ -228,11 +227,11 @@ func BenchmarkList(b *testing.B) {
 
 					g.Expect(err).To(BeNil())
 					g.Expect(resp.Kvs).To(HaveLen((b.N + 1) / 2))
+					b.StopTimer()
 					kine.ReportMetrics(b)
 				})
 
 				b.Run("pagination", func(b *testing.B) {
-					b.StopTimer()
 					g := NewWithT(b)
 
 					ctx, cancel := context.WithCancel(context.Background())
@@ -264,6 +263,7 @@ func BenchmarkList(b *testing.B) {
 					}
 
 					g.Expect(count).To(Equal((b.N + 1) / 2))
+					b.StopTimer()
 					kine.ReportMetrics(b)
 				})
 			})

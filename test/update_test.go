@@ -73,7 +73,6 @@ func TestUpdate(t *testing.T) {
 func BenchmarkUpdate(b *testing.B) {
 	for _, backendType := range []string{endpoint.SQLiteBackend, endpoint.DQLiteBackend} {
 		b.Run(backendType, func(b *testing.B) {
-			b.StopTimer()
 			g := NewWithT(b)
 
 			ctx, cancel := context.WithCancel(context.Background())
@@ -87,6 +86,7 @@ func BenchmarkUpdate(b *testing.B) {
 				value := fmt.Sprintf("value-%d", i)
 				lastModRev = updateRev(ctx, g, kine.client, "benchKey", lastModRev, value)
 			}
+			b.StopTimer()
 			kine.ReportMetrics(b)
 		})
 	}
