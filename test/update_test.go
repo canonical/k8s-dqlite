@@ -82,24 +82,15 @@ func BenchmarkUpdate(b *testing.B) {
 			kine := newKineServer(ctx, b, &kineOptions{backendType: backendType})
 
 			kine.ResetMetrics()
-			b.StartTimer()
 			for i, lastModRev := 0, int64(0); i < b.N; i++ {
 				value := fmt.Sprintf("value-%d", i)
+				b.StartTimer()
 				lastModRev = updateRev(ctx, g, kine.client, "benchKey", lastModRev, value)
+				b.StopTimer()
 			}
-			b.StopTimer()
 			kine.ReportMetrics(b)
 		})
 	}
-}
-
-func updateKey(ctx context.Context, g Gomega, client *clientv3.Client, key string, value string) {
-	resp, err := client.Get(ctx, key, clientv3.WithRange(""))
-
-	g.Expect(err).To(BeNil())
-	g.Expect(resp.Kvs).To(HaveLen(1))
-
-	updateRev(ctx, g, client, key, resp.Kvs[0].ModRevision, value)
 }
 
 func updateRev(ctx context.Context, g Gomega, client *clientv3.Client, key string, revision int64, value string) int64 {

@@ -228,7 +228,6 @@ func BenchmarkList(b *testing.B) {
 					b.StopTimer()
 					g.Expect(err).To(BeNil())
 					g.Expect(resp.Kvs).To(HaveLen((b.N + 1) / 2))
-
 					kine.ReportMetrics(b)
 				})
 
@@ -247,25 +246,24 @@ func BenchmarkList(b *testing.B) {
 					})
 
 					kine.ResetMetrics()
-					b.StartTimer()
 					nextKey := "key/"
 					endRange := clientv3.GetPrefixRangeEnd(nextKey)
 					count := 0
 					for more := true; more; {
+						b.StartTimer()
 						resp, err := kine.client.Get(ctx,
 							nextKey,
 							clientv3.WithRange(endRange),
 							clientv3.WithLimit(int64(b.N)/10),
 						)
+						b.StopTimer()
 						g.Expect(err).To(BeNil())
 
 						more = resp.More
 						count += len(resp.Kvs)
 						nextKey = string(resp.Kvs[len(resp.Kvs)-1].Key) + "\x01"
 					}
-					b.StopTimer()
 					g.Expect(count).To(Equal((b.N + 1) / 2))
-
 					kine.ReportMetrics(b)
 				})
 			})
