@@ -95,9 +95,10 @@ func BenchmarkLease(b *testing.B) {
 			kine.ResetMetrics()
 			b.StartTimer()
 			for i := 0; i < b.N; i++ {
+				b.StartTimer()
 				var ttl int64 = int64(i + 1)
 				resp, err := kine.client.Lease.Grant(ctx, ttl)
-
+				b.StopTimer()
 				g.Expect(err).To(BeNil())
 				g.Expect(resp.ID).To(Equal(clientv3.LeaseID(ttl)))
 				g.Expect(resp.TTL).To(Equal(ttl))
