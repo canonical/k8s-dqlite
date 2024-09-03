@@ -32,7 +32,7 @@ type opts struct {
 	admissionControlOnlyWriteQueries            bool
 }
 
-func New(ctx context.Context, dataSourceName string, connectionPoolConfig generic.ConnectionPoolConfig) (server.Backend, error) {
+func New(ctx context.Context, dataSourceName string, connectionPoolConfig *generic.ConnectionPoolConfig) (server.Backend, error) {
 	backend, _, err := NewVariant(ctx, "sqlite3", dataSourceName, connectionPoolConfig)
 	if err != nil {
 		return nil, err
@@ -41,7 +41,7 @@ func New(ctx context.Context, dataSourceName string, connectionPoolConfig generi
 	return backend, err
 }
 
-func NewVariant(ctx context.Context, driverName, dataSourceName string, connectionPoolConfig generic.ConnectionPoolConfig) (server.Backend, *generic.Generic, error) {
+func NewVariant(ctx context.Context, driverName, dataSourceName string, connectionPoolConfig *generic.ConnectionPoolConfig) (server.Backend, *generic.Generic, error) {
 	const retryAttempts = 300
 
 	opts, err := parseOpts(dataSourceName)
