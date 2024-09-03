@@ -209,8 +209,8 @@ func BenchmarkList(b *testing.B) {
 		for _, payload := range payloads {
 			b.Run(fmt.Sprintf("%s-%s", backendType, payload.name), func(b *testing.B) {
 				b.Run("all", func(b *testing.B) {
-					g := NewWithT(b)
 					b.StopTimer()
+					g := NewWithT(b)
 
 					ctx, cancel := context.WithCancel(context.Background())
 					defer cancel()
@@ -233,8 +233,8 @@ func BenchmarkList(b *testing.B) {
 				})
 
 				b.Run("pagination", func(b *testing.B) {
-					g := NewWithT(b)
 					b.StopTimer()
+					g := NewWithT(b)
 
 					ctx, cancel := context.WithCancel(context.Background())
 					defer cancel()
