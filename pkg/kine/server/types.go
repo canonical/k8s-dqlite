@@ -2,13 +2,15 @@ package server
 
 import (
 	"context"
+	"errors"
 
 	"go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 )
 
 var (
-	ErrKeyExists = rpctypes.ErrGRPCDuplicateKey
-	ErrCompacted = rpctypes.ErrGRPCCompacted
+	ErrKeyExists   = rpctypes.ErrGRPCDuplicateKey
+	ErrCompacted   = rpctypes.ErrGRPCCompacted
+	ErrRevNotFound = errors.New("revision not found")
 )
 
 type Backend interface {

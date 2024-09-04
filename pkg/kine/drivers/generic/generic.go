@@ -554,8 +554,7 @@ func (d *Generic) Update(ctx context.Context, key string, value []byte, preRev, 
 	if insertCount, err := result.RowsAffected(); err != nil {
 		return 0, err
 	} else if insertCount == 0 {
-		return 0, server.ErrKeyExists
-		// FIXME: Wrong Error
+		return 0, server.ErrRevNotFound
 	}
 	return result.LastInsertId()
 }
