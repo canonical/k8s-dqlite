@@ -160,7 +160,7 @@ Steps:
     make static
     sudo ./bin/static/k8s-dqlite \
       --storage-dir /var/snap/microk8s/current/var/kubernetes/backend \
-      --listen unix:///var/snap/microk8s/current/var/kubernetes/backend/kine.sock
+      --listen unix:///var/snap/microk8s/current/var/kubernetes/backend/kine.sock:12379
     ```
 
 7. While developing and making changes to `k8s-dqlite`, just restart k8s-dqlite
