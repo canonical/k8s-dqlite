@@ -79,30 +79,3 @@ func TestLease(t *testing.T) {
 		})
 	}
 }
-
-// BenchmarkLease is a benchmark for the lease operation.
-func BenchmarkLease(b *testing.B) {
-	for _, backendType := range []string{endpoint.SQLiteBackend, endpoint.DQLiteBackend} {
-		b.Run(backendType, func(b *testing.B) {
-			b.StopTimer()
-			g := NewWithT(b)
-
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-
-			kine := newKineServer(ctx, b, &kineOptions{backendType: backendType})
-
-			kine.ResetMetrics()
-			b.StartTimer()
-			for i := 0; i < b.N; i++ {
-				var ttl int64 = int64(i + 1)
-				resp, err := kine.client.Lease.Grant(ctx, ttl)
-
-				g.Expect(err).To(BeNil())
-				g.Expect(resp.ID).To(Equal(clientv3.LeaseID(ttl)))
-				g.Expect(resp.TTL).To(Equal(ttl))
-			}
-			kine.ReportMetrics(b)
-		})
-	}
-}
