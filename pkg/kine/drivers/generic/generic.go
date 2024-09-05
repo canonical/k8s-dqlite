@@ -320,7 +320,7 @@ func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig
 				0 AS created,
 				0 AS deleted,
 				create_revision,
-				prev_revision,
+				id AS prev_revision,
 				? AS lease,
 				? AS value,
 				value AS old_value
