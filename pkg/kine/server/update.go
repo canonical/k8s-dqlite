@@ -27,9 +27,9 @@ func isUpdate(txn *etcdserverpb.TxnRequest) (int64, string, []byte, int64, bool)
 
 func (l *LimitedServer) update(ctx context.Context, rev int64, key string, value []byte, lease int64) (*etcdserverpb.TxnResponse, error) {
 	var (
-		kv  *KeyValue
-		ok  bool
-		err error
+		kv      *KeyValue
+		updated bool
+		err     error
 	)
 	updateCnt.Add(ctx, 1)
 
@@ -46,26 +46,26 @@ func (l *LimitedServer) update(ctx context.Context, rev int64, key string, value
 
 	if rev == 0 {
 		rev, err = l.backend.Create(ctx, key, value, lease)
-		ok = true
-
-		span.SetAttributes(
-			attribute.Int64("revision", rev),
-			attribute.Bool("ok", ok),
-		)
+		if err == ErrKeyExists {
+			updated = false
+			err = nil
+		} else {
+			updated = true
+		}
 	} else {
-		rev, kv, ok, err = l.backend.Update(ctx, key, value, rev, lease)
-		span.SetAttributes(attribute.Bool("ok", ok))
+		rev, updated, err = l.backend.Update(ctx, key, value, rev, lease)
 	}
 	if err != nil {
 		return nil, err
 	}
+	span.SetAttributes(attribute.Bool("updated", updated), attribute.Int64("revision", rev))
 
 	resp := &etcdserverpb.TxnResponse{
 		Header:    txnHeader(rev),
-		Succeeded: ok,
+		Succeeded: updated,
 	}
 
-	if ok {
+	if updated {
 		resp.Responses = []*etcdserverpb.ResponseOp{
 			{
 				Response: &etcdserverpb.ResponseOp_ResponsePut{
@@ -76,6 +76,10 @@ func (l *LimitedServer) update(ctx context.Context, rev int64, key string, value
 			},
 		}
 	} else {
+		rev, kv, err = l.backend.Get(ctx, key, "", 1, rev)
+		if err != nil {
+			return nil, err
+		}
 		resp.Responses = []*etcdserverpb.ResponseOp{
 			{
 				Response: &etcdserverpb.ResponseOp_ResponseRange{

@@ -2,15 +2,13 @@ package server
 
 import (
 	"context"
-	"errors"
 
 	"go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 )
 
 var (
-	ErrKeyExists   = rpctypes.ErrGRPCDuplicateKey
-	ErrCompacted   = rpctypes.ErrGRPCCompacted
-	ErrRevNotFound = errors.New("revision not found")
+	ErrKeyExists = rpctypes.ErrGRPCDuplicateKey
+	ErrCompacted = rpctypes.ErrGRPCCompacted
 )
 
 type Backend interface {
@@ -21,7 +19,7 @@ type Backend interface {
 	Delete(ctx context.Context, key string, revision int64) (int64, *KeyValue, bool, error)
 	List(ctx context.Context, prefix, startKey string, limit, revision int64) (int64, []*KeyValue, error)
 	Count(ctx context.Context, prefix, startKey string, revision int64) (int64, int64, error)
-	Update(ctx context.Context, key string, value []byte, revision, lease int64) (int64, *KeyValue, bool, error)
+	Update(ctx context.Context, key string, value []byte, revision, lease int64) (int64, bool, error)
 	Watch(ctx context.Context, key string, revision int64) <-chan []*Event
 	DbSize(ctx context.Context) (int64, error)
 	DoCompact(ctx context.Context) error

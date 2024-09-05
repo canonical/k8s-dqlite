@@ -534,7 +534,7 @@ func (d *Generic) Create(ctx context.Context, key string, value []byte, ttl int6
 	}
 	return result.LastInsertId()
 }
-func (d *Generic) Update(ctx context.Context, key string, value []byte, preRev, ttl int64) (rev int64, err error) {
+func (d *Generic) Update(ctx context.Context, key string, value []byte, preRev, ttl int64) (rev int64, updated bool, err error) {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Update", otelName))
 	defer func() {
 		if err != nil {
@@ -549,14 +549,15 @@ func (d *Generic) Update(ctx context.Context, key string, value []byte, preRev, 
 	result, err := d.execute(ctx, "update_sql", d.UpdateSQL, key, ttl, value, key, preRev)
 	if err != nil {
 		logrus.WithError(err).Error("failed to update key")
-		return 0, err
+		return 0, false, err
 	}
 	if insertCount, err := result.RowsAffected(); err != nil {
-		return 0, err
+		return 0, false, err
 	} else if insertCount == 0 {
-		return 0, server.ErrRevNotFound
+		return 0, false, nil
 	}
-	return result.LastInsertId()
+	rev, err = result.LastInsertId()
+	return rev, true, err
 }
 
 // Compact compacts the database up to the revision provided in the method's call.

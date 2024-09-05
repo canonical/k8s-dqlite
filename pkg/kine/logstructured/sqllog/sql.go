@@ -67,7 +67,7 @@ type Dialect interface {
 	After(ctx context.Context, rev, limit int64) (*sql.Rows, error)
 	Insert(ctx context.Context, key string, create, delete bool, createRevision, previousRevision int64, ttl int64, value, prevValue []byte) (int64, error)
 	Create(ctx context.Context, key string, value []byte, lease int64) (int64, error)
-	Update(ctx context.Context, key string, value []byte, prevRev, lease int64) (int64, error)
+	Update(ctx context.Context, key string, value []byte, prevRev, lease int64) (int64, bool, error)
 	DeleteRevision(ctx context.Context, revision int64) error
 	GetCompactRevision(ctx context.Context) (int64, int64, error)
 	Compact(ctx context.Context, revision int64) error
@@ -566,27 +566,17 @@ func (s *SQLLog) Create(ctx context.Context, key string, value []byte, lease int
 	return rev, nil
 }
 
-func (s *SQLLog) Update(ctx context.Context, key string, value []byte, prevRev, lease int64) (rev int64, err error) {
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Update", otelName))
-	defer func() {
-		span.RecordError(err)
-		span.SetAttributes(attribute.Int64("revision", rev))
-		span.End()
-	}()
-	span.SetAttributes(attribute.String("key", key),
-		attribute.Int64("prevRev", prevRev),
-	)
-
-	rev, err = s.d.Update(ctx, key, value, prevRev, lease)
+func (s *SQLLog) Update(ctx context.Context, key string, value []byte, prevRev, lease int64) (rev int64, updated bool, err error) {
+	rev, updated, err = s.d.Update(ctx, key, value, prevRev, lease)
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 
 	select {
 	case s.notify <- rev:
 	default:
 	}
-	return rev, err
+	return rev, updated, nil
 }
 
 func scan(rows *sql.Rows, event *server.Event) error {
