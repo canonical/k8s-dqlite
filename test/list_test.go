@@ -218,7 +218,7 @@ func BenchmarkList(b *testing.B) {
 					kine := newKineServer(ctx, b, &kineOptions{
 						backendType: backendType,
 						setup: func(ctx context.Context, tx *sql.Tx) error {
-							return setup(ctx, tx, payload.size, 100000)
+							return setup(ctx, tx, payload.size, b.N)
 						},
 					})
 
