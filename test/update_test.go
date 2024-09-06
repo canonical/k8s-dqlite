@@ -3,6 +3,7 @@ package test
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/canonical/k8s-dqlite/pkg/kine/endpoint"
@@ -72,32 +73,47 @@ func TestUpdate(t *testing.T) {
 // BenchmarkUpdate is a benchmark for the Update operation.
 func BenchmarkUpdate(b *testing.B) {
 	for _, backendType := range []string{endpoint.SQLiteBackend, endpoint.DQLiteBackend} {
-		b.Run(backendType, func(b *testing.B) {
-			b.StopTimer()
-			g := NewWithT(b)
+		for _, workers := range []int{1, 2, 4, 8, 16} {
+			b.Run(fmt.Sprintf("%s-%d", backendType, workers), func(b *testing.B) {
+				b.StopTimer()
+				g := NewWithT(b)
 
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
 
-			kine := newKineServer(ctx, b, &kineOptions{backendType: backendType})
+				kine := newKineServer(ctx, b, &kineOptions{backendType: backendType})
+				wg := &sync.WaitGroup{}
+				run := func(start int) {
+					defer wg.Done()
+					benchKey := fmt.Sprintf("benchKey-%d", start)
+					for i, lastModRev := 0, int64(0); i < b.N; i += workers {
+						value := fmt.Sprintf("value-%d", i)
+						lastModRev = updateRev(ctx, g, kine.client, benchKey, lastModRev, value)
+					}
+				}
 
-			kine.ResetMetrics()
-			b.StartTimer()
-			for i, lastModRev := 0, int64(0); i < b.N; i++ {
-				value := fmt.Sprintf("value-%d", i)
-				lastModRev = updateRev(ctx, g, kine.client, "benchKey", lastModRev, value)
-			}
-			kine.ReportMetrics(b)
-		})
+				kine.ResetMetrics()
+				b.StartTimer()
+				wg.Add(workers)
+				for worker := 0; worker < workers-1; worker++ {
+					go run(worker)
+				}
+				run(workers - 1)
+				wg.Wait()
+				kine.ReportMetrics(b)
+			})
+		}
 	}
 }
 
 func updateRev(ctx context.Context, g Gomega, client *clientv3.Client, key string, revision int64, value string) int64 {
-	resp, err := client.Txn(ctx).
+	txn := client.Txn(ctx).
 		If(clientv3.Compare(clientv3.ModRevision(key), "=", revision)).
-		Then(clientv3.OpPut(key, value)).
-		Else(clientv3.OpGet(key, clientv3.WithRange(""))).
-		Commit()
+		Then(clientv3.OpPut(key, value))
+	if revision != 0 {
+		txn = txn.Else(clientv3.OpGet(key, clientv3.WithRange("")))
+	}
+	resp, err := txn.Commit()
 
 	g.Expect(err).To(BeNil())
 	g.Expect(resp.Succeeded).To(BeTrue())
