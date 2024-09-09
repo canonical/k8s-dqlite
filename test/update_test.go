@@ -34,6 +34,21 @@ func TestUpdate(t *testing.T) {
 				g.Expect(resp.Kvs[0].ModRevision).To(BeNumerically(">", resp.Kvs[0].CreateRevision))
 			})
 
+			t.Run("CreateExistingFails", func(t *testing.T) {
+				g := NewWithT(t)
+
+				createKey(ctx, g, kine.client, "createExistingKey", "testValue1")
+
+				resp, err := kine.client.Txn(ctx).
+					If(clientv3.Compare(clientv3.ModRevision("createExistingKey"), "=", 0)).
+					Then(clientv3.OpPut("createExistingKey", "testValue1")).
+					Else(clientv3.OpGet("createExistingKey", clientv3.WithRange(""))).
+					Commit()
+
+				g.Expect(err).To(BeNil())
+				g.Expect(resp.Succeeded).To(BeFalse())
+			})
+
 			// Trying to update an old revision(in compare) should fail
 			t.Run("UpdateOldRevisionFails", func(t *testing.T) {
 				g := NewWithT(t)

@@ -47,8 +47,10 @@ func (l *LimitedServer) update(ctx context.Context, rev int64, key string, value
 	if rev == 0 {
 		rev, err = l.backend.Create(ctx, key, value, lease)
 		if err == ErrKeyExists {
-			updated = false
-			err = nil
+			return &etcdserverpb.TxnResponse{
+				Header:    txnHeader(rev),
+				Succeeded: false,
+			}, nil
 		} else {
 			updated = true
 		}
