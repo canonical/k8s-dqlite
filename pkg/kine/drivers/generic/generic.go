@@ -325,6 +325,7 @@ func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig
 				? AS value,
 				value AS old_value
 			FROM kine WHERE name = ?
+			GROUP BY name
 			HAVING deleted = 0 AND id = ?`, paramCharacter, numbered),
 
 		FillSQL: q(`INSERT INTO kine(id, name, created, deleted, create_revision, prev_revision, lease, value, old_value)
