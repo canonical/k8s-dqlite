@@ -67,6 +67,7 @@ func TestUpdate(t *testing.T) {
 				g.Expect(resp.Responses).To(HaveLen(1))
 				g.Expect(resp.Responses[0].GetResponseRange()).ToNot(BeNil())
 			})
+
 			t.Run("UpdatedDeletedKeyFails", func(t *testing.T) {
 				g := NewWithT(t)
 
