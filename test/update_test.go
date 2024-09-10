@@ -74,7 +74,7 @@ func TestUpdate(t *testing.T) {
 func BenchmarkUpdate(b *testing.B) {
 	for _, backendType := range []string{endpoint.SQLiteBackend, endpoint.DQLiteBackend} {
 		for _, workers := range []int{1, 2, 4, 8, 16} {
-			b.Run(fmt.Sprintf("%s-%d", backendType, workers), func(b *testing.B) {
+			b.Run(fmt.Sprintf("%s-workers(%d)", backendType, workers), func(b *testing.B) {
 				b.StopTimer()
 				g := NewWithT(b)
 
