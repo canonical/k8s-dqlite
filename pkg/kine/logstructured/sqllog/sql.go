@@ -273,10 +273,7 @@ func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revis
 		return rev, result, server.ErrCompacted
 	}
 
-	select {
-	case s.notify <- rev:
-	default:
-	}
+	s.notifyWatcherPoll(rev)
 
 	return rev, result, err
 }
@@ -442,18 +439,12 @@ func (s *SQLLog) poll(result chan interface{}, pollStart int64) {
 					// and trigger a quick retry for simple out of order events
 					skip = next
 					skipTime = time.Now()
-					select {
-					case s.notify <- next:
-					default:
-					}
+					s.notifyWatcherPoll(next)
 					break
 				} else {
 					if err := s.d.Fill(s.ctx, next); err == nil {
 						logrus.Debugf("FILL, revision=%d, err=%v", next, err)
-						select {
-						case s.notify <- next:
-						default:
-						}
+						s.notifyWatcherPoll(next)
 					} else {
 						logrus.Debugf("FILL FAILED, revision=%d, err=%v", next, err)
 					}
@@ -538,10 +529,7 @@ func (s *SQLLog) Append(ctx context.Context, event *server.Event) (int64, error)
 	if err != nil {
 		return 0, err
 	}
-	select {
-	case s.notify <- rev:
-	default:
-	}
+	s.notifyWatcherPoll(rev)
 	return rev, nil
 }
 
@@ -559,10 +547,7 @@ func (s *SQLLog) Create(ctx context.Context, key string, value []byte, lease int
 		return 0, err
 	}
 
-	select {
-	case s.notify <- rev:
-	default:
-	}
+	s.notifyWatcherPoll(rev)
 	return rev, nil
 }
 
@@ -572,11 +557,15 @@ func (s *SQLLog) Update(ctx context.Context, key string, value []byte, prevRev, 
 		return 0, false, err
 	}
 
+	s.notifyWatcherPoll(rev)
+	return rev, updated, nil
+}
+
+func (s *SQLLog) notifyWatcherPoll(revision int64) {
 	select {
-	case s.notify <- rev:
+	case s.notify <- revision:
 	default:
 	}
-	return rev, updated, nil
 }
 
 func scan(rows *sql.Rows, event *server.Event) error {

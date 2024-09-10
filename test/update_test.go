@@ -27,7 +27,7 @@ func TestUpdate(t *testing.T) {
 				updateRev(ctx, g, kine.client, "updateExistingKey", lastModRev, "testValue2")
 
 				resp, err := kine.client.Get(ctx, "updateExistingKey", clientv3.WithRange(""))
-				g.Expect(err).To(BeNil())
+				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(resp.Kvs).To(HaveLen(1))
 				g.Expect(resp.Kvs[0].Key).To(Equal([]byte("updateExistingKey")))
 				g.Expect(resp.Kvs[0].Value).To(Equal([]byte("testValue2")))
@@ -45,7 +45,7 @@ func TestUpdate(t *testing.T) {
 					Else(clientv3.OpGet("createExistingKey", clientv3.WithRange(""))).
 					Commit()
 
-				g.Expect(err).To(BeNil())
+				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(resp.Succeeded).To(BeFalse())
 			})
 
@@ -62,7 +62,7 @@ func TestUpdate(t *testing.T) {
 					Else(clientv3.OpGet("updateOldRevKey", clientv3.WithRange(""))).
 					Commit()
 
-				g.Expect(err).To(BeNil())
+				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(resp.Succeeded).To(BeFalse())
 				g.Expect(resp.Responses).To(HaveLen(1))
 				g.Expect(resp.Responses[0].GetResponseRange()).ToNot(BeNil())
@@ -77,7 +77,7 @@ func TestUpdate(t *testing.T) {
 					Else(clientv3.OpGet("updateNotExistingKey", clientv3.WithRange(""))).
 					Commit()
 
-				g.Expect(err).To(BeNil())
+				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(resp.Succeeded).To(BeFalse())
 				g.Expect(resp.Responses).To(HaveLen(1))
 				g.Expect(resp.Responses[0].GetResponseRange()).ToNot(BeNil())
@@ -95,7 +95,7 @@ func TestUpdate(t *testing.T) {
 					Else(clientv3.OpGet("updateDeletedKey", clientv3.WithRange(""))).
 					Commit()
 
-				g.Expect(err).To(BeNil())
+				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(resp.Succeeded).To(BeFalse())
 				g.Expect(resp.Responses).To(HaveLen(1))
 				g.Expect(resp.Responses[0].GetResponseRange()).ToNot(BeNil())
@@ -148,7 +148,7 @@ func updateRev(ctx context.Context, g Gomega, client *clientv3.Client, key strin
 	}
 	resp, err := txn.Commit()
 
-	g.Expect(err).To(BeNil())
+	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(resp.Succeeded).To(BeTrue())
 
 	return resp.Responses[0].GetResponsePut().Header.Revision
