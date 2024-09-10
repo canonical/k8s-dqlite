@@ -87,10 +87,9 @@ func BenchmarkDelete(b *testing.B) {
 				kine.ResetMetrics()
 				b.StartTimer()
 				wg.Add(workers)
-				for worker := 0; worker < workers-1; worker++ {
+				for worker := 0; worker < workers; worker++ {
 					go run(worker)
 				}
-				run(workers - 1)
 				wg.Wait()
 				kine.ReportMetrics(b)
 			})
