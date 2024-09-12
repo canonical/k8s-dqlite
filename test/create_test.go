@@ -3,6 +3,7 @@ package test
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/canonical/k8s-dqlite/pkg/kine/endpoint"
@@ -37,24 +38,35 @@ func TestCreate(t *testing.T) {
 // BenchmarkCreate is a benchmark for the Create operation.
 func BenchmarkCreate(b *testing.B) {
 	for _, backendType := range []string{endpoint.SQLiteBackend, endpoint.DQLiteBackend} {
-		b.Run(backendType, func(b *testing.B) {
-			b.StopTimer()
-			g := NewWithT(b)
+		for _, workers := range []int{1, 2, 4, 8, 16} {
+			b.Run(fmt.Sprintf("%d-workers/%s", workers, backendType), func(b *testing.B) {
+				b.StopTimer()
+				g := NewWithT(b)
 
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
 
-			kine := newKineServer(ctx, b, &kineOptions{backendType: backendType})
+				kine := newKineServer(ctx, b, &kineOptions{backendType: backendType})
+				wg := &sync.WaitGroup{}
+				run := func(start int) {
+					defer wg.Done()
+					for i := start; i < b.N; i += workers {
+						key := fmt.Sprintf("key-%d", i)
+						value := fmt.Sprintf("value-%d", i)
+						createKey(ctx, g, kine.client, key, value)
+					}
+				}
 
-			kine.ResetMetrics()
-			b.StartTimer()
-			for i := 0; i < b.N; i++ {
-				key := fmt.Sprintf("key-%d", i)
-				value := fmt.Sprintf("value-%d", i)
-				createKey(ctx, g, kine.client, key, value)
-			}
-			kine.ReportMetrics(b)
-		})
+				kine.ResetMetrics()
+				b.StartTimer()
+				wg.Add(workers)
+				for worker := 0; worker < workers; worker++ {
+					go run(worker)
+				}
+				wg.Wait()
+				kine.ReportMetrics(b)
+			})
+		}
 	}
 }
 
