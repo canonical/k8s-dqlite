@@ -104,7 +104,7 @@ func assertMissingKey(ctx context.Context, g Gomega, client *clientv3.Client, ke
 	g.Expect(resp.Kvs).To(HaveLen(0))
 }
 
-func deleteKey(ctx context.Context, g Gomega, client *clientv3.Client, key string) {
+func deleteKey(ctx context.Context, g Gomega, client *clientv3.Client, key string) int64 {
 	// The Get before the Delete is to trick kine to accept the transaction
 	resp, err := client.Txn(ctx).
 		Then(clientv3.OpGet(key), clientv3.OpDelete(key)).
@@ -112,6 +112,7 @@ func deleteKey(ctx context.Context, g Gomega, client *clientv3.Client, key strin
 
 	g.Expect(err).To(BeNil())
 	g.Expect(resp.Succeeded).To(BeTrue())
+	return resp.Header.Revision
 }
 
 func assertKey(ctx context.Context, g Gomega, client *clientv3.Client, key string, value string) {

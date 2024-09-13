@@ -67,6 +67,7 @@ type Dialect interface {
 	After(ctx context.Context, rev, limit int64) (*sql.Rows, error)
 	Insert(ctx context.Context, key string, create, delete bool, createRevision, previousRevision int64, ttl int64, value, prevValue []byte) (int64, error)
 	Create(ctx context.Context, key string, value []byte, lease int64) (int64, error)
+	Update(ctx context.Context, key string, value []byte, prevRev, lease int64) (int64, bool, error)
 	DeleteRevision(ctx context.Context, revision int64) error
 	GetCompactRevision(ctx context.Context) (int64, int64, error)
 	Compact(ctx context.Context, revision int64) error
@@ -272,10 +273,7 @@ func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revis
 		return rev, result, server.ErrCompacted
 	}
 
-	select {
-	case s.notify <- rev:
-	default:
-	}
+	s.notifyWatcherPoll(rev)
 
 	return rev, result, err
 }
@@ -441,18 +439,12 @@ func (s *SQLLog) poll(result chan interface{}, pollStart int64) {
 					// and trigger a quick retry for simple out of order events
 					skip = next
 					skipTime = time.Now()
-					select {
-					case s.notify <- next:
-					default:
-					}
+					s.notifyWatcherPoll(next)
 					break
 				} else {
 					if err := s.d.Fill(s.ctx, next); err == nil {
 						logrus.Debugf("FILL, revision=%d, err=%v", next, err)
-						select {
-						case s.notify <- next:
-						default:
-						}
+						s.notifyWatcherPoll(next)
 					} else {
 						logrus.Debugf("FILL FAILED, revision=%d, err=%v", next, err)
 					}
@@ -537,10 +529,7 @@ func (s *SQLLog) Append(ctx context.Context, event *server.Event) (int64, error)
 	if err != nil {
 		return 0, err
 	}
-	select {
-	case s.notify <- rev:
-	default:
-	}
+	s.notifyWatcherPoll(rev)
 	return rev, nil
 }
 
@@ -558,11 +547,25 @@ func (s *SQLLog) Create(ctx context.Context, key string, value []byte, lease int
 		return 0, err
 	}
 
+	s.notifyWatcherPoll(rev)
+	return rev, nil
+}
+
+func (s *SQLLog) Update(ctx context.Context, key string, value []byte, prevRev, lease int64) (rev int64, updated bool, err error) {
+	rev, updated, err = s.d.Update(ctx, key, value, prevRev, lease)
+	if err != nil {
+		return 0, false, err
+	}
+
+	s.notifyWatcherPoll(rev)
+	return rev, updated, nil
+}
+
+func (s *SQLLog) notifyWatcherPoll(revision int64) {
 	select {
-	case s.notify <- rev:
+	case s.notify <- revision:
 	default:
 	}
-	return rev, nil
 }
 
 func scan(rows *sql.Rows, event *server.Event) error {

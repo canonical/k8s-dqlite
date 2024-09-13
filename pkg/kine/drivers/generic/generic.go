@@ -149,6 +149,7 @@ type Generic struct {
 	FillSQL               string
 	InsertLastInsertIDSQL string
 	CreateSQL             string
+	UpdateSQL             string
 	GetSizeSQL            string
 	Retry                 ErrRetry
 	TranslateErr          TranslateErr
@@ -311,6 +312,21 @@ func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig
 				WHERE name = ?
 			) maxkv
 			WHERE maxkv.deleted = 1 OR id IS NULL`, paramCharacter, numbered),
+
+		UpdateSQL: q(`
+			INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
+			SELECT 
+				? AS name,
+				0 AS created,
+				0 AS deleted,
+				create_revision,
+				id AS prev_revision,
+				? AS lease,
+				? AS value,
+				value AS old_value
+			FROM kine WHERE id = (SELECT MAX(id) FROM kine WHERE name = ?)
+    			AND deleted = 0
+    			AND id = ?`, paramCharacter, numbered),
 
 		FillSQL: q(`INSERT INTO kine(id, name, created, deleted, create_revision, prev_revision, lease, value, old_value)
 			VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`, paramCharacter, numbered),
@@ -514,6 +530,31 @@ func (d *Generic) Create(ctx context.Context, key string, value []byte, ttl int6
 		return 0, server.ErrKeyExists
 	}
 	return result.LastInsertId()
+}
+func (d *Generic) Update(ctx context.Context, key string, value []byte, preRev, ttl int64) (rev int64, updated bool, err error) {
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Update", otelName))
+	defer func() {
+		if err != nil {
+			if d.TranslateErr != nil {
+				err = d.TranslateErr(err)
+			}
+			span.RecordError(err)
+		}
+		span.End()
+	}()
+
+	result, err := d.execute(ctx, "update_sql", d.UpdateSQL, key, ttl, value, key, preRev)
+	if err != nil {
+		logrus.WithError(err).Error("failed to update key")
+		return 0, false, err
+	}
+	if insertCount, err := result.RowsAffected(); err != nil {
+		return 0, false, err
+	} else if insertCount == 0 {
+		return 0, false, nil
+	}
+	rev, err = result.LastInsertId()
+	return rev, true, err
 }
 
 // Compact compacts the database up to the revision provided in the method's call.

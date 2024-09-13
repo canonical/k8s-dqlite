@@ -30,6 +30,7 @@ type Log interface {
 	CurrentRevision(ctx context.Context) (int64, error)
 	List(ctx context.Context, prefix, startKey string, limit, revision int64, includeDeletes bool) (int64, []*server.Event, error)
 	Create(ctx context.Context, key string, value []byte, lease int64) (int64, error)
+	Update(ctx context.Context, key string, value []byte, revision, lease int64) (revRet int64, updateRet bool, errRet error)
 	After(ctx context.Context, prefix string, revision, limit int64) (int64, []*server.Event, error)
 	Watch(ctx context.Context, prefix string) <-chan []*server.Event
 	Count(ctx context.Context, prefix, startKey string, revision int64) (int64, int64, error)
@@ -275,61 +276,21 @@ func (l *LogStructured) Count(ctx context.Context, prefix, startKey string, revi
 	return rev, count, nil
 }
 
-func (l *LogStructured) Update(ctx context.Context, key string, value []byte, revision, lease int64) (revRet int64, kvRet *server.KeyValue, updateRet bool, errRet error) {
+func (l *LogStructured) Update(ctx context.Context, key string, value []byte, revision, lease int64) (revRet int64, updateRet bool, errRet error) {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Update", otelName))
 	defer func() {
-		l.adjustRevision(ctx, &revRet)
-		kvRev := int64(0)
-		if kvRet != nil {
-			kvRev = kvRet.ModRevision
-		}
-		logrus.Debugf("UPDATE %s, value=%d, rev=%d, lease=%v => rev=%d, kvrev=%d, updated=%v, err=%v", key, len(value), revision, lease, revRet, kvRev, updateRet, errRet)
+		logrus.Debugf("UPDATE %s, value=%d, rev=%d, lease=%v => rev=%d, updated=%v, err=%v", key, len(value), revision, lease, revRet, updateRet, errRet)
 		span.SetAttributes(
 			attribute.String("key", key),
 			attribute.Int64("revision", revision),
 			attribute.Int64("lease", lease),
 			attribute.Int64("value-size", int64(len(value))),
 			attribute.Int64("adjusted-revision", revRet),
-			attribute.Int64("kv-mod-revision", kvRev),
 			attribute.Bool("updated", updateRet),
 		)
 		span.End()
 	}()
-
-	rev, event, err := l.get(ctx, key, "", 1, 0, false)
-	if err != nil {
-		return 0, nil, false, err
-	}
-
-	if event == nil {
-		return 0, nil, false, nil
-	}
-
-	if event.KV.ModRevision != revision {
-		return rev, event.KV, false, nil
-	}
-
-	updateEvent := &server.Event{
-		KV: &server.KeyValue{
-			Key:            key,
-			CreateRevision: event.KV.CreateRevision,
-			Value:          value,
-			Lease:          lease,
-		},
-		PrevKV: event.KV,
-	}
-
-	rev, err = l.log.Append(ctx, updateEvent)
-	if err != nil {
-		rev, event, err := l.get(ctx, key, "", 1, 0, false)
-		if event == nil {
-			return rev, nil, false, err
-		}
-		return rev, event.KV, false, err
-	}
-
-	updateEvent.KV.ModRevision = rev
-	return rev, updateEvent.KV, true, err
+	return l.log.Update(ctx, key, value, revision, lease)
 }
 
 func (l *LogStructured) ttlEvents(ctx context.Context) chan *server.Event {

@@ -20,20 +20,6 @@ func TestUpdate(t *testing.T) {
 
 			kine := newKineServer(ctx, t, &kineOptions{backendType: backendType})
 
-			// Testing that update can create a new key if ModRevision is 0
-			t.Run("UpdateNewKey", func(t *testing.T) {
-				g := NewWithT(t)
-
-				createKey(ctx, g, kine.client, "updateNewKey", "testValue")
-
-				resp, err := kine.client.Get(ctx, "updateNewKey", clientv3.WithRange(""))
-				g.Expect(err).To(BeNil())
-				g.Expect(resp.Kvs).To(HaveLen(1))
-				g.Expect(resp.Kvs[0].Key).To(Equal([]byte("updateNewKey")))
-				g.Expect(resp.Kvs[0].Value).To(Equal([]byte("testValue")))
-				g.Expect(resp.Kvs[0].ModRevision).To(Equal(int64(resp.Kvs[0].CreateRevision)))
-			})
-
 			t.Run("UpdateExisting", func(t *testing.T) {
 				g := NewWithT(t)
 
@@ -41,11 +27,26 @@ func TestUpdate(t *testing.T) {
 				updateRev(ctx, g, kine.client, "updateExistingKey", lastModRev, "testValue2")
 
 				resp, err := kine.client.Get(ctx, "updateExistingKey", clientv3.WithRange(""))
-				g.Expect(err).To(BeNil())
+				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(resp.Kvs).To(HaveLen(1))
 				g.Expect(resp.Kvs[0].Key).To(Equal([]byte("updateExistingKey")))
 				g.Expect(resp.Kvs[0].Value).To(Equal([]byte("testValue2")))
 				g.Expect(resp.Kvs[0].ModRevision).To(BeNumerically(">", resp.Kvs[0].CreateRevision))
+			})
+
+			t.Run("CreateExistingFails", func(t *testing.T) {
+				g := NewWithT(t)
+
+				createKey(ctx, g, kine.client, "createExistingKey", "testValue1")
+
+				resp, err := kine.client.Txn(ctx).
+					If(clientv3.Compare(clientv3.ModRevision("createExistingKey"), "=", 0)).
+					Then(clientv3.OpPut("createExistingKey", "testValue1")).
+					Else(clientv3.OpGet("createExistingKey", clientv3.WithRange(""))).
+					Commit()
+
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(resp.Succeeded).To(BeFalse())
 			})
 
 			// Trying to update an old revision(in compare) should fail
@@ -61,7 +62,40 @@ func TestUpdate(t *testing.T) {
 					Else(clientv3.OpGet("updateOldRevKey", clientv3.WithRange(""))).
 					Commit()
 
-				g.Expect(err).To(BeNil())
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(resp.Succeeded).To(BeFalse())
+				g.Expect(resp.Responses).To(HaveLen(1))
+				g.Expect(resp.Responses[0].GetResponseRange()).ToNot(BeNil())
+			})
+
+			t.Run("UpdateNotExistingFails", func(t *testing.T) {
+				g := NewWithT(t)
+
+				resp, err := kine.client.Txn(ctx).
+					If(clientv3.Compare(clientv3.ModRevision("updateNotExistingKey"), "=", 1)).
+					Then(clientv3.OpPut("updateNotExistingKey", "testValue3")).
+					Else(clientv3.OpGet("updateNotExistingKey", clientv3.WithRange(""))).
+					Commit()
+
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(resp.Succeeded).To(BeFalse())
+				g.Expect(resp.Responses).To(HaveLen(1))
+				g.Expect(resp.Responses[0].GetResponseRange()).ToNot(BeNil())
+			})
+
+			t.Run("UpdatedDeletedKeyFails", func(t *testing.T) {
+				g := NewWithT(t)
+
+				createKey(ctx, g, kine.client, "updateDeletedKey", "testValue4")
+				lastModRev := deleteKey(ctx, g, kine.client, "updateDeletedKey")
+
+				resp, err := kine.client.Txn(ctx).
+					If(clientv3.Compare(clientv3.ModRevision("updateDeletedKey"), "=", lastModRev)).
+					Then(clientv3.OpPut("updateDeletedKey", "testValue4")).
+					Else(clientv3.OpGet("updateDeletedKey", clientv3.WithRange(""))).
+					Commit()
+
+				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(resp.Succeeded).To(BeFalse())
 				g.Expect(resp.Responses).To(HaveLen(1))
 				g.Expect(resp.Responses[0].GetResponseRange()).ToNot(BeNil())
@@ -114,7 +148,7 @@ func updateRev(ctx context.Context, g Gomega, client *clientv3.Client, key strin
 	}
 	resp, err := txn.Commit()
 
-	g.Expect(err).To(BeNil())
+	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(resp.Succeeded).To(BeTrue())
 
 	return resp.Responses[0].GetResponsePut().Header.Revision
