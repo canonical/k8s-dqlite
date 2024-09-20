@@ -28,11 +28,11 @@ type Log interface {
 	Start(ctx context.Context) error
 	Wait()
 	CurrentRevision(ctx context.Context) (int64, error)
-	List(ctx context.Context, prefix, startKey string, limit, revision int64, includeDeletes bool) (int64, []*server.Event, error)
+	List(ctx context.Context, prefix, startKey string, limit, revision int64, includeDeletes bool) (int64, []server.Event, error)
 	Create(ctx context.Context, key string, value []byte, lease int64) (int64, error)
 	Update(ctx context.Context, key string, value []byte, revision, lease int64) (revRet int64, updateRet bool, errRet error)
-	After(ctx context.Context, prefix string, revision, limit int64) (int64, []*server.Event, error)
-	Watch(ctx context.Context, prefix string) <-chan []*server.Event
+	After(ctx context.Context, prefix string, revision, limit int64) (int64, []server.Event, error)
+	Watch(ctx context.Context, prefix string) <-chan []server.Event
 	Count(ctx context.Context, prefix, startKey string, revision int64) (int64, int64, error)
 	Append(ctx context.Context, event *server.Event) (int64, error)
 	DbSize(ctx context.Context) (int64, error)
@@ -124,7 +124,7 @@ func (l *LogStructured) get(ctx context.Context, key, rangeEnd string, limit, re
 	if len(events) == 0 {
 		return rev, nil, nil
 	}
-	return rev, events[0], nil
+	return rev, &events[0], nil
 }
 
 func (l *LogStructured) adjustRevision(ctx context.Context, rev *int64) {
@@ -293,8 +293,8 @@ func (l *LogStructured) Update(ctx context.Context, key string, value []byte, re
 	return l.log.Update(ctx, key, value, revision, lease)
 }
 
-func (l *LogStructured) ttlEvents(ctx context.Context) chan *server.Event {
-	result := make(chan *server.Event)
+func (l *LogStructured) ttlEvents(ctx context.Context) chan server.Event {
+	result := make(chan server.Event)
 	var shouldClose atomic.Bool
 
 	l.wg.Add(2)
@@ -345,7 +345,7 @@ func (l *LogStructured) ttl(ctx context.Context) {
 	// very naive TTL support
 	mutex := &sync.Mutex{}
 	for event := range l.ttlEvents(ctx) {
-		go func(event *server.Event) {
+		go func(event server.Event) {
 			select {
 			case <-ctx.Done():
 				return
@@ -358,7 +358,7 @@ func (l *LogStructured) ttl(ctx context.Context) {
 	}
 }
 
-func (l *LogStructured) Watch(ctx context.Context, prefix string, revision int64) <-chan []*server.Event {
+func (l *LogStructured) Watch(ctx context.Context, prefix string, revision int64) <-chan []server.Event {
 	logrus.Debugf("WATCH %s, revision=%d", prefix, revision)
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Watch", otelName))
 	defer span.End()
@@ -376,7 +376,7 @@ func (l *LogStructured) Watch(ctx context.Context, prefix string, revision int64
 		revision -= 1
 	}
 
-	result := make(chan []*server.Event, 100)
+	result := make(chan []server.Event, 100)
 
 	rev, kvs, err := l.log.After(ctx, prefix, revision, 0)
 	if err != nil {
@@ -414,7 +414,7 @@ func (l *LogStructured) Watch(ctx context.Context, prefix string, revision int64
 	return result
 }
 
-func filter(events []*server.Event, rev int64) []*server.Event {
+func filter(events []server.Event, rev int64) []server.Event {
 	for len(events) > 0 && events[0].KV.ModRevision <= rev {
 		events = events[1:]
 	}
