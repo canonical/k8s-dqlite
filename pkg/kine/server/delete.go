@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"fmt"
 
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
 	"go.opentelemetry.io/otel/attribute"
@@ -32,7 +31,8 @@ func isDelete(txn *etcdserverpb.TxnRequest) (int64, string, bool) {
 func (l *LimitedServer) delete(ctx context.Context, key string, revision int64) (*etcdserverpb.TxnResponse, error) {
 	var err error
 	deleteCnt.Add(ctx, 1)
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.delete", otelName))
+	const spanName = otelName + ".delete"
+	ctx, span := otelTracer.Start(ctx, spanName)
 	defer func() {
 		span.RecordError(err)
 		span.End()

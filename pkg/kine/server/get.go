@@ -11,7 +11,8 @@ import (
 func (l *LimitedServer) get(ctx context.Context, r *etcdserverpb.RangeRequest) (*RangeResponse, error) {
 	var err error
 	getCnt.Add(ctx, 1)
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.get", otelName))
+	const spanName = otelName + ".get"
+	ctx, span := otelTracer.Start(ctx, spanName)
 	defer func() {
 		span.RecordError(err)
 		span.End()

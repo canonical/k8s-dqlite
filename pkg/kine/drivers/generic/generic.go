@@ -351,7 +351,8 @@ func getPrefixRange(prefix string) (start, end string) {
 }
 
 func (d *Generic) query(ctx context.Context, txName, query string, args ...interface{}) (rows *sql.Rows, err error) {
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.query", otelName))
+	const spanName = otelName + ".query"
+	ctx, span := otelTracer.Start(ctx, spanName)
 	defer func() {
 		span.RecordError(err)
 		span.End()
@@ -394,7 +395,8 @@ func (d *Generic) query(ctx context.Context, txName, query string, args ...inter
 }
 
 func (d *Generic) execute(ctx context.Context, txName, query string, args ...interface{}) (result sql.Result, err error) {
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.execute", otelName))
+	const spanName = otelName + ".execute"
+	ctx, span := otelTracer.Start(ctx, spanName)
 	defer func() {
 		span.RecordError(err)
 		span.End()
@@ -502,7 +504,8 @@ func (d *Generic) Count(ctx context.Context, prefix, startKey string, revision i
 }
 
 func (d *Generic) Create(ctx context.Context, key string, value []byte, ttl int64) (rev int64, err error) {
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Create", otelName))
+	const spanName = otelName + ".Create"
+	ctx, span := otelTracer.Start(ctx, spanName)
 
 	defer func() {
 		if err != nil {
@@ -532,7 +535,8 @@ func (d *Generic) Create(ctx context.Context, key string, value []byte, ttl int6
 	return result.LastInsertId()
 }
 func (d *Generic) Update(ctx context.Context, key string, value []byte, preRev, ttl int64) (rev int64, updated bool, err error) {
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Update", otelName))
+	const spanName = otelName + ".Update"
+	ctx, span := otelTracer.Start(ctx, spanName)
 	defer func() {
 		if err != nil {
 			if d.TranslateErr != nil {
@@ -562,7 +566,8 @@ func (d *Generic) Update(ctx context.Context, key string, value []byte, preRev, 
 // a compacted error.
 func (d *Generic) Compact(ctx context.Context, revision int64) (err error) {
 	compactCnt.Add(ctx, 1)
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Compact", otelName))
+	const spanName = otelName + ".Compact"
+	ctx, span := otelTracer.Start(ctx, spanName)
 	defer func() {
 		span.RecordError(err)
 		span.End()
@@ -592,7 +597,8 @@ func (d *Generic) Compact(ctx context.Context, revision int64) (err error) {
 }
 
 func (d *Generic) tryCompact(ctx context.Context, start, end int64) (err error) {
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.tryCompact", otelName))
+	const spanName = otelName + ".tryCompact"
+	ctx, span := otelTracer.Start(ctx, spanName)
 	defer func() {
 		span.RecordError(err)
 		span.End()
@@ -648,7 +654,8 @@ func (d *Generic) tryCompact(ctx context.Context, start, end int64) (err error) 
 
 func (d *Generic) GetCompactRevision(ctx context.Context) (int64, int64, error) {
 	getCompactRevCnt.Add(ctx, 1)
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.get_compact_revision", otelName))
+	const spanName = otelName + ".get_compact_revision"
+	ctx, span := otelTracer.Start(ctx, spanName)
 	var compact, target sql.NullInt64
 	start := time.Now()
 	var err error
@@ -688,7 +695,8 @@ func (d *Generic) GetCompactRevision(ctx context.Context) (int64, int64, error) 
 func (d *Generic) DeleteRevision(ctx context.Context, revision int64) error {
 	var err error
 	deleteRevCnt.Add(ctx, 1)
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.delete_revision", otelName))
+	const spanName = otelName + ".delete_revision"
+	ctx, span := otelTracer.Start(ctx, spanName)
 	defer func() {
 		span.RecordError(err)
 		span.End()
@@ -738,7 +746,8 @@ func (d *Generic) CurrentRevision(ctx context.Context) (int64, error) {
 	var err error
 
 	currentRevCnt.Add(ctx, 1)
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.current_revision", otelName))
+	const spanName = otelName + ".current_revision"
+	ctx, span := otelTracer.Start(ctx, spanName)
 	defer func() {
 		span.RecordError(err)
 		span.End()

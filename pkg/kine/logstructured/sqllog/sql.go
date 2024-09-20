@@ -143,7 +143,8 @@ func (s *SQLLog) compactStart(ctx context.Context) error {
 // DoCompact makes a single compaction run when called. It is intended to be called
 // from test functions that have access to the backend.
 func (s *SQLLog) DoCompact(ctx context.Context) (err error) {
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.DoCompact", otelName))
+	const spanName = otelName + ".DoCompact"
+	ctx, span := otelTracer.Start(ctx, spanName)
 	defer func() {
 		span.RecordError(err)
 		span.End()
@@ -188,7 +189,8 @@ func (s *SQLLog) CurrentRevision(ctx context.Context) (int64, error) {
 
 func (s *SQLLog) After(ctx context.Context, prefix string, revision, limit int64) (int64, []*server.Event, error) {
 	var err error
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.After", otelName))
+	const spanName = otelName + ".After"
+	ctx, span := otelTracer.Start(ctx, spanName)
 	defer func() {
 		span.RecordError(err)
 		span.End()
@@ -226,7 +228,8 @@ func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revis
 		rows *sql.Rows
 		err  error
 	)
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.List", otelName))
+	const spanName = otelName + ".List"
+	ctx, span := otelTracer.Start(ctx, spanName)
 	defer func() {
 		span.RecordError(err)
 		span.End()
@@ -482,7 +485,8 @@ func canSkipRevision(rev, skip int64, skipTime time.Time) bool {
 
 func (s *SQLLog) Count(ctx context.Context, prefix, startKey string, revision int64) (int64, int64, error) {
 	var err error
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Count", otelName))
+	const spanName = otelName + ".Count"
+	ctx, span := otelTracer.Start(ctx, spanName)
 	defer func() {
 		span.RecordError(err)
 		span.End()
@@ -501,7 +505,8 @@ func (s *SQLLog) Count(ctx context.Context, prefix, startKey string, revision in
 
 func (s *SQLLog) Append(ctx context.Context, event *server.Event) (int64, error) {
 	var err error
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Append", otelName))
+	const spanName = otelName + ".Append"
+	ctx, span := otelTracer.Start(ctx, spanName)
 	defer func() {
 		span.RecordError(err)
 		span.End()
@@ -534,7 +539,8 @@ func (s *SQLLog) Append(ctx context.Context, event *server.Event) (int64, error)
 }
 
 func (s *SQLLog) Create(ctx context.Context, key string, value []byte, lease int64) (rev int64, err error) {
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Create", otelName))
+	const spanName = otelName + ".Create"
+	ctx, span := otelTracer.Start(ctx, spanName)
 	defer func() {
 		span.RecordError(err)
 		span.SetAttributes(attribute.Int64("revision", rev))
@@ -597,7 +603,8 @@ func scan(rows *sql.Rows, event *server.Event) error {
 
 func (s *SQLLog) DbSize(ctx context.Context) (int64, error) {
 	var err error
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.DbSize", otelName))
+	const spanName = otelName + ".DbSize"
+	ctx, span := otelTracer.Start(ctx, spanName)
 	defer func() {
 		span.RecordError(err)
 		span.End()
