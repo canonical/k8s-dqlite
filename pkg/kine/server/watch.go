@@ -77,15 +77,15 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 			}
 
 			if logrus.IsLevelEnabled(logrus.DebugLevel) {
-				for _, event := range events {
-					logrus.Debugf("WATCH READ id=%d, key=%s, revision=%d", id, event.KV.Key, event.KV.ModRevision)
+				for i := range events {
+					logrus.Debugf("WATCH READ id=%d, key=%s, revision=%d", id, events[i].KV.Key, events[i].KV.ModRevision)
 				}
 			}
 
 			if err := w.server.Send(&etcdserverpb.WatchResponse{
 				Header:  txnHeader(events[len(events)-1].KV.ModRevision),
 				WatchId: id,
-				Events:  toEvents(events...),
+				Events:  toEvents(events),
 			}); err != nil {
 				w.Cancel(id, err)
 				continue
@@ -96,10 +96,10 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 	}()
 }
 
-func toEvents(events ...*Event) []*mvccpb.Event {
+func toEvents(events []Event) []*mvccpb.Event {
 	ret := make([]*mvccpb.Event, 0, len(events))
-	for _, e := range events {
-		ret = append(ret, toEvent(e))
+	for i := range events {
+		ret = append(ret, toEvent(&events[i]))
 	}
 	return ret
 }

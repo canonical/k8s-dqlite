@@ -186,7 +186,7 @@ func (s *SQLLog) CurrentRevision(ctx context.Context) (int64, error) {
 	return s.d.CurrentRevision(ctx)
 }
 
-func (s *SQLLog) After(ctx context.Context, prefix string, revision, limit int64) (int64, []*server.Event, error) {
+func (s *SQLLog) After(ctx context.Context, prefix string, revision, limit int64) (int64, []server.Event, error) {
 	var err error
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.After", otelName))
 	defer func() {
@@ -221,7 +221,7 @@ func (s *SQLLog) After(ctx context.Context, prefix string, revision, limit int64
 	return rev, result, err
 }
 
-func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revision int64, includeDeleted bool) (int64, []*server.Event, error) {
+func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revision int64, includeDeleted bool) (int64, []server.Event, error) {
 	var (
 		rows *sql.Rows
 		err  error
@@ -278,23 +278,29 @@ func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revis
 	return rev, result, err
 }
 
-func RowsToEvents(rows *sql.Rows) ([]*server.Event, error) {
-	var result []*server.Event
+var scannerPool = sync.Pool{
+	New: func() any { return &rowsScanner{} },
+}
+
+func RowsToEvents(rows *sql.Rows) ([]server.Event, error) {
 	defer rows.Close()
 
+	scanner := scannerPool.Get().(*rowsScanner)
+	defer scannerPool.Put(scanner)
+
+	result := []server.Event{}
 	for rows.Next() {
-		event := &server.Event{}
-		if err := scan(rows, event); err != nil {
+		event, err := scanner.scan(rows)
+		if err != nil {
 			return nil, err
 		}
 		result = append(result, event)
 	}
-
 	return result, nil
 }
 
-func (s *SQLLog) Watch(ctx context.Context, prefix string) <-chan []*server.Event {
-	res := make(chan []*server.Event, 100)
+func (s *SQLLog) Watch(ctx context.Context, prefix string) <-chan []server.Event {
+	res := make(chan []server.Event, 100)
 	values, err := s.broadcaster.Subscribe(ctx)
 	if err != nil {
 		return nil
@@ -318,9 +324,9 @@ func (s *SQLLog) Watch(ctx context.Context, prefix string) <-chan []*server.Even
 	return res
 }
 
-func filter(events interface{}, checkPrefix bool, prefix string) ([]*server.Event, bool) {
-	eventList := events.([]*server.Event)
-	filteredEventList := make([]*server.Event, 0, len(eventList))
+func filter(events interface{}, checkPrefix bool, prefix string) ([]server.Event, bool) {
+	eventList := events.([]server.Event)
+	filteredEventList := make([]server.Event, 0, len(eventList))
 
 	for _, event := range eventList {
 		if (checkPrefix && strings.HasPrefix(event.KV.Key, prefix)) || event.KV.Key == prefix {
@@ -421,7 +427,7 @@ func (s *SQLLog) poll(result chan interface{}, pollStart int64) {
 
 		rev := last
 		var (
-			sequential []*server.Event
+			sequential []server.Event
 			saveLast   bool
 		)
 
@@ -566,33 +572,6 @@ func (s *SQLLog) notifyWatcherPoll(revision int64) {
 	case s.notify <- revision:
 	default:
 	}
-}
-
-func scan(rows *sql.Rows, event *server.Event) error {
-	event.KV = &server.KeyValue{}
-	event.PrevKV = &server.KeyValue{}
-
-	err := rows.Scan(
-		&event.KV.ModRevision,
-		&event.KV.Key,
-		&event.Create,
-		&event.Delete,
-		&event.KV.CreateRevision,
-		&event.PrevKV.ModRevision,
-		&event.KV.Lease,
-		&event.KV.Value,
-		&event.PrevKV.Value,
-	)
-	if err != nil {
-		return err
-	}
-
-	if event.Create {
-		event.KV.CreateRevision = event.KV.ModRevision
-		event.PrevKV = nil
-	}
-
-	return nil
 }
 
 func (s *SQLLog) DbSize(ctx context.Context) (int64, error) {
