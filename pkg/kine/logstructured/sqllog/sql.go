@@ -549,8 +549,9 @@ func (s *SQLLog) Delete(ctx context.Context, key string, revision int64) (rev in
 	if err != nil {
 		return 0, false, err
 	}
-
-	s.notifyWatcherPoll(rev)
+	if deleted {
+		s.notifyWatcherPoll(rev)
+	}
 	return rev, deleted, nil
 }
 
@@ -559,8 +560,9 @@ func (s *SQLLog) Update(ctx context.Context, key string, value []byte, prevRev, 
 	if err != nil {
 		return 0, false, err
 	}
-
-	s.notifyWatcherPoll(rev)
+	if updated {
+		s.notifyWatcherPoll(rev)
+	}
 	return rev, updated, nil
 }
 
