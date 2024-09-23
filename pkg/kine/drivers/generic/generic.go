@@ -29,8 +29,8 @@ var (
 	otelTracer       trace.Tracer
 	otelMeter        metric.Meter
 	compactCnt       metric.Int64Counter
-	getRevisionCnt   metric.Int64Counter
 	deleteRevCnt     metric.Int64Counter
+	deleteCnt        metric.Int64Counter
 	currentRevCnt    metric.Int64Counter
 	getCompactRevCnt metric.Int64Counter
 )
@@ -43,11 +43,11 @@ func init() {
 	if err != nil {
 		logrus.WithError(err).Warning("Otel failed to create create counter")
 	}
-	getRevisionCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.get_revision", otelName), metric.WithDescription("Number of get revision requests"))
+	deleteRevCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.delete_rev", otelName), metric.WithDescription("Number of delete revision requests"))
 	if err != nil {
 		logrus.WithError(err).Warning("Otel failed to create create counter")
 	}
-	deleteRevCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.delete_revision", otelName), metric.WithDescription("Number of delete revision requests"))
+	deleteCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.delete", otelName), metric.WithDescription("Number of delete requests"))
 	if err != nil {
 		logrus.WithError(err).Warning("Otel failed to create create counter")
 	}
@@ -142,9 +142,10 @@ type Generic struct {
 	CountRevisionSQL      string
 	AfterSQLPrefix        string
 	AfterSQL              string
-	DeleteSQL             string
+	DeleteRevSQL          string
 	CompactSQL            string
 	UpdateCompactSQL      string
+	DeleteSQL             string
 	InsertSQL             string
 	FillSQL               string
 	InsertLastInsertIDSQL string
@@ -280,7 +281,7 @@ func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig
 				ORDER BY kv.id ASC
 		`, columns), paramCharacter, numbered),
 
-		DeleteSQL: q(`
+		DeleteRevSQL: q(`
 			DELETE FROM kine
 			WHERE id = ?`, paramCharacter, numbered),
 
@@ -294,6 +295,21 @@ func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig
 
 		InsertSQL: q(`INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
 			VALUES(?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`, paramCharacter, numbered),
+
+		DeleteSQL: q(`
+			INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
+			SELECT 
+				name,
+				0 AS created,
+				1 AS deleted,
+				create_revision,
+				id AS prev_revision,
+				lease,
+				value,
+				value AS old_value
+			FROM kine WHERE id = (SELECT MAX(id) FROM kine WHERE name = ?)
+    			AND deleted = 0
+    			AND id = ?`, paramCharacter, numbered),
 
 		CreateSQL: q(`
 			INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
@@ -514,6 +530,7 @@ func (d *Generic) Create(ctx context.Context, key string, value []byte, ttl int6
 			}
 			span.RecordError(err)
 		}
+		span.SetAttributes(attribute.Int64("revision", rev))
 		span.End()
 	}()
 	span.SetAttributes(
@@ -556,6 +573,32 @@ func (d *Generic) Update(ctx context.Context, key string, value []byte, preRev, 
 	} else if insertCount == 0 {
 		return 0, false, nil
 	}
+	rev, err = result.LastInsertId()
+	return rev, true, err
+}
+
+func (d *Generic) Delete(ctx context.Context, key string, revision int64) (rev int64, deleted bool, err error) {
+	deleteCnt.Add(ctx, 1)
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Delete", otelName))
+	defer func() {
+		span.RecordError(err)
+		span.SetAttributes(attribute.Int64("revision", rev))
+		span.SetAttributes(attribute.Bool("deleted", deleted))
+		span.End()
+	}()
+	span.SetAttributes(attribute.String("key", key))
+
+	result, err := d.execute(ctx, "delete_sql", d.DeleteSQL, key, revision)
+	if err != nil {
+		logrus.WithError(err).Error("failed to delete key")
+		return 0, false, err
+	}
+	if insertCount, err := result.RowsAffected(); err != nil {
+		return 0, false, err
+	} else if insertCount == 0 {
+		return 0, false, nil
+	}
+
 	rev, err = result.LastInsertId()
 	return rev, true, err
 }
@@ -698,7 +741,7 @@ func (d *Generic) DeleteRevision(ctx context.Context, revision int64) error {
 	}()
 	span.SetAttributes(attribute.Int64("revision", revision))
 
-	_, err = d.execute(ctx, "delete_sql", d.DeleteSQL, revision)
+	_, err = d.execute(ctx, "delete_rev_sql", d.DeleteRevSQL, revision)
 	return err
 }
 

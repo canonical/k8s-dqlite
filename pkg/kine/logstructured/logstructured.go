@@ -31,6 +31,7 @@ type Log interface {
 	List(ctx context.Context, prefix, startKey string, limit, revision int64, includeDeletes bool) (int64, []*server.Event, error)
 	Create(ctx context.Context, key string, value []byte, lease int64) (int64, error)
 	Update(ctx context.Context, key string, value []byte, revision, lease int64) (revRet int64, updateRet bool, errRet error)
+	Delete(ctx context.Context, key string, revision int64) (revRet int64, deleted bool, errRet error)
 	After(ctx context.Context, prefix string, revision, limit int64) (int64, []*server.Event, error)
 	Watch(ctx context.Context, prefix string) <-chan []*server.Event
 	Count(ctx context.Context, prefix, startKey string, revision int64) (int64, int64, error)
@@ -138,69 +139,15 @@ func (l *LogStructured) adjustRevision(ctx context.Context, rev *int64) {
 }
 
 func (l *LogStructured) Create(ctx context.Context, key string, value []byte, lease int64) (rev int64, err error) {
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Create", otelName))
-	defer span.End()
 	rev, err = l.log.Create(ctx, key, value, lease)
 	logrus.Debugf("CREATE %s, size=%d, lease=%d => rev=%d, err=%v", key, len(value), lease, rev, err)
 	return rev, err
 }
 
-func (l *LogStructured) Delete(ctx context.Context, key string, revision int64) (revRet int64, kvRet *server.KeyValue, deletedRet bool, errRet error) {
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Delete", otelName))
-
-	defer func() {
-		l.adjustRevision(ctx, &revRet)
-		logrus.Debugf("DELETE %s, rev=%d => rev=%d, kv=%v, deleted=%v, err=%v", key, revision, revRet, kvRet != nil, deletedRet, errRet)
-		span.SetAttributes(
-			attribute.String("key", key),
-			attribute.Int64("revision", revision),
-			attribute.Int64("adjusted-revision", revRet),
-			attribute.Bool("deleted", deletedRet),
-			attribute.Bool("kv-found", kvRet != nil),
-		)
-		span.RecordError(errRet)
-		span.End()
-	}()
-
-	rev, event, err := l.get(ctx, key, "", 1, 0, true)
-	if err != nil {
-		span.RecordError(err)
-		return 0, nil, false, err
-	}
-
-	if event == nil {
-		return rev, nil, true, nil
-	}
-
-	if event.Delete {
-		return rev, event.KV, true, nil
-	}
-
-	if revision != 0 && event.KV.ModRevision != revision {
-		return rev, event.KV, false, nil
-	}
-
-	deleteEvent := &server.Event{
-		Delete: true,
-		KV:     event.KV,
-		PrevKV: event.KV,
-	}
-
-	rev, err = l.log.Append(ctx, deleteEvent)
-	if err != nil {
-		// If error on Append we assume it's a UNIQUE constraint error, so we fetch the latest (if we can)
-		// and return that the delete failed
-		span.AddEvent("Failed to append delete event")
-		span.RecordError(err)
-		latestRev, latestEvent, latestErr := l.get(ctx, key, "", 1, 0, true)
-		if latestErr != nil || latestEvent == nil {
-			span.RecordError(latestErr)
-			span.SetAttributes(attribute.Bool("latest-event-found", latestEvent != nil))
-			return rev, event.KV, false, nil
-		}
-		return latestRev, latestEvent.KV, false, nil
-	}
-	return rev, event.KV, true, err
+func (l *LogStructured) Delete(ctx context.Context, key string, revision int64) (revRet int64, deleted bool, errRet error) {
+	rev, del, err := l.log.Delete(ctx, key, revision)
+	logrus.Debugf("DELETE %s, rev=%d => rev=%d, deleted=%v, err=%v", key, revision, rev, del, err)
+	return rev, del, err
 }
 
 func (l *LogStructured) List(ctx context.Context, prefix, startKey string, limit, revision int64) (revRet int64, kvRet []*server.KeyValue, errRet error) {
