@@ -99,7 +99,6 @@ func TestGet(t *testing.T) {
 			t.Run("FailNotFound", func(t *testing.T) {
 				g := NewWithT(t)
 				key := "testKeyFailNotFound"
-
 				// Delete key
 				deleteKey(ctx, g, kine.client, key, 0)
 

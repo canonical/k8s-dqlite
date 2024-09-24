@@ -9,14 +9,6 @@ import (
 )
 
 func isDelete(txn *etcdserverpb.TxnRequest) (int64, string, bool) {
-	if len(txn.Compare) == 0 &&
-		len(txn.Failure) == 0 &&
-		len(txn.Success) == 2 &&
-		txn.Success[0].GetRequestRange() != nil &&
-		txn.Success[1].GetRequestDeleteRange() != nil {
-		rng := txn.Success[1].GetRequestDeleteRange()
-		return 0, string(rng.Key), true
-	}
 	if len(txn.Compare) == 1 &&
 		txn.Compare[0].Target == etcdserverpb.Compare_MOD &&
 		txn.Compare[0].Result == etcdserverpb.Compare_EQUAL &&

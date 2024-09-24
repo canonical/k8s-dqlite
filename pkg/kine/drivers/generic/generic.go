@@ -309,7 +309,7 @@ func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig
 				value AS old_value
 			FROM kine WHERE id = (SELECT MAX(id) FROM kine WHERE name = ?)
     			AND deleted = 0
-				AND (id = ? OR ? = 0)`, paramCharacter, numbered),
+				AND id = ?`, paramCharacter, numbered),
 
 		CreateSQL: q(`
 			INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
@@ -588,7 +588,7 @@ func (d *Generic) Delete(ctx context.Context, key string, revision int64) (rev i
 	}()
 	span.SetAttributes(attribute.String("key", key))
 
-	result, err := d.execute(ctx, "delete_sql", d.DeleteSQL, key, revision, revision)
+	result, err := d.execute(ctx, "delete_sql", d.DeleteSQL, key, revision)
 	if err != nil {
 		logrus.WithError(err).Error("failed to delete key")
 		return 0, false, err
