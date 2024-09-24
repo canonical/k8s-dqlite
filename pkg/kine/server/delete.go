@@ -61,9 +61,6 @@ func (l *LimitedServer) delete(ctx context.Context, key string, revision int64) 
 		if err != nil {
 			return nil, err
 		}
-		if kv == nil {
-			resp.Succeeded = true
-		}
 		resp.Responses = []*etcdserverpb.ResponseOp{
 			{
 				Response: &etcdserverpb.ResponseOp_ResponseRange{
