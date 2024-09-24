@@ -305,7 +305,7 @@ func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig
 				create_revision,
 				id AS prev_revision,
 				lease,
-				value,
+				NULL AS value,
 				value AS old_value
 			FROM kine WHERE id = (SELECT MAX(id) FROM kine WHERE name = ?)
     			AND deleted = 0
