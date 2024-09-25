@@ -35,7 +35,7 @@ func TestAdmissionControl(t *testing.T) {
 					"admission-control-only-write-queries=true",
 				},
 				setup: func(ctx context.Context, tx *sql.Tx) error {
-					if err := insertMany(ctx, tx, "Key", 100, 1000); err != nil {
+					if _, err := insertMany(ctx, tx, "Key", 100, 1000); err != nil {
 						return err
 					}
 					return nil

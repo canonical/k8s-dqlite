@@ -180,13 +180,13 @@ func TestList(t *testing.T) {
 
 func BenchmarkList(b *testing.B) {
 	setup := func(ctx context.Context, tx *sql.Tx, payloadSize, n int) error {
-		if err := insertMany(ctx, tx, "key", payloadSize, n); err != nil {
+		if _, err := insertMany(ctx, tx, "key", payloadSize, n); err != nil {
 			return err
 		}
-		if err := updateMany(ctx, tx, "key", payloadSize, n/2); err != nil {
+		if _, err := updateMany(ctx, tx, "key", payloadSize, n/2); err != nil {
 			return err
 		}
-		if err := deleteMany(ctx, tx, "key", n/2); err != nil {
+		if _, err := deleteMany(ctx, tx, "key", n/2); err != nil {
 			return err
 		}
 		return nil

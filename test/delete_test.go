@@ -22,7 +22,7 @@ func TestDelete(t *testing.T) {
 			kine := newKineServer(ctx, t, &kineOptions{backendType: backendType})
 
 			// Calling the delete method outside a transaction should fail in kine
-			t.Run("DeleteNotSupportedFails", func(t *testing.T) {
+			t.Run("NotSupportedFails", func(t *testing.T) {
 				g := NewWithT(t)
 				resp, err := kine.client.Delete(ctx, "missingKey")
 
@@ -32,21 +32,21 @@ func TestDelete(t *testing.T) {
 			})
 
 			// Delete a key that does not exist
-			t.Run("DeleteNonExistentKeys", func(t *testing.T) {
+			t.Run("NonExistentKeys", func(t *testing.T) {
 				g := NewWithT(t)
-				deleteKey(ctx, g, kine.client, "alsoNonExistentKey")
+				deleteKey(ctx, g, kine.client, "missingKey", 1)
 			})
 
 			// Add a key, make sure it exists, then delete it, make sure it got deleted,
 			// recreate it, make sure it exists again.
-			t.Run("DeleteSuccess", func(t *testing.T) {
+			t.Run("Success", func(t *testing.T) {
 				g := NewWithT(t)
 
 				key := "testKeyToDelete"
 				value := "testValue"
-				createKey(ctx, g, kine.client, key, value)
+				rev := createKey(ctx, g, kine.client, key, value)
 				assertKey(ctx, g, kine.client, key, value)
-				deleteKey(ctx, g, kine.client, key)
+				deleteKey(ctx, g, kine.client, key, rev)
 				assertMissingKey(ctx, g, kine.client, key)
 				createKey(ctx, g, kine.client, key, value)
 				assertKey(ctx, g, kine.client, key, value)
@@ -66,21 +66,25 @@ func BenchmarkDelete(b *testing.B) {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
 
+				var initialRev int64
 				kine := newKineServer(ctx, b, &kineOptions{
 					backendType: backendType,
 					setup: func(ctx context.Context, tx *sql.Tx) error {
-						if err := insertMany(ctx, tx, "key", 100, b.N*2); err != nil {
+						if lastRev, err := insertMany(ctx, tx, "key", 100, b.N*2); err != nil {
 							return err
+						} else {
+							initialRev = lastRev - int64(b.N)*2
+							return nil
 						}
-						return nil
 					},
 				})
 				wg := &sync.WaitGroup{}
 				run := func(start int) {
 					defer wg.Done()
 					for i := start; i < b.N; i += workers {
-						key := fmt.Sprintf("key/%d", i)
-						deleteKey(ctx, g, kine.client, key)
+						keyId := int64(i + 1)
+						key := fmt.Sprintf("key/%d", keyId)
+						deleteKey(ctx, g, kine.client, key, initialRev+keyId)
 					}
 				}
 
@@ -104,10 +108,12 @@ func assertMissingKey(ctx context.Context, g Gomega, client *clientv3.Client, ke
 	g.Expect(resp.Kvs).To(HaveLen(0))
 }
 
-func deleteKey(ctx context.Context, g Gomega, client *clientv3.Client, key string) int64 {
+func deleteKey(ctx context.Context, g Gomega, client *clientv3.Client, key string, revision int64) int64 {
 	// The Get before the Delete is to trick kine to accept the transaction
 	resp, err := client.Txn(ctx).
-		Then(clientv3.OpGet(key), clientv3.OpDelete(key)).
+		If(clientv3.Compare(clientv3.ModRevision(key), "=", revision)).
+		Then(clientv3.OpDelete(key)).
+		Else(clientv3.OpGet(key)).
 		Commit()
 
 	g.Expect(err).To(BeNil())
