@@ -319,7 +319,10 @@ func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig
 				? AS name,
 				0 AS created,
 				0 AS deleted,
-				create_revision,
+				CASE 
+					WHEN kine.created THEN id
+					ELSE create_revision
+				END AS create_revision,
 				id AS prev_revision,
 				? AS lease,
 				? AS value,
