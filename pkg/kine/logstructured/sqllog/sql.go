@@ -590,6 +590,10 @@ func scan(rows *sql.Rows, event *server.Event) error {
 	if event.Create {
 		event.KV.CreateRevision = event.KV.ModRevision
 		event.PrevKV = nil
+	} else {
+		event.PrevKV.Key = event.KV.Key
+		event.PrevKV.CreateRevision = event.KV.CreateRevision
+		event.PrevKV.Lease = event.KV.Lease
 	}
 
 	return nil

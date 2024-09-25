@@ -111,6 +111,7 @@ func toEvent(event *Event) *mvccpb.Event {
 	}
 	if event.Delete {
 		e.Type = mvccpb.DELETE
+		e.Kv.Value = nil
 	} else {
 		e.Type = mvccpb.PUT
 	}
