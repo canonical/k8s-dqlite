@@ -8,15 +8,15 @@ The following configuration options are available listed in a table format:
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `--storage-dir` | The directory to store the dqlite data | `/var/snap/k8s-dqlite/` |
+| `--storage-dir` | The directory to store the dqlite data | `/var/tmp/k8s-dqlite/` |
 | `--listen` | The endpoint where dqlite should listen to | `tcp://127.0.0.1:12379` |
 | `--enable-tls` | Enable TLS | `true` |
 | `--debug` | Enable debug logs | `false` |
 | `--profiling` | Enable debug pprof endpoint | `false` |
 | `--profiling-listen` | The address to listen for pprof endpoint | `127.0.0.1:4000` |
-| `--disk-mode` | Run dqlite store in disk mode | `false` |
+| `--disk-mode` | (Experimental) Run dqlite store in disk mode | `false` |
 | `--tls-client-session-cache-size` | ClientCacheSession size for dial TLS config | `0` |
-| `--min-tls-version` | Minimum TLS version for dqlite endpoint | `tls12` |
+| `--min-tls-version` | Minimum TLS version for dqlite endpoint supported values: (tls10, tls11, tls12, tls13) | `tls12` |
 | `--metrics` | Enable metrics endpoint | `false` |
 | `--otel` | Enable traces endpoint | `false` |
 | `--otel-listen` | The address to listen for OpenTelemetry endpoint | `127.0.0.1:4317` |
@@ -26,7 +26,7 @@ The following configuration options are available listed in a table format:
 | `--datastore-connection-max-lifetime` | Maximum amount of time a connection may be reused | `60s` |
 | `--datastore-connection-max-idle-time` | Maximum amount of time a connection may be idle before being closed | `0s` |
 | `--watch-storage-available-size-interval` | Interval to check if the disk is running low on space | `5s` |
-| `--watch-storage-available-size-min-bytes` | Minimum required available disk size (in bytes) to continue operation | `10MB` |
+| `--watch-storage-available-size-min-bytes` | Minimum required available disk size (in bytes) to continue operation | `10*1024*1024`|
 | `--low-available-storage-action` | Action to perform in case the available storage is low | `none` |
 | `--admission-control-policy` | Transaction admission control policy to use | `allow-all` |
 | `--admission-control-policy-limit` | Maximum number of transactions that are allowed to run concurrently | `300` |
@@ -51,10 +51,10 @@ The connection pool configuration options are available to control the connectio
 - [SetConnMaxIdleTime](https://pkg.go.dev/database/sql#DB.SetConnMaxIdleTime)
 - [SetConnMaxLifetime](https://pkg.go.dev/database/sql#DB.SetConnMaxLifetime)
 
-We recommend allowing at least two maximum open connections to dqlite. For larger clusters with more than 5 nodes,
-you may need to increase the maximum open connections to dqlite.
+We recommend allowing at least two maximum open connections to dqlite. For larger clusters,
+you may find it advantageous to increase the maximum open connections to dqlite.
 
-## Changing the default configuration
+## Changing the Default Configuration
 
 It is possible to change the default configuration of k8s-dqlite by editing the configuration file and restarting the service.
 
@@ -69,7 +69,7 @@ sudo snap restart microk8s.daemon-k8s-dqlite
 
 ### Canonical Kubernetes
 
-For Canonical Kubernetes, you can edit `TODO` and restart k8s-dqlite via:
+For Canonical Kubernetes, you can edit `/var/snap/k8s/common/args/k8s-dqlite` and restart k8s-dqlite via:
 
 ```
 sudo snap restart snap.k8s.k8s-dqlite
