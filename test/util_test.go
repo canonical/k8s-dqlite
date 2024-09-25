@@ -190,7 +190,7 @@ func (ks *kineServer) ResetMetrics() {
 	}
 }
 
-func insertMany(ctx context.Context, tx *sql.Tx, prefix string, valueSize, n int) error {
+func insertMany(ctx context.Context, tx *sql.Tx, prefix string, valueSize, n int) (int64, error) {
 	insertManyQuery := `
 WITH RECURSIVE gen_id AS(
 	SELECT 1 AS id
@@ -209,11 +209,14 @@ INSERT INTO kine(
 )
 SELECT id + revision.base, ?||'/'||id, 1, 0, id + revision.base, 0, 0, randomblob(?), NULL
 FROM gen_id, revision`
-	_, err := tx.ExecContext(ctx, insertManyQuery, n, prefix, valueSize)
-	return err
+	result, err := tx.ExecContext(ctx, insertManyQuery, n, prefix, valueSize)
+	if err != nil {
+		return 0, err
+	}
+	return result.LastInsertId()
 }
 
-func updateMany(ctx context.Context, tx *sql.Tx, prefix string, valueSize, n int) error {
+func updateMany(ctx context.Context, tx *sql.Tx, prefix string, valueSize, n int) (int64, error) {
 	updateManyQuery := `
 INSERT INTO kine(
 	name, created, deleted, create_revision, prev_revision, lease, value, old_value
@@ -229,11 +232,15 @@ JOIN (
 WHERE kv.deleted = 0
 ORDER BY kv.name
 LIMIT ?`
-	_, err := tx.ExecContext(ctx, updateManyQuery, valueSize, prefix, prefix, n)
-	return err
+	result, err := tx.ExecContext(ctx, updateManyQuery, valueSize, prefix, prefix, n)
+	if err != nil {
+		return 0, err
+	}
+	return result.LastInsertId()
+
 }
 
-func deleteMany(ctx context.Context, tx *sql.Tx, prefix string, n int) error {
+func deleteMany(ctx context.Context, tx *sql.Tx, prefix string, n int) (int64, error) {
 	const deleteManyQuery = `
 INSERT INTO kine(
 	name, created, deleted, create_revision, prev_revision, lease, value, old_value
@@ -249,6 +256,9 @@ JOIN (
 WHERE kv.deleted = 0
 ORDER BY kv.name
 LIMIT ?`
-	_, err := tx.ExecContext(ctx, deleteManyQuery, prefix, prefix, n)
-	return err
+	result, err := tx.ExecContext(ctx, deleteManyQuery, prefix, prefix, n)
+	if err != nil {
+		return 0, err
+	}
+	return result.LastInsertId()
 }

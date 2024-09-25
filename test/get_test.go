@@ -101,7 +101,7 @@ func TestGet(t *testing.T) {
 				key := "testKeyFailNotFound"
 
 				// Delete key
-				deleteKey(ctx, g, kine.client, key)
+				deleteKey(ctx, g, kine.client, key, 0)
 
 				// Get key
 				resp, err := kine.client.Get(ctx, key, clientv3.WithRange(""))
@@ -125,10 +125,10 @@ func BenchmarkGet(b *testing.B) {
 			kine := newKineServer(ctx, b, &kineOptions{
 				backendType: backendType,
 				setup: func(ctx context.Context, tx *sql.Tx) error {
-					if err := insertMany(ctx, tx, "testKey", 100, b.N*2); err != nil {
+					if _, err := insertMany(ctx, tx, "testKey", 100, b.N*2); err != nil {
 						return err
 					}
-					if err := updateMany(ctx, tx, "testKey", 100, b.N); err != nil {
+					if _, err := updateMany(ctx, tx, "testKey", 100, b.N); err != nil {
 						return err
 					}
 					return nil

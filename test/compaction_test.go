@@ -22,13 +22,13 @@ func TestCompaction(t *testing.T) {
 				kine := newKineServer(ctx, t, &kineOptions{
 					backendType: backendType,
 					setup: func(ctx context.Context, tx *sql.Tx) error {
-						if err := insertMany(ctx, tx, "key", 100, 2); err != nil {
+						if _, err := insertMany(ctx, tx, "key", 100, 2); err != nil {
 							return err
 						}
-						if err := updateMany(ctx, tx, "key", 100, 1); err != nil {
+						if _, err := updateMany(ctx, tx, "key", 100, 1); err != nil {
 							return err
 						}
-						if err := deleteMany(ctx, tx, "key", 1); err != nil {
+						if _, err := deleteMany(ctx, tx, "key", 1); err != nil {
 							return err
 						}
 						return nil
@@ -55,13 +55,13 @@ func TestCompaction(t *testing.T) {
 				kine := newKineServer(ctx, t, &kineOptions{
 					backendType: backendType,
 					setup: func(ctx context.Context, tx *sql.Tx) error {
-						if err := insertMany(ctx, tx, "key", 100, 10_000); err != nil {
+						if _, err := insertMany(ctx, tx, "key", 100, 10_000); err != nil {
 							return err
 						}
-						if err := updateMany(ctx, tx, "key", 100, 500); err != nil {
+						if _, err := updateMany(ctx, tx, "key", 100, 500); err != nil {
 							return err
 						}
-						if err := deleteMany(ctx, tx, "key", 500); err != nil {
+						if _, err := deleteMany(ctx, tx, "key", 500); err != nil {
 							return err
 						}
 						return nil
@@ -109,10 +109,10 @@ func BenchmarkCompaction(b *testing.B) {
 					// that the deleted rows are about 5% of the total.
 					addCount := delCount * 20
 
-					if err := insertMany(ctx, tx, "key", 100, addCount); err != nil {
+					if _, err := insertMany(ctx, tx, "key", 100, addCount); err != nil {
 						return err
 					}
-					if err := deleteMany(ctx, tx, "key", delCount); err != nil {
+					if _, err := deleteMany(ctx, tx, "key", delCount); err != nil {
 						return err
 					}
 					return nil

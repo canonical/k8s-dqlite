@@ -86,8 +86,8 @@ func TestUpdate(t *testing.T) {
 			t.Run("UpdatedDeletedKeyFails", func(t *testing.T) {
 				g := NewWithT(t)
 
-				createKey(ctx, g, kine.client, "updateDeletedKey", "testValue4")
-				lastModRev := deleteKey(ctx, g, kine.client, "updateDeletedKey")
+				lastModRev := createKey(ctx, g, kine.client, "updateDeletedKey", "testValue4")
+				lastModRev = deleteKey(ctx, g, kine.client, "updateDeletedKey", lastModRev)
 
 				resp, err := kine.client.Txn(ctx).
 					If(clientv3.Compare(clientv3.ModRevision("updateDeletedKey"), "=", lastModRev)).
