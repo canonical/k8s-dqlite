@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"fmt"
 
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
 	"go.opentelemetry.io/otel/attribute"
@@ -24,7 +23,8 @@ func isCreate(txn *etcdserverpb.TxnRequest) *etcdserverpb.PutRequest {
 func (l *LimitedServer) create(ctx context.Context, put *etcdserverpb.PutRequest, txn *etcdserverpb.TxnRequest) (*etcdserverpb.TxnResponse, error) {
 	var err error
 	createCnt.Add(ctx, 1)
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.create", otelName))
+	const spanName = otelName + ".create"
+	ctx, span := otelTracer.Start(ctx, spanName)
 	defer func() {
 		span.RecordError(err)
 		span.End()

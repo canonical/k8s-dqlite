@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"sync"
 
 	"go.opentelemetry.io/otel"
@@ -36,7 +35,8 @@ func New(db *sql.DB) *DB {
 func (db *DB) Underlying() *sql.DB { return db.underlying }
 
 func (db *DB) ExecContext(ctx context.Context, query string, args ...any) (result sql.Result, err error) {
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.ExecContext", otelName))
+	const spanName = otelName + ".ExecContext"
+	ctx, span := otelTracer.Start(ctx, spanName)
 	defer func() {
 		span.RecordError(err)
 		span.End()
@@ -50,7 +50,8 @@ func (db *DB) ExecContext(ctx context.Context, query string, args ...any) (resul
 }
 
 func (db *DB) QueryContext(ctx context.Context, query string, args ...any) (rows *sql.Rows, err error) {
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.QueryContext", otelName))
+	const spanName = otelName + ".QueryContext"
+	ctx, span := otelTracer.Start(ctx, spanName)
 	defer func() {
 		span.RecordError(err)
 		span.End()
@@ -84,7 +85,8 @@ func (db *DB) Close() error {
 }
 
 func (db *DB) prepare(ctx context.Context, query string) (stmt *sql.Stmt, err error) {
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.prepare", otelName))
+	const spanName = otelName + ".prepare"
+	ctx, span := otelTracer.Start(ctx, spanName)
 	defer func() {
 		span.RecordError(err)
 		span.End()

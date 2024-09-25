@@ -73,7 +73,8 @@ func (l *LogStructured) Wait() {
 }
 
 func (l *LogStructured) Get(ctx context.Context, key, rangeEnd string, limit, revision int64) (revRet int64, kvRet *server.KeyValue, errRet error) {
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Get", otelName))
+	const spanName = otelName + ".Get"
+	ctx, span := otelTracer.Start(ctx, spanName)
 	span.SetAttributes(
 		attribute.String("key", key),
 		attribute.String("rangeEnd", rangeEnd),
@@ -97,7 +98,8 @@ func (l *LogStructured) Get(ctx context.Context, key, rangeEnd string, limit, re
 
 func (l *LogStructured) get(ctx context.Context, key, rangeEnd string, limit, revision int64, includeDeletes bool) (int64, *server.Event, error) {
 	var err error
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.get", otelName))
+	const spanName = otelName + ".get"
+	ctx, span := otelTracer.Start(ctx, spanName)
 	defer func() {
 		span.RecordError(err)
 		span.End()
@@ -138,7 +140,8 @@ func (l *LogStructured) adjustRevision(ctx context.Context, rev *int64) {
 }
 
 func (l *LogStructured) Create(ctx context.Context, key string, value []byte, lease int64) (rev int64, err error) {
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Create", otelName))
+	const spanName = otelName + ".Create"
+	ctx, span := otelTracer.Start(ctx, spanName)
 	defer span.End()
 	rev, err = l.log.Create(ctx, key, value, lease)
 	logrus.Debugf("CREATE %s, size=%d, lease=%d => rev=%d, err=%v", key, len(value), lease, rev, err)
@@ -146,7 +149,8 @@ func (l *LogStructured) Create(ctx context.Context, key string, value []byte, le
 }
 
 func (l *LogStructured) Delete(ctx context.Context, key string, revision int64) (revRet int64, kvRet *server.KeyValue, deletedRet bool, errRet error) {
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Delete", otelName))
+	const spanName = otelName + ".Delete"
+	ctx, span := otelTracer.Start(ctx, spanName)
 
 	defer func() {
 		l.adjustRevision(ctx, &revRet)
@@ -204,7 +208,8 @@ func (l *LogStructured) Delete(ctx context.Context, key string, revision int64) 
 }
 
 func (l *LogStructured) List(ctx context.Context, prefix, startKey string, limit, revision int64) (revRet int64, kvRet []*server.KeyValue, errRet error) {
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.List", otelName))
+	const spanName = otelName + ".List"
+	ctx, span := otelTracer.Start(ctx, spanName)
 
 	defer func() {
 		logrus.Debugf("LIST %s, start=%s, limit=%d, rev=%d => rev=%d, kvs=%d, err=%v", prefix, startKey, limit, revision, revRet, len(kvRet), errRet)
@@ -246,7 +251,8 @@ func (l *LogStructured) List(ctx context.Context, prefix, startKey string, limit
 }
 
 func (l *LogStructured) Count(ctx context.Context, prefix, startKey string, revision int64) (revRet int64, count int64, err error) {
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Count", otelName))
+	const spanName = otelName + ".Count"
+	ctx, span := otelTracer.Start(ctx, spanName)
 	defer func() {
 		logrus.Debugf("COUNT prefix=%s startKey=%s => rev=%d, count=%d, err=%v", prefix, startKey, revRet, count, err)
 		span.SetAttributes(
@@ -277,7 +283,8 @@ func (l *LogStructured) Count(ctx context.Context, prefix, startKey string, revi
 }
 
 func (l *LogStructured) Update(ctx context.Context, key string, value []byte, revision, lease int64) (revRet int64, updateRet bool, errRet error) {
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Update", otelName))
+	const spanName = otelName + ".Update"
+	ctx, span := otelTracer.Start(ctx, spanName)
 	defer func() {
 		logrus.Debugf("UPDATE %s, value=%d, rev=%d, lease=%v => rev=%d, updated=%v, err=%v", key, len(value), revision, lease, revRet, updateRet, errRet)
 		span.SetAttributes(
@@ -360,7 +367,8 @@ func (l *LogStructured) ttl(ctx context.Context) {
 
 func (l *LogStructured) Watch(ctx context.Context, prefix string, revision int64) <-chan []*server.Event {
 	logrus.Debugf("WATCH %s, revision=%d", prefix, revision)
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Watch", otelName))
+	const spanName = otelName + ".Watch"
+	ctx, span := otelTracer.Start(ctx, spanName)
 	defer span.End()
 	span.SetAttributes(
 		attribute.String("prefix", prefix),

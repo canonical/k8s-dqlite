@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"fmt"
 
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
 	"go.opentelemetry.io/otel/attribute"
@@ -33,7 +32,8 @@ func (l *LimitedServer) update(ctx context.Context, rev int64, key string, value
 	)
 	updateCnt.Add(ctx, 1)
 
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.update", otelName))
+	const spanName = otelName + ".update"
+	ctx, span := otelTracer.Start(ctx, spanName)
 	defer func() {
 		span.RecordError(err)
 		span.End()
