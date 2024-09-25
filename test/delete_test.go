@@ -34,7 +34,16 @@ func TestDelete(t *testing.T) {
 			// Delete a key that does not exist
 			t.Run("NonExistentKeys", func(t *testing.T) {
 				g := NewWithT(t)
-				deleteKey(ctx, g, kine.client, "missingKey", 1)
+				key := "missing key"
+				rev := 0
+				resp, err := kine.client.Txn(ctx).
+					If(clientv3.Compare(clientv3.ModRevision(key), "=", rev)).
+					Then(clientv3.OpDelete(key)).
+					Else(clientv3.OpGet(key)).
+					Commit()
+
+				g.Expect(err).To(BeNil())
+				g.Expect(resp.Succeeded).To(BeFalse())
 			})
 
 			// Add a key, make sure it exists, then delete it, make sure it got deleted,

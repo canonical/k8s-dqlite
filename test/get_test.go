@@ -99,8 +99,11 @@ func TestGet(t *testing.T) {
 			t.Run("FailNotFound", func(t *testing.T) {
 				g := NewWithT(t)
 				key := "testKeyFailNotFound"
+				value := "testValue"
+
+				rev := createKey(ctx, g, kine.client, key, value)
 				// Delete key
-				deleteKey(ctx, g, kine.client, key, 0)
+				deleteKey(ctx, g, kine.client, key, rev)
 
 				// Get key
 				resp, err := kine.client.Get(ctx, key, clientv3.WithRange(""))
