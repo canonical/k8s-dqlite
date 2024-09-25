@@ -9,14 +9,6 @@ import (
 )
 
 func isDelete(txn *etcdserverpb.TxnRequest) (int64, string, bool) {
-	if len(txn.Compare) == 0 &&
-		len(txn.Failure) == 0 &&
-		len(txn.Success) == 2 &&
-		txn.Success[0].GetRequestRange() != nil &&
-		txn.Success[1].GetRequestDeleteRange() != nil {
-		rng := txn.Success[1].GetRequestDeleteRange()
-		return 0, string(rng.Key), true
-	}
 	if len(txn.Compare) == 1 &&
 		txn.Compare[0].Target == etcdserverpb.Compare_MOD &&
 		txn.Compare[0].Result == etcdserverpb.Compare_EQUAL &&
@@ -42,41 +34,44 @@ func (l *LimitedServer) delete(ctx context.Context, key string, revision int64) 
 		attribute.Int64("revision", revision),
 	)
 
-	rev, kv, ok, err := l.backend.Delete(ctx, key, revision)
+	rev, deleted, err := l.backend.Delete(ctx, key, revision)
 	if err != nil {
 		return nil, err
 	}
-	span.SetAttributes(attribute.Bool("ok", ok))
 
-	if !ok {
-		return &etcdserverpb.TxnResponse{
-			Header: txnHeader(rev),
-			Responses: []*etcdserverpb.ResponseOp{
-				{
-					Response: &etcdserverpb.ResponseOp_ResponseRange{
-						ResponseRange: &etcdserverpb.RangeResponse{
-							Header: txnHeader(rev),
-							Kvs:    toKVs(kv),
-						},
-					},
-				},
-			},
-			Succeeded: false,
-		}, nil
+	span.SetAttributes(attribute.Bool("deleted", deleted))
+
+	resp := &etcdserverpb.TxnResponse{
+		Header:    txnHeader(rev),
+		Succeeded: deleted,
 	}
 
-	return &etcdserverpb.TxnResponse{
-		Header: txnHeader(rev),
-		Responses: []*etcdserverpb.ResponseOp{
+	if deleted {
+		resp.Responses = []*etcdserverpb.ResponseOp{
 			{
 				Response: &etcdserverpb.ResponseOp_ResponseDeleteRange{
 					ResponseDeleteRange: &etcdserverpb.DeleteRangeResponse{
-						Header:  txnHeader(rev),
-						PrevKvs: toKVs(kv),
+						Header: txnHeader(rev),
 					},
 				},
 			},
-		},
-		Succeeded: true,
-	}, nil
+		}
+	} else {
+		rev, kv, err := l.backend.Get(ctx, key, "", 1, rev)
+		if err != nil {
+			return nil, err
+		}
+		resp.Responses = []*etcdserverpb.ResponseOp{
+			{
+				Response: &etcdserverpb.ResponseOp_ResponseRange{
+					ResponseRange: &etcdserverpb.RangeResponse{
+						Header: txnHeader(rev),
+						Kvs:    toKVs(kv),
+					},
+				},
+			},
+		}
+
+	}
+	return resp, nil
 }

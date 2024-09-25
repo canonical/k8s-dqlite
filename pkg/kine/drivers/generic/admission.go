@@ -28,6 +28,8 @@ const (
 var writeQueries = map[string]bool{
 	"update_compact_sql":        true,
 	"delete_sql":                true,
+	"update_sql":                true,
+	"delete_rev_sql":            true,
 	"fill_sql":                  true,
 	"insert_last_insert_id_sql": true,
 	"insert_sql":                true,
