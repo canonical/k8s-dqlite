@@ -88,7 +88,7 @@ To point the API server to `k8s-dqlite` use the following arguments:
 
 ## Highly Available Dqlite
 
-K8s-qdlite supports high availability by using the Raft protocol.
+K8s-dqlite supports high availability by using the Raft protocol.
 Below are the steps to set up a highly available dqlite cluster with 3 nodes.
 
 ### Steps
