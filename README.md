@@ -93,7 +93,15 @@ Below are the steps to set up a highly available dqlite cluster with 3 nodes.
 
 ### Steps
 
-1. On the main node, ensure that `k8s-dqlite` is listening to the default network interface.
+1. On the main node, verify that `k8s-dqlite` is listening on the correct IP address and port. You can check this by running:
+
+  ```
+  sudo ss -tuln | grep <the ip of the main node>:29001
+  ```
+
+  If `k8s-dqlite` is listening correctly, you should see an output indicating that
+  it's bound to the node's IP and port.
+
 2. On each joining node, prepare the environment:
    - Backup the dqlite data directory (`/var/data`).
    - Remove the existing the dqlite data directory.
