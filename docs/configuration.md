@@ -8,15 +8,15 @@ The following configuration options are available listed in a table format:
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `--storage-dir` | The directory to store the dqlite data | `/var/tmp/k8s-dqlite/` |
-| `--listen` | The endpoint where dqlite should listen to | `tcp://127.0.0.1:12379` |
+| `--storage-dir` | The directory to store the Dqlite data | `/var/tmp/k8s-dqlite/` |
+| `--listen` | The endpoint where Dqlite should listen to | `tcp://127.0.0.1:12379` |
 | `--enable-tls` | Enable TLS | `true` |
 | `--debug` | Enable debug logs | `false` |
 | `--profiling` | Enable debug pprof endpoint | `false` |
 | `--profiling-listen` | The address to listen for pprof endpoint | `127.0.0.1:4000` |
-| `--disk-mode` | (Experimental) Run dqlite store in disk mode | `false` |
+| `--disk-mode` | (Experimental) Run Dqlite store in disk mode | `false` |
 | `--tls-client-session-cache-size` | ClientCacheSession size for dial TLS config | `0` |
-| `--min-tls-version` | Minimum TLS version for dqlite endpoint supported values: (tls10, tls11, tls12, tls13) | `tls12` |
+| `--min-tls-version` | Minimum TLS version for Dqlite endpoint supported values: (tls10, tls11, tls12, tls13) | `tls12` |
 | `--metrics` | Enable metrics endpoint | `false` |
 | `--otel` | Enable traces endpoint | `false` |
 | `--otel-listen` | The address to listen for OpenTelemetry endpoint | `127.0.0.1:4317` |
@@ -39,20 +39,20 @@ The `metrics` endpoint allows you to view the metrics of the k8s-dqlite layer wi
 With k8s-dqlite `v1.2.0` you will need to enable the `metrics` endpoint first before scraping the metrics.
 
 Starting with k8s-dqlite `v1.2.0`, [Otel](https://opentelemetry.io/) can be used to gather insights on
-traces on queries to dqlite using a tool like Jaeger.
+traces on queries to Dqlite using a tool like Jaeger.
 To gather insights on traces locally, you can start the Jaeger all-in-one container by running the script under `k8s-dqlite/hack/jaeger.sh` and navigate to `http://localhost:16686`.
 
 ## Connection Pool Configuration
 
-The connection pool configuration options are available to control the connections to dqlite:
+The connection pool configuration options are available to control the connections to Dqlite:
 
 - [SetMaxOpenConns](https://pkg.go.dev/database/sql#DB.SetMaxOpenConns)
 - [SetMaxIdleConns](https://pkg.go.dev/database/sql#DB.SetMaxIdleConns)
 - [SetConnMaxIdleTime](https://pkg.go.dev/database/sql#DB.SetConnMaxIdleTime)
 - [SetConnMaxLifetime](https://pkg.go.dev/database/sql#DB.SetConnMaxLifetime)
 
-We recommend allowing at least two maximum open connections to dqlite. For larger clusters,
-you may find it advantageous to increase the maximum open connections to dqlite.
+We recommend allowing at least two maximum open connections to Dqlite. For larger clusters,
+you may find it advantageous to increase the maximum open connections to Dqlite.
 
 ## Changing the Default Configuration
 

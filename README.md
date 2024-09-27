@@ -3,18 +3,18 @@
 This project is a drop in replacement for etcd on Kubernetes.
 
 If you're looking for a lightweight, distributed, and in-memory database to replace etcd
-in your K8s cluster, dqlite might be the solution for you.
+in your K8s cluster, Dqlite might be the solution for you.
 
 ## Key Features
 
-- Distributed SQlite: Uses dqlite as the backend
+- Distributed SQlite: Uses Dqlite as the backend
 - In-memory: Efficient and fast
 - High Availability: Built-in high availabilty with Raft
 - Minimal operations: Designed to be almost zero ops
 
 ## Building
 
-`k8s-dqlite` links with [`dqlite`](https://github.com/canonical/dqlite). To build the project, you can create static and dynamic binaries:
+`k8s-dqlite` links with [`Dqlite`](https://github.com/canonical/dqlite). To build the project, you can create static and dynamic binaries:
 
 ### Static Build (Recommended)
 
@@ -25,7 +25,7 @@ make static
 
 ### Dynamic Build
 
-If you prefer dynamic binaries (which require dqlite shared libraries and dependencies to be present during runtime), use the following commands:
+If you prefer dynamic binaries (which require Dqlite shared libraries and dependencies to be present during runtime), use the following commands:
 
 ```
 make dynamic
@@ -47,7 +47,7 @@ IP="127.0.0.1"
 PORT="29001"
 DNS=$(/bin/hostname)
 
-# Create init.yaml with the dqlite listening address
+# Create init.yaml with the Dqlite listening address
 echo "Address: $IP:$PORT" > /var/data/init.yaml
 mkdir -p /var/tmp/
 
@@ -88,8 +88,8 @@ To point the API server to `k8s-dqlite` use the following arguments:
 
 ## Highly Available Dqlite
 
-K8s-dqlite supports high availability by using the Raft protocol.
-Below are the steps to set up a highly available dqlite cluster with 3 nodes.
+K8s-dqlite supports high availability by using the Raft protocol to achieve consensus through an elected leader.
+Below are the steps to set up a highly available Dqlite cluster with three nodes.
 
 ### Steps
 
@@ -103,8 +103,8 @@ Below are the steps to set up a highly available dqlite cluster with 3 nodes.
   it's bound to the node's IP and port.
 
 2. On each joining node, prepare the environment:
-   - Backup the dqlite data directory (`/var/data`).
-   - Remove the existing the dqlite data directory.
+   - Backup the Dqlite data directory (`/var/data`).
+   - Remove the existing the Dqlite data directory.
 3. Copy the `cluster.crt` and `cluster.key` from the main node and place it into the joining node's `/var/data`.
 4. Create the `init.yaml` file with the following content
 
@@ -120,7 +120,7 @@ Below are the steps to set up a highly available dqlite cluster with 3 nodes.
   k8s-dqlite --storage-dir=/var/data/
   ```
 
-6. On the main node, verify that the joining node is connected to the dqlite cluster.
+6. On the main node, verify that the joining node is connected to the Dqlite cluster.
 
   ```shell
   dqlite -s file:///var/data/cluster.yaml -c /var/data/cluster.crt -k /var/data/cluster.key -f json k8s .cluster
