@@ -242,6 +242,7 @@ type Generic struct {
 
 	LockWrites bool
 	DB         database.Interface
+	batch      *Batch
 	Retry      ErrRetry
 	ErrCode    ErrCode
 
@@ -318,8 +319,10 @@ func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig
 
 	configureConnectionPooling(connPoolConfig, db)
 
+	wrapped := database.NewPrepared(db)
 	return &Generic{
-		DB: database.NewPrepared(db),
+		DB:    wrapped,
+		batch: NewBatch(wrapped),
 	}, err
 }
 
@@ -387,12 +390,6 @@ func (d *Generic) execute(ctx context.Context, txName, query string, args ...int
 		attribute.String("tx_name", txName),
 	)
 
-	if d.LockWrites {
-		d.Lock()
-		defer d.Unlock()
-		span.AddEvent("acquired write lock")
-	}
-
 	start := time.Now()
 	retryCount := 0
 	defer func() {
@@ -407,7 +404,7 @@ func (d *Generic) execute(ctx context.Context, txName, query string, args ...int
 		} else {
 			logrus.Tracef("EXEC (try: %d) %v : %s", retryCount, args, Stripped(query))
 		}
-		result, err = d.DB.ExecContext(ctx, query, args...)
+		result, err = d.batch.ExecContext(ctx, query, args...)
 		if err == nil {
 			break
 		}
@@ -480,7 +477,6 @@ func (d *Generic) Update(ctx context.Context, key string, value []byte, preRev, 
 		span.End()
 	}()
 
-	updateCnt.Add(ctx, 1)
 	result, err := d.execute(ctx, "update_sql", updateSQL, key, ttl, value, key, preRev)
 	if err != nil {
 		logrus.WithError(err).Error("failed to update key")
