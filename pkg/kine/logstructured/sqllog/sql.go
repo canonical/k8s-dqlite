@@ -66,7 +66,7 @@ type Dialect interface {
 	AfterPrefix(ctx context.Context, prefix string, rev, limit int64) (*sql.Rows, error)
 	After(ctx context.Context, rev, limit int64) (*sql.Rows, error)
 	Insert(ctx context.Context, key string, create, delete bool, createRevision, previousRevision int64, ttl int64, value, prevValue []byte) (int64, error)
-	Create(ctx context.Context, key string, value []byte, lease int64) (int64, error)
+	Create(ctx context.Context, key string, value []byte, lease int64) (int64, bool, error)
 	Update(ctx context.Context, key string, value []byte, prevRev, lease int64) (int64, bool, error)
 	Delete(ctx context.Context, key string, revision int64) (int64, bool, error)
 	DeleteRevision(ctx context.Context, revision int64) error
@@ -534,14 +534,15 @@ func (s *SQLLog) Append(ctx context.Context, event *server.Event) (int64, error)
 	return rev, nil
 }
 
-func (s *SQLLog) Create(ctx context.Context, key string, value []byte, lease int64) (rev int64, err error) {
-	rev, err = s.d.Create(ctx, key, value, lease)
+func (s *SQLLog) Create(ctx context.Context, key string, value []byte, lease int64) (int64, bool, error) {
+	rev, created, err := s.d.Create(ctx, key, value, lease)
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
-
-	s.notifyWatcherPoll(rev)
-	return rev, nil
+	if created {
+		s.notifyWatcherPoll(rev)
+	}
+	return rev, created, nil
 }
 
 func (s *SQLLog) Delete(ctx context.Context, key string, revision int64) (rev int64, deleted bool, err error) {
