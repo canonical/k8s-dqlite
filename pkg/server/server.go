@@ -67,9 +67,6 @@ func New(
 	watchAvailableStorageInterval time.Duration,
 	watchAvailableStorageMinBytes uint64,
 	lowAvailableStorageAction string,
-	admissionControlPolicy string,
-	admissionControlPolicyLimitMaxConcurrentTxn int64,
-	admissionControlOnlyWriteQueries bool,
 	connectionPoolConfig generic.ConnectionPoolConfig,
 	watchQueryTimeout time.Duration,
 ) (*Server, error) {
@@ -274,9 +271,6 @@ func New(
 		params["poll-interval"] = []string{fmt.Sprintf("%v", *v)}
 	}
 
-	params["admission-control-policy"] = []string{admissionControlPolicy}
-	params["admission-control-policy-limit-max-concurrent-txn"] = []string{fmt.Sprintf("%v", admissionControlPolicyLimitMaxConcurrentTxn)}
-	params["admission-control-only-write-queries"] = []string{fmt.Sprintf("%v", admissionControlOnlyWriteQueries)}
 	params["watch-query-timeout"] = []string{fmt.Sprintf("%v", watchQueryTimeout)}
 
 	kineConfig.Listener = listen

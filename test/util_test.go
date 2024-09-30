@@ -36,7 +36,7 @@ type kineOptions struct {
 	backendType string
 
 	// endpointParameters can be used to configure kine parameters
-	// like admission-control-**.
+	// like watch-query-timeout.
 	endpointParameters []string
 
 	// setup is a function to setup the database before a test or

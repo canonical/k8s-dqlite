@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -26,10 +25,6 @@ type opts struct {
 	compactInterval   time.Duration
 	pollInterval      time.Duration
 	watchQueryTimeout time.Duration
-
-	admissionControlPolicy                      string
-	admissionControlPolicyLimitMaxConcurrentTxn int64
-	admissionControlOnlyWriteQueries            bool
 }
 
 func New(ctx context.Context, dataSourceName string, connectionPoolConfig *generic.ConnectionPoolConfig) (server.Backend, error) {
@@ -95,11 +90,6 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string, connecti
 	dialect.CompactInterval = opts.compactInterval
 	dialect.PollInterval = opts.pollInterval
 	dialect.WatchQueryTimeout = opts.watchQueryTimeout
-	dialect.AdmissionControlPolicy = generic.NewAdmissionControlPolicy(
-		opts.admissionControlPolicy,
-		opts.admissionControlOnlyWriteQueries,
-		opts.admissionControlPolicyLimitMaxConcurrentTxn,
-	)
 
 	if driverName == "sqlite3" {
 		dialect.Retry = func(err error) bool {
@@ -221,20 +211,6 @@ func parseOpts(dsn string) (opts, error) {
 				return opts{}, fmt.Errorf("failed to parse watch-query-timeout duration value %q: %w", vs[0], err)
 			}
 			result.watchQueryTimeout = d
-		case "admission-control-policy":
-			result.admissionControlPolicy = vs[0]
-		case "admission-control-policy-limit-max-concurrent-txn":
-			d, err := strconv.ParseInt(vs[0], 10, 64)
-			if err != nil {
-				return opts{}, fmt.Errorf("failed to parse max-concurrent-txn value %q: %w", vs[0], err)
-			}
-			result.admissionControlPolicyLimitMaxConcurrentTxn = d
-		case "admission-control-only-write-queries":
-			d, err := strconv.ParseBool(vs[0])
-			if err != nil {
-				return opts{}, fmt.Errorf("failed to parse admission-control-only-writes value %q: %w", vs[0], err)
-			}
-			result.admissionControlOnlyWriteQueries = d
 		default:
 			return opts{}, fmt.Errorf("unknown option %s=%v", k, vs)
 		}

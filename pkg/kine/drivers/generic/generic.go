@@ -156,8 +156,6 @@ type Generic struct {
 	TranslateErr          TranslateErr
 	ErrCode               ErrCode
 
-	AdmissionControlPolicy AdmissionControlPolicy
-
 	// CompactInterval is interval between database compactions performed by kine.
 	CompactInterval time.Duration
 	// PollInterval is the event poll interval used by kine.
@@ -352,7 +350,6 @@ func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig
 
 		FillSQL: q(`INSERT INTO kine(id, name, created, deleted, create_revision, prev_revision, lease, value, old_value)
 			VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`, paramCharacter, numbered),
-		AdmissionControlPolicy: &allowAllPolicy{},
 	}, err
 }
 
@@ -381,12 +378,6 @@ func (d *Generic) query(ctx context.Context, txName, query string, args ...inter
 	span.SetAttributes(
 		attribute.String("tx_name", txName),
 	)
-
-	done, err := d.AdmissionControlPolicy.Admit(ctx, txName)
-	if err != nil {
-		return nil, fmt.Errorf("denied: %w", err)
-	}
-	defer done()
 
 	start := time.Now()
 	retryCount := 0
@@ -425,12 +416,6 @@ func (d *Generic) execute(ctx context.Context, txName, query string, args ...int
 	span.SetAttributes(
 		attribute.String("tx_name", txName),
 	)
-
-	done, err := d.AdmissionControlPolicy.Admit(ctx, txName)
-	if err != nil {
-		return nil, fmt.Errorf("denied: %w", err)
-	}
-	defer done()
 
 	if d.LockWrites {
 		d.Lock()
@@ -708,12 +693,6 @@ func (d *Generic) GetCompactRevision(ctx context.Context) (int64, int64, error) 
 		span.End()
 	}()
 
-	done, err := d.AdmissionControlPolicy.Admit(ctx, "revision_interval_sql")
-	if err != nil {
-		return 0, 0, fmt.Errorf("denied: %w", err)
-	}
-	defer done()
-
 	rows, err := d.query(ctx, "revision_interval_sql", revisionIntervalSQL)
 	if err != nil {
 		return 0, 0, err
@@ -792,12 +771,6 @@ func (d *Generic) CurrentRevision(ctx context.Context) (int64, error) {
 		span.RecordError(err)
 		span.End()
 	}()
-
-	done, err := d.AdmissionControlPolicy.Admit(ctx, "rev_sql")
-	if err != nil {
-		return 0, fmt.Errorf("denied: %w", err)
-	}
-	defer done()
 
 	rows, err := d.query(ctx, "rev_sql", revSQL)
 	if err != nil {

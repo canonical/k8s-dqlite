@@ -28,9 +28,6 @@ The following configuration options are available listed in a table format:
 | `--watch-storage-available-size-interval` | Interval to check if the disk is running low on space | `5s` |
 | `--watch-storage-available-size-min-bytes` | Minimum required available disk size (in bytes) to continue operation | `10*1024*1024`|
 | `--low-available-storage-action` | Action to perform in case the available storage is low | `none` |
-| `--admission-control-policy` | Transaction admission control policy to use | `allow-all` |
-| `--admission-control-policy-limit` | Maximum number of transactions that are allowed to run concurrently | `300` |
-| `--admission-control-only-for-write-queries` | If set, admission control will only be applied to write queries | `false` |
 | `--watch-query-timeout` | Timeout for querying events in the watch poll loop | `20s` |
 
 ## Observability

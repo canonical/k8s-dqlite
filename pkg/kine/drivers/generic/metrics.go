@@ -24,10 +24,6 @@ var (
 		Name: "k8s_dqlite_generic_current_ops",
 		Help: "Total number of database operations that are currently running by tx_name",
 	}, []string{"tx_name"})
-	metricsOpAdmissionControl = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "k8s_dqlite_generic_op_admission_control",
-		Help: "Total number of database operations that the admission control handled by tx_name and result",
-	}, []string{"tx_name", "result"})
 )
 
 func errorToResultLabel(err error) string {
@@ -47,10 +43,6 @@ func recordOpResult(txName string, err error, startTime time.Time) {
 	metricsOpResult.WithLabelValues(txName, resultLabel).Inc()
 }
 
-func recordOpAdmissionControl(txName string, status string) {
-	metricsOpAdmissionControl.WithLabelValues(txName, status).Inc()
-}
-
 func incCurrentOps(txName string) {
 	metricsCurrentOps.WithLabelValues(txName).Inc()
 }
@@ -65,6 +57,5 @@ func init() {
 		metricsOpResult,
 		metricsOpLatency,
 		metricsCurrentOps,
-		metricsOpAdmissionControl,
 	)
 }
