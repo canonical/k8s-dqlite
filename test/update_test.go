@@ -107,7 +107,7 @@ func TestUpdate(t *testing.T) {
 // BenchmarkUpdate is a benchmark for the Update operation.
 func BenchmarkUpdate(b *testing.B) {
 	for _, backendType := range []string{endpoint.SQLiteBackend, endpoint.DQLiteBackend} {
-		for _, workers := range []int{1, 2, 4, 8, 16} {
+		for _, workers := range []int{1, 4, 16, 64, 128} {
 			b.Run(fmt.Sprintf("%s/%d-workers", backendType, workers), func(b *testing.B) {
 				b.StopTimer()
 				g := NewWithT(b)
