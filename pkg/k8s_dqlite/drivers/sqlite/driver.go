@@ -258,10 +258,9 @@ type Driver struct {
 }
 
 type DriverConfig struct {
-	DB         database.Interface
-	LockWrites bool
-	Retry      func(error) bool
-	ErrCode    func(error) string
+	DB      database.Interface
+	Retry   func(error) bool
+	ErrCode func(error) string
 }
 
 func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
@@ -424,12 +423,6 @@ func (d *Driver) execute(ctx context.Context, txName, query string, args ...inte
 		attribute.String("tx_name", txName),
 	)
 
-	if d.config.LockWrites {
-		d.mu.Lock()
-		defer d.mu.Unlock()
-		span.AddEvent("acquired write lock")
-	}
-
 	start := time.Now()
 	retryCount := 0
 	defer func() {
@@ -516,7 +509,6 @@ func (d *Driver) Update(ctx context.Context, key, value []byte, preRev, ttl int6
 		span.End()
 	}()
 
-	updateCnt.Add(ctx, 1)
 	result, err := d.execute(ctx, "update_sql", updateSQL, key, ttl, value, key, preRev)
 	if err != nil {
 		logrus.WithError(err).Error("failed to update key")
