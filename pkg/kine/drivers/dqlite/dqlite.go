@@ -40,7 +40,6 @@ func NewVariant(ctx context.Context, datasourceName string, connectionPoolConfig
 	if err := migrate(ctx, generic.DB.Underlying()); err != nil {
 		return nil, nil, errors.Wrap(err, "failed to migrate DB from sqlite")
 	}
-	generic.LockWrites = true
 	generic.Retry = func(err error) bool {
 		// get the inner-most error if possible
 		err = errors.Cause(err)

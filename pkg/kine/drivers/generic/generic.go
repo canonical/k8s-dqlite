@@ -224,6 +224,7 @@ type Generic struct {
 
 	LockWrites   bool
 	DB           *prepared.DB
+	batch        *Batch
 	Retry        ErrRetry
 	TranslateErr TranslateErr
 	ErrCode      ErrCode
@@ -234,11 +235,6 @@ type Generic struct {
 	PollInterval time.Duration
 	// WatchQueryTimeout is the timeout on the after query in the poll loop.
 	WatchQueryTimeout time.Duration
-
-	batchMu     sync.Mutex
-	batchCv     *sync.Cond
-	batchRunnig bool
-	batch       []*batchedChange
 }
 
 type ConnectionPoolConfig struct {
@@ -305,16 +301,12 @@ func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig
 	}
 
 	configureConnectionPooling(connPoolConfig, db)
+	wrappedDb := prepared.New(db)
 
-	if err != nil {
-		return nil, err
-	}
-
-	driver := &Generic{
-		DB: prepared.New(db),
-	}
-	driver.batchCv = sync.NewCond(&driver.batchMu)
-	return driver, err
+	return &Generic{
+		DB:    wrappedDb,
+		batch: NewBatch(wrappedDb),
+	}, err
 }
 
 func (d *Generic) Close() error {
@@ -381,12 +373,6 @@ func (d *Generic) execute(ctx context.Context, txName, query string, args ...int
 		attribute.String("tx_name", txName),
 	)
 
-	if d.LockWrites {
-		d.Lock()
-		defer d.Unlock()
-		span.AddEvent("acquired write lock")
-	}
-
 	start := time.Now()
 	retryCount := 0
 	defer func() {
@@ -401,7 +387,7 @@ func (d *Generic) execute(ctx context.Context, txName, query string, args ...int
 		} else {
 			logrus.Tracef("EXEC (try: %d) %v : %s", retryCount, args, Stripped(query))
 		}
-		result, err = d.DB.ExecContext(ctx, query, args...)
+		result, err = d.batch.ExecContext(ctx, query, args...)
 		if err == nil {
 			break
 		}
@@ -412,10 +398,6 @@ func (d *Generic) execute(ctx context.Context, txName, query string, args ...int
 
 	recordTxResult(txName, err)
 	return result, err
-}
-
-type executor interface {
-	ExecContext(ctx context.Context, query string, args ...any) (result sql.Result, err error)
 }
 
 func (d *Generic) Count(ctx context.Context, prefix, startKey string, revision int64) (int64, error) {
@@ -443,166 +425,24 @@ func (d *Generic) Count(ctx context.Context, prefix, startKey string, revision i
 	return id, err
 }
 
-func (d *Generic) execBatchedOperation(ctx context.Context, change *batchedChange) (rev int64, succeeded bool, err error) {
-	d.batchMu.Lock()
-	defer d.batchMu.Unlock()
+func (d *Generic) Create(ctx context.Context, key string, value []byte, ttl int64) (rev int64, succeeded bool, err error) {
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Create", otelName))
 
-	d.batch = append(d.batch, change)
-	stop := context.AfterFunc(ctx, func() {
-		d.batchMu.Lock()
-		defer d.batchMu.Unlock()
-
-		if !change.committed {
-			for i, c := range d.batch {
-				if c == change {
-					d.batch = append(d.batch[:i], d.batch[i+1:]...)
-					change.err = ctx.Err()
-					change.succeeded = false
-					change.committed = true
-					d.batchCv.Broadcast()
-					return
-				}
+	defer func() {
+		if err != nil {
+			if d.TranslateErr != nil {
+				err = d.TranslateErr(err)
 			}
+			span.RecordError(err)
 		}
-	})
-	defer stop()
-
-	if !d.batchRunnig {
-		d.batchRunnig = true
-		go d.execBatch(context.TODO())
-	}
-
-	for !change.committed {
-		d.batchCv.Wait()
-	}
-
-	return change.revision, change.succeeded, change.err
-}
-
-func (d *Generic) execBatch(ctx context.Context) {
-	d.batchMu.Lock()
-	defer d.batchMu.Unlock()
-
-	for len(d.batch) > 0 {
-		d.batchMu.Unlock()
-		d.execSingleBatch(ctx)
-		d.batchMu.Lock()
-	}
-
-	d.batchRunnig = false
-}
-
-func (d *Generic) execSingleBatch(ctx context.Context) {
-	defer d.batchCv.Broadcast()
-	book := func() []*batchedChange {
-		d.batchMu.Lock()
-		defer d.batchMu.Unlock()
-
-		batch := d.batch
-		d.batch = nil
-		return batch
-	}
-
-	retry := func(changes []*batchedChange) {
-		d.batchMu.Lock()
-		defer d.batchMu.Unlock()
-
-		d.batch = append(d.batch, changes...)
-	}
-
-	for i := 0; i < maxRetries; i++ {
-		batch := book()
-
-		switch len(batch) {
-		case 0:
-			return
-		case 1:
-			d.exec(ctx, d.DB, batch[0])
-			if batch[0].err == nil {
-				// Autocommit was on.
-				batch[0].committed = true
-				return
-			} else if d.Retry == nil || !d.Retry(batch[0].err) {
-				// In this case, if a query had a hard error,
-				// it doesn't make sense to retry it.
-				batch[0].committed = true
-				return
-			} else {
-				retry(batch)
-			}
-		default:
-			// FIXME it would be nice to have a `BEGIN IMMEDIATE` here,
-			// this way the database can never be busy after the transaction
-			// started...
-			tx, err := d.DB.BeginTx(ctx, nil)
-			if err != nil {
-				// TODO log
-				break
-			}
-			defer tx.Rollback()
-
-			for i, change := range batch {
-				d.exec(ctx, tx, change)
-				if change.err != nil {
-					if d.Retry == nil || !d.Retry(batch[0].err) {
-						// In this case, if a query had a hard error,
-						// it doesn't make sense to retry it, but the
-						// whole batch needs to be rolled back.
-						change.committed = true
-						retry(batch[:i])
-						retry(batch[i+1:])
-					} else {
-						// In this case we need to retry the whole batch
-						retry(batch)
-					}
-					if err := tx.Rollback(); err != nil {
-						logrus.WithError(err).Debug("cannot rollback transaction")
-					}
-					break
-				}
-			}
-			if err := tx.Commit(); err != nil {
-				logrus.WithError(err).Error("cannot commit transaction")
-			}
-			for _, change := range batch {
-				change.committed = true
-			}
-			return
-		}
-	}
-}
-
-func (d *Generic) exec(ctx context.Context, db executor, bc *batchedChange) {
-	switch bc.Type {
-	case batchCreate:
-		bc.revision, bc.succeeded, bc.err = d.create(ctx, db, bc.Key, bc.Value, bc.TTL)
-	case batchUpdate:
-		bc.revision, bc.succeeded, bc.err = d.update(ctx, db, bc.Key, bc.Value, bc.PrevRevision, bc.TTL)
-	default:
-		panic("WTF")
-	}
-	if d.TranslateErr != nil && bc.err != nil {
-		bc.err = d.TranslateErr(bc.err)
-	}
-}
-
-func (d *Generic) Create(ctx context.Context, key string, value []byte, ttl int64) (int64, bool, error) {
-	return d.execBatchedOperation(ctx, &batchedChange{
-		Type:  batchCreate,
-		Key:   key,
-		Value: value,
-		TTL:   ttl,
-	})
-}
-
-func (d *Generic) create(ctx context.Context, db executor, key string, value []byte, ttl int64) (int64, bool, error) {
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.create", otelName))
+		span.SetAttributes(attribute.Int64("revision", rev))
+		span.End()
+	}()
 	span.SetAttributes(
 		attribute.String("key", key),
 		attribute.Int64("ttl", ttl),
 	)
 	createCnt.Add(ctx, 1)
-	defer span.End()
 
 	result, err := d.execute(ctx, "create_sql", createSQL, key, ttl, value, key)
 	if err != nil {
@@ -614,56 +454,33 @@ func (d *Generic) create(ctx context.Context, db executor, key string, value []b
 	} else if insertCount == 0 {
 		return 0, false, nil
 	}
-
-	rev, err := result.LastInsertId()
-	if err != nil {
-		span.RecordError(err)
-		logrus.WithError(err).Error("failed to retrive inserted id")
-		return 0, false, err
-	}
-	span.SetAttributes(attribute.Int64("revision", rev))
+	rev, err = result.LastInsertId()
 	return rev, true, err
 }
 
-func (d *Generic) Update(ctx context.Context, key string, value []byte, preRev, ttl int64) (int64, bool, error) {
-	return d.execBatchedOperation(ctx, &batchedChange{
-		Type:         batchUpdate,
-		Key:          key,
-		Value:        value,
-		PrevRevision: preRev,
-		TTL:          ttl,
-	})
-}
-
-func (d *Generic) update(ctx context.Context, db executor, key string, value []byte, preRev, ttl int64) (int64, bool, error) {
+func (d *Generic) Update(ctx context.Context, key string, value []byte, preRev, ttl int64) (rev int64, updated bool, err error) {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Update", otelName))
-	span.SetAttributes(
-		attribute.String("key", key),
-		attribute.Int64("ttl", ttl),
-		attribute.Int64("prevRev", preRev),
-	)
-	defer span.End()
+	defer func() {
+		if err != nil {
+			if d.TranslateErr != nil {
+				err = d.TranslateErr(err)
+			}
+			span.RecordError(err)
+		}
+		span.End()
+	}()
 
-	result, err := db.ExecContext(ctx, updateSQL, key, ttl, value, key, preRev)
+	result, err := d.execute(ctx, "update_sql", updateSQL, key, ttl, value, key, preRev)
 	if err != nil {
+		logrus.WithError(err).Error("failed to update key")
 		return 0, false, err
 	}
-
 	if insertCount, err := result.RowsAffected(); err != nil {
-		span.RecordError(err)
-		logrus.WithError(err).Error("failed to update key")
 		return 0, false, err
 	} else if insertCount == 0 {
 		return 0, false, nil
 	}
-
-	rev, err := result.LastInsertId()
-	if err != nil {
-		span.RecordError(err)
-		logrus.WithError(err).Error("failed to retrive inserted id")
-		return 0, false, err
-	}
-	span.SetAttributes(attribute.Int64("revision", rev))
+	rev, err = result.LastInsertId()
 	return rev, true, err
 }
 
@@ -943,31 +760,4 @@ func (d *Generic) GetPollInterval() time.Duration {
 		return v
 	}
 	return time.Second
-}
-
-type batchedChangeType int
-
-const (
-	batchCreate batchedChangeType = iota + 1
-	batchUpdate
-	batchDelete
-)
-
-type batchedChange struct {
-	Type         batchedChangeType
-	Key          string
-	Value        []byte
-	TTL          int64
-	PrevRevision int64
-
-	committed bool
-	succeeded bool
-	revision  int64
-	err       error
-}
-
-func (bc *batchedChange) Exec(ctx context.Context, db executor) {
-	if bc.committed {
-		return
-	}
 }
