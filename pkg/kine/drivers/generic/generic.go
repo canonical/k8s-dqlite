@@ -655,15 +655,17 @@ func (d *Generic) exec(ctx context.Context, db executor, bc *batchedChange) {
 	switch bc.Type {
 	case batchCreate:
 		bc.revision, bc.succeeded, bc.err = d.create(ctx, db, bc.Key, bc.Value, bc.TTL)
+	case batchUpdate:
+		bc.revision, bc.succeeded, bc.err = d.update(ctx, db, bc.Key, bc.Value, bc.PrevRevision, bc.TTL)
 	default:
 		panic("WTF")
 	}
-	if d.TranslateErr != nil {
+	if d.TranslateErr != nil && bc.err != nil {
 		bc.err = d.TranslateErr(bc.err)
 	}
 }
 
-func (d *Generic) Create(ctx context.Context, key string, value []byte, ttl int64) (rev int64, created bool, err error) {
+func (d *Generic) Create(ctx context.Context, key string, value []byte, ttl int64) (int64, bool, error) {
 	return d.execBatchedOperation(ctx, &batchedChange{
 		Type:  batchCreate,
 		Key:   key,
@@ -672,21 +674,13 @@ func (d *Generic) Create(ctx context.Context, key string, value []byte, ttl int6
 	})
 }
 
-func (d *Generic) create(ctx context.Context, db executor, key string, value []byte, ttl int64) (rev int64, created bool, err error) {
+func (d *Generic) create(ctx context.Context, db executor, key string, value []byte, ttl int64) (int64, bool, error) {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.create", otelName))
 	span.SetAttributes(
 		attribute.String("key", key),
 		attribute.Int64("ttl", ttl),
 	)
-	defer func() {
-		if err != nil {
-			span.RecordError(err)
-			logrus.WithError(err).Error("failed to create key")
-		} else {
-			span.SetAttributes(attribute.Int64("revision", rev))
-		}
-		span.End()
-	}()
+	defer span.End()
 
 	result, err := db.ExecContext(ctx, d.CreateSQL, key, ttl, value, key)
 	if err != nil {
@@ -701,33 +695,55 @@ func (d *Generic) create(ctx context.Context, db executor, key string, value []b
 		return 0, false, nil
 	}
 
-	rev, err = result.LastInsertId()
+	rev, err := result.LastInsertId()
+	if err != nil {
+		span.RecordError(err)
+		logrus.WithError(err).Error("failed to retrive inserted id")
+		return 0, false, err
+	}
+	span.SetAttributes(attribute.Int64("revision", rev))
 	return rev, true, err
 }
 
-func (d *Generic) Update(ctx context.Context, key string, value []byte, preRev, ttl int64) (rev int64, updated bool, err error) {
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Update", otelName))
-	defer func() {
-		if err != nil {
-			if d.TranslateErr != nil {
-				err = d.TranslateErr(err)
-			}
-			span.RecordError(err)
-		}
-		span.End()
-	}()
+func (d *Generic) Update(ctx context.Context, key string, value []byte, preRev, ttl int64) (int64, bool, error) {
+	return d.execBatchedOperation(ctx, &batchedChange{
+		Type:         batchUpdate,
+		Key:          key,
+		Value:        value,
+		PrevRevision: preRev,
+		TTL:          ttl,
+	})
+}
 
-	result, err := d.execute(ctx, "update_sql", d.UpdateSQL, key, ttl, value, key, preRev)
+func (d *Generic) update(ctx context.Context, db executor, key string, value []byte, preRev, ttl int64) (int64, bool, error) {
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Update", otelName))
+	span.SetAttributes(
+		attribute.String("key", key),
+		attribute.Int64("ttl", ttl),
+		attribute.Int64("prevRev", preRev),
+	)
+	defer span.End()
+
+	result, err := db.ExecContext(ctx, d.UpdateSQL, key, ttl, value, key, preRev)
 	if err != nil {
-		logrus.WithError(err).Error("failed to update key")
 		return 0, false, err
 	}
+
 	if insertCount, err := result.RowsAffected(); err != nil {
+		span.RecordError(err)
+		logrus.WithError(err).Error("failed to update key")
 		return 0, false, err
 	} else if insertCount == 0 {
 		return 0, false, nil
 	}
-	rev, err = result.LastInsertId()
+
+	rev, err := result.LastInsertId()
+	if err != nil {
+		span.RecordError(err)
+		logrus.WithError(err).Error("failed to retrive inserted id")
+		return 0, false, err
+	}
+	span.SetAttributes(attribute.Int64("revision", rev))
 	return rev, true, err
 }
 
