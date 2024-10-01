@@ -51,8 +51,7 @@ jobs:
           TEST_LXD_IMAGE: ubuntu:24.04
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
         run: |
-          mkdir dir
-          git clone https://github.com/k8s-snap.git      
+          git clone https://github.com/canonical/k8s-snap.git      
           cd k8s-snap/tests/integration && sg lxd -c 'tox -e integration'
 
       - name: Prepare inspection reports
