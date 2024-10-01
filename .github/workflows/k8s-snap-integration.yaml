@@ -29,7 +29,7 @@ jobs:
           go-version: "1.21"
       - name: Download latest k8s-snap
         run: |
-          sudo snap install k8s --channel=latest/edge --classic
+          sudo snap download k8s --channel=latest/edge --basename k8s
       - name: Install lxd
         run: |
           sudo snap refresh lxd --channel 5.21/stable
@@ -39,14 +39,24 @@ jobs:
       - name: Build k8s-dqlite
         run: |
           make static  
-      - name: Swap out k8s-dqlite
+      # Unpack the snap and swap out the k8s-dqlite binary
+      - name: Unpack Snap
         run: |
-          sudo cp ./bin/static/k8s-dqlite /var/snap/k8s/common/var/lib/k8s-dqlite
-          # sudo chown root:root /var/snap/k8s/common/var/lib/k8s-dqlite
-          # sudo chmod 755 /var/snap/k8s/common/var/lib/k8s-dqlite   
+          sudo unsquashfs -d snap-unpack-dir k8s.snap
+
+      - name: Replace k8s-dqlite binary
+        run: |
+          # Ensure the target directory exists and copy the new binary
+          sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
+          sudo chmod +x snap-unpack-dir/bin/k8s-dqlite  # Ensure the binary is executable
+      - name: Repack Snap
+        run: |
+          sudo mksquashfs snap-unpack-dir k8s-updated.snap -noappend -comp xz
+          ls -a # TODO:rm
+
       - name: Running
         env:
-          TEST_SNAP: /var/snap/k8s/current
+          TEST_SNAP: ${{ github.workspace }}/k8s-updated.snap
           TEST_SUBSTRATE: lxd
           TEST_LXD_IMAGE: ubuntu:24.04
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
