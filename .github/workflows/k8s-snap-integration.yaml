@@ -2,6 +2,7 @@ name: Integration Test K8s-snap
 
 on:
   push:
+    # TODO:rm my branch
     branches: ["master", "KU-1213/k8s-snap-build"]
   pull_request:
 
@@ -40,9 +41,9 @@ jobs:
           make static  
       - name: Swap out k8s-dqlite
         run: |
-          sudo cp ./bin/static/k8s-dqlite /var/snap/k8s/current/bin/k8s-dqlite
-          sudo chown root:root /var/snap/k8s/current/bin/k8s-dqlite
-          sudo chmod 755 /var/snap/k8s/current/bin/k8s-dqlite   
+          sudo cp ./bin/static/k8s-dqlite /var/snap/k8s/common/var/lib/k8s-dqlite
+          # sudo chown root:root /var/snap/k8s/common/var/lib/k8s-dqlite
+          # sudo chmod 755 /var/snap/k8s/common/var/lib/k8s-dqlite   
       - name: Running
         env:
           TEST_SNAP: /var/snap/k8s/current
