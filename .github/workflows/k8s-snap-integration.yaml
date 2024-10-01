@@ -1,0 +1,67 @@
+name: Integration Test K8s-snap
+
+on:
+  push:
+    branches: ["master", "KU-1213/k8s-snap-build"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build K8-dqlite
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checking out repo
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.8'
+      - name: Install tox
+        run: pip install tox
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+      - name: Download latest k8s-snap
+        run: |
+          sudo snap install k8s --channel=latest/edge --classic
+      - name: Install lxd
+        run: |
+          sudo snap refresh lxd --channel 5.21/stable
+          sudo lxd init --auto
+          sudo usermod --append --groups lxd $USER
+          sg lxd -c 'lxc version'
+      - name: Build k8s-dqlite
+        run: |
+          make static  
+      - name: Swap out k8s-dqlite
+        run: |
+          sudo cp ./bin/static/k8s-dqlite /var/snap/k8s/current/bin/k8s-dqlite
+          sudo chown root:root /var/snap/k8s/current/bin/k8s-dqlite
+          sudo chmod 755 /var/snap/k8s/current/bin/k8s-dqlite   
+      - name: Running
+        env:
+          TEST_SNAP: /var/snap/k8s/current
+          TEST_SUBSTRATE: lxd
+          TEST_LXD_IMAGE: ubuntu:24.04
+          TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
+        run: |
+          mkdir dir
+          git clone https://github.com/k8s-snap.git      
+          cd k8s-snap/tests/integration && sg lxd -c 'tox -e integration'
+
+      - name: Prepare inspection reports
+        if: failure()
+        run: |
+          tar -czvf inspection-reports.tar.gz -C ${{ github.workspace }} inspection-reports
+      - name: Upload inspection report artifact
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: inspection-reports
+          path: ${{ github.workspace }}/inspection-reports.tar.gz
+    
