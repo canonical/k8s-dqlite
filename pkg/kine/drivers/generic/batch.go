@@ -107,8 +107,6 @@ func (b *Batch) run() {
 }
 
 func (b *Batch) execQueue(ctx context.Context, queue []*batchJob) {
-	// TODO limit batch duration
-	// TODO limit batch size
 	if len(queue) == 0 {
 		return // This should never happen.
 	}
@@ -120,7 +118,6 @@ func (b *Batch) execQueue(ctx context.Context, queue []*batchJob) {
 	}
 
 	transaction := func() error {
-		// TODO: this should be BEGIN IMMEDIATE
 		tx, err := b.db.BeginTx(ctx, nil)
 		if err != nil {
 			return err
@@ -128,16 +125,18 @@ func (b *Batch) execQueue(ctx context.Context, queue []*batchJob) {
 		defer tx.Rollback()
 
 		for _, q := range queue {
-			// FIXME:
 			// In the case of SQLITE_FULL SQLITE_IOERR SQLITE_BUSY SQLITE_NOMEM
-			// we should explicitly rollback the whole transaction. However, it
-			// is a bit unclear to me what to do next though as:
+			// we should explicitly rollback the whole transaction. In all the other
+			// cases, we could keep going with other queries. However, it is a bit
+			// unclear to me what to do next though as:
 			//  - SQLITE_FULL, SQLITE_IOERR mean that we have problems with the disk
 			//    so, even retrying the batch will not work. We might throttle the
 			//    max batch size, hoping in a checkpoint?
 			// - SQLITE_BUSY should never happen if we manage to get `IMMEDIATE`
-			//   transactions in.
-			// - SQLITE_NOMEM, again, we could throttle here?
+			//   transactions in. Otherwise it only affects the first statement.
+			// - SQLITE_NOMEM, again, we could throttle here? Call a gc collection?
+			// Given the points above, the code below always rolls back the whole
+			// batch. It might seem inefficient, but it should almost never happen.
 			if err := q.exec(ctx, tx); err != nil {
 				return err
 			}
