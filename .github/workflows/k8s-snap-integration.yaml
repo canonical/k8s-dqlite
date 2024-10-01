@@ -2,8 +2,7 @@ name: Integration Test K8s-snap
 
 on:
   push:
-    # TODO:rm my branch
-    branches: ["master", "KU-1213/k8s-snap-build"]
+    branches: ["master"]
   pull_request:
 
 permissions:
@@ -49,8 +48,6 @@ jobs:
       - name: Repack Snap
         run: |
           sudo mksquashfs snap-unpack-dir k8s-updated.snap -noappend -comp lzo -no-fragments
-          ls ${{ github.workspace }}/k8s-updated.snap
-          pwd # TODO:rm
       - name: Running
         env:
           TEST_SNAP: ${{ github.workspace }}/k8s-updated.snap
