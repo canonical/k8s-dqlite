@@ -39,10 +39,6 @@ var (
 		watchAvailableStorageMinBytes uint64
 		lowAvailableStorageAction     string
 
-		admissionControlPolicy   string
-		acpLimitMaxConcurrentTxn int64
-		acpOnlyWriteQueries      bool
-
 		etcdMode          bool
 		watchQueryTimeout time.Duration
 	}
@@ -108,9 +104,6 @@ var (
 				rootCmdOpts.watchAvailableStorageInterval,
 				rootCmdOpts.watchAvailableStorageMinBytes,
 				rootCmdOpts.lowAvailableStorageAction,
-				rootCmdOpts.admissionControlPolicy,
-				rootCmdOpts.acpLimitMaxConcurrentTxn,
-				rootCmdOpts.acpOnlyWriteQueries,
 				rootCmdOpts.connectionPoolConfig,
 				rootCmdOpts.watchQueryTimeout,
 			)
@@ -187,10 +180,6 @@ func init() {
 	rootCmd.Flags().DurationVar(&rootCmdOpts.watchAvailableStorageInterval, "watch-storage-available-size-interval", 5*time.Second, "Interval to check if the disk is running low on space. Set to 0 to disable the periodic disk size check")
 	rootCmd.Flags().Uint64Var(&rootCmdOpts.watchAvailableStorageMinBytes, "watch-storage-available-size-min-bytes", 10*1024*1024, "Minimum required available disk size (in bytes) to continue operation. If available disk space gets below this threshold, then the --low-available-storage-action is performed")
 	rootCmd.Flags().StringVar(&rootCmdOpts.lowAvailableStorageAction, "low-available-storage-action", "none", "Action to perform in case the available storage is low. One of (none|handover|terminate). none means no action is performed. handover means the dqlite node will handover its leadership role, if any. terminate means this dqlite node will shutdown")
-	rootCmd.Flags().StringVar(&rootCmdOpts.admissionControlPolicy, "admission-control-policy", "allow-all", "Transaction admission control policy to use. One of (allow-all|limit-concurrent-transactions). Set to allow-all to disable the admission control")
-	// TODO(MK-1408): This value is highly dependent on underlying hardware, thus making the default value a bit useless. The linked card will implement a dynamic way to set this value.
-	rootCmd.Flags().Int64Var(&rootCmdOpts.acpLimitMaxConcurrentTxn, "admission-control-policy-limit-max-concurrent-transactions", 300, "Maximum number of transactions that are allowed to run concurrently. Transactions will not be admitted after the limit is reached.")
-	rootCmd.Flags().BoolVar(&rootCmdOpts.acpOnlyWriteQueries, "admission-control-only-for-write-queries", false, "If set, admission control will only be applied to write queries.")
 	rootCmd.Flags().DurationVar(&rootCmdOpts.watchQueryTimeout, "watch-query-timeout", 20*time.Second, "Timeout for querying events in the watch poll loop. If timeout is reached, the poll loop will be re-triggered. The minimum value is 5 seconds.")
 
 	rootCmd.AddCommand(&cobra.Command{
