@@ -12,7 +12,7 @@ permissions:
 jobs:
   build:
     name: Build K8-dqlite
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
 
     steps:
       - name: Checking out repo
@@ -39,31 +39,28 @@ jobs:
       - name: Build k8s-dqlite
         run: |
           make static  
-      # Unpack the snap and swap out the k8s-dqlite binary
       - name: Unpack Snap
         run: |
           sudo unsquashfs -d snap-unpack-dir k8s.snap
-
       - name: Replace k8s-dqlite binary
         run: |
-          # Ensure the target directory exists and copy the new binary
           sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
-          sudo chmod +x snap-unpack-dir/bin/k8s-dqlite  # Ensure the binary is executable
+          sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
       - name: Repack Snap
         run: |
-          sudo mksquashfs snap-unpack-dir k8s-updated.snap -noappend -comp xz
-          ls -a # TODO:rm
-
+          sudo mksquashfs snap-unpack-dir k8s-updated.snap -noappend -comp lzo -no-fragments
+          ls ${{ github.workspace }}/k8s-updated.snap
+          pwd # TODO:rm
       - name: Running
         env:
           TEST_SNAP: ${{ github.workspace }}/k8s-updated.snap
           TEST_SUBSTRATE: lxd
-          TEST_LXD_IMAGE: ubuntu:24.04
+          TEST_LXD_IMAGE: ubuntu:22.04
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
+          TEST_VERSION_UPGRADE_CHANNELS: "recent 6 classic"
         run: |
           git clone https://github.com/canonical/k8s-snap.git      
           cd k8s-snap/tests/integration && sg lxd -c 'tox -e integration'
-
       - name: Prepare inspection reports
         if: failure()
         run: |
