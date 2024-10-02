@@ -54,7 +54,6 @@ jobs:
           TEST_SUBSTRATE: lxd
           TEST_LXD_IMAGE: ubuntu:22.04
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
-          TEST_VERSION_UPGRADE_CHANNELS: "recent 6 classic"
         run: |
           git clone https://github.com/canonical/k8s-snap.git      
           cd k8s-snap/tests/integration && sg lxd -c 'tox -e integration'
