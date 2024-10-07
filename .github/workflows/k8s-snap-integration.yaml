@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     name: Build K8-dqlite
@@ -19,7 +23,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.8'
+          python-version: "3.8"
       - name: Install tox
         run: pip install tox
       - name: Install Go
@@ -37,7 +41,7 @@ jobs:
           sg lxd -c 'lxc version'
       - name: Build k8s-dqlite
         run: |
-          make static  
+          make static
       - name: Unpack Snap
         run: |
           sudo unsquashfs -d snap-unpack-dir k8s.snap
@@ -67,4 +71,3 @@ jobs:
         with:
           name: inspection-reports
           path: ${{ github.workspace }}/inspection-reports.tar.gz
-    
