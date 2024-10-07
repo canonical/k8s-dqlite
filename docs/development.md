@@ -55,17 +55,15 @@ and connect to the Dqlite database.
 
 Follow the guide for MicroK8s steps 1-5 while changing the snap name to `k8s`.
 
-Step 5:
-Stop k8s-dqlite included in the snap:
+5. Stop k8s-dqlite included in the snap:
 
-    ```bash
+    ```
     sudo snap stop k8s.k8s-dqlite --disable
     ```
 
-Step 6:
-This step is different as it uses a different path for the storage directory and the listen address:
+6. This step is different as it uses a different path for the storage directory and the listen address:
 
-    ```bash
+    ```
     cd k8s-dqlite
     make static
     sudo ./bin/static/k8s-dqlite \
