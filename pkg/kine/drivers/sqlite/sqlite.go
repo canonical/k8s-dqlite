@@ -53,11 +53,11 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string, connecti
 	}
 	logrus.Printf("DriverName is %s.", driverName)
 
-	if dataSourceName == "" {
+	if opts.dsn == "" {
 		if err := os.MkdirAll("./db", 0700); err != nil {
 			return nil, nil, err
 		}
-		dataSourceName = "./db/state.db?_journal=WAL&cache=shared"
+		opts.dsn = "./db/state.db?_journal=WAL&_synchronous=FULL&_foreign_keys=1"
 	}
 
 	dialect, err := generic.Open(ctx, driverName, opts.dsn, connectionPoolConfig, "?", false)
@@ -212,7 +212,7 @@ func parseOpts(dsn string) (opts, error) {
 			}
 			result.watchQueryTimeout = d
 		default:
-			return opts{}, fmt.Errorf("unknown option %s=%v", k, vs)
+			continue
 		}
 		delete(values, k)
 	}
