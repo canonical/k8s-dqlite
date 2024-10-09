@@ -36,7 +36,7 @@ func New(db *sql.DB) *DB {
 func (db *DB) Underlying() *sql.DB { return db.underlying }
 
 func (db *DB) ExecContext(ctx context.Context, query string, args ...any) (result sql.Result, err error) {
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.ExecContext", otelName))
+	ctx, span := otelTracer.Start(ctx, "DB.ExecContext")
 	defer func() {
 		span.RecordError(err)
 		span.End()
@@ -50,7 +50,7 @@ func (db *DB) ExecContext(ctx context.Context, query string, args ...any) (resul
 }
 
 func (db *DB) QueryContext(ctx context.Context, query string, args ...any) (rows *sql.Rows, err error) {
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.QueryContext", otelName))
+	ctx, span := otelTracer.Start(ctx, "DB.QueryContext")
 	defer func() {
 		span.RecordError(err)
 		span.End()
