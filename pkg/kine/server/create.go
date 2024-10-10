@@ -21,7 +21,7 @@ func isCreate(txn *etcdserverpb.TxnRequest) *etcdserverpb.PutRequest {
 	return nil
 }
 
-func (l *LimitedServer) create(ctx context.Context, put *etcdserverpb.PutRequest, txn *etcdserverpb.TxnRequest) (*etcdserverpb.TxnResponse, error) {
+func (l *LimitedServer) create(ctx context.Context, put *etcdserverpb.PutRequest) (*etcdserverpb.TxnResponse, error) {
 	var err error
 	createCnt.Add(ctx, 1)
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.create", otelName))
@@ -42,16 +42,18 @@ func (l *LimitedServer) create(ctx context.Context, put *etcdserverpb.PutRequest
 		return nil, unsupported("prevKv")
 	}
 
-	rev, err := l.backend.Create(ctx, string(put.Key), put.Value, put.Lease)
+	rev, created, err := l.backend.Create(ctx, string(put.Key), put.Value, put.Lease)
+	if err != nil {
+		return nil, err
+	}
+
 	span.SetAttributes(attribute.Int64("revision", rev))
-	if err == ErrKeyExists {
+	if !created {
 		span.AddEvent("key exists")
 		return &etcdserverpb.TxnResponse{
 			Header:    txnHeader(rev),
 			Succeeded: false,
 		}, nil
-	} else if err != nil {
-		return nil, err
 	}
 
 	return &etcdserverpb.TxnResponse{
