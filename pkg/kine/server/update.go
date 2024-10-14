@@ -27,9 +27,9 @@ func isUpdate(txn *etcdserverpb.TxnRequest) (int64, string, []byte, int64, bool)
 
 func (l *LimitedServer) update(ctx context.Context, rev int64, key string, value []byte, lease int64) (*etcdserverpb.TxnResponse, error) {
 	var (
-		kv      *KeyValue
-		updated bool
-		err     error
+		kv        *KeyValue
+		succeeded bool
+		err       error
 	)
 	updateCnt.Add(ctx, 1)
 
@@ -45,29 +45,21 @@ func (l *LimitedServer) update(ctx context.Context, rev int64, key string, value
 	)
 
 	if rev == 0 {
-		rev, err = l.backend.Create(ctx, key, value, lease)
-		if err == ErrKeyExists {
-			return &etcdserverpb.TxnResponse{
-				Header:    txnHeader(rev),
-				Succeeded: false,
-			}, nil
-		} else {
-			updated = true
-		}
+		rev, succeeded, err = l.backend.Create(ctx, key, value, lease)
 	} else {
-		rev, updated, err = l.backend.Update(ctx, key, value, rev, lease)
+		rev, succeeded, err = l.backend.Update(ctx, key, value, rev, lease)
 	}
 	if err != nil {
 		return nil, err
 	}
-	span.SetAttributes(attribute.Bool("updated", updated), attribute.Int64("revision", rev))
+	span.SetAttributes(attribute.Bool("updated", succeeded), attribute.Int64("revision", rev))
 
 	resp := &etcdserverpb.TxnResponse{
 		Header:    txnHeader(rev),
-		Succeeded: updated,
+		Succeeded: succeeded,
 	}
 
-	if updated {
+	if succeeded {
 		resp.Responses = []*etcdserverpb.ResponseOp{
 			{
 				Response: &etcdserverpb.ResponseOp_ResponsePut{

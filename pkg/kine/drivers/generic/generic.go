@@ -7,11 +7,9 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/canonical/k8s-dqlite/pkg/kine/prepared"
-	"github.com/canonical/k8s-dqlite/pkg/kine/server"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
@@ -129,11 +127,9 @@ type TranslateErr func(error) error
 type ErrCode func(error) string
 
 type Generic struct {
-	sync.Mutex
-
-	LockWrites            bool
 	LastInsertID          bool
 	DB                    *prepared.DB
+	batch                 *Batch
 	GetCurrentSQL         string
 	RevisionSQL           string
 	ListRevisionStartSQL  string
@@ -244,9 +240,11 @@ func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig
 	}
 
 	configureConnectionPooling(connPoolConfig, db)
+	wrappedDb := prepared.New(db)
 
 	return &Generic{
-		DB: prepared.New(db),
+		DB:    wrappedDb,
+		batch: NewBatch(wrappedDb),
 
 		GetCurrentSQL:        q(fmt.Sprintf(listSQL, ""), paramCharacter, numbered),
 		ListRevisionStartSQL: q(fmt.Sprintf(listSQL, "AND mkv.id <= ?"), paramCharacter, numbered),
@@ -417,12 +415,6 @@ func (d *Generic) execute(ctx context.Context, txName, query string, args ...int
 		attribute.String("tx_name", txName),
 	)
 
-	if d.LockWrites {
-		d.Lock()
-		defer d.Unlock()
-		span.AddEvent("acquired write lock")
-	}
-
 	start := time.Now()
 	retryCount := 0
 	defer func() {
@@ -437,7 +429,7 @@ func (d *Generic) execute(ctx context.Context, txName, query string, args ...int
 		} else {
 			logrus.Tracef("EXEC (try: %d) %v : %s", retryCount, args, Stripped(query))
 		}
-		result, err = d.DB.ExecContext(ctx, query, args...)
+		result, err = d.batch.ExecContext(ctx, query, args...)
 		if err == nil {
 			break
 		}
@@ -508,7 +500,7 @@ func (d *Generic) Count(ctx context.Context, prefix, startKey string, revision i
 	return rev.Int64, id, err
 }
 
-func (d *Generic) Create(ctx context.Context, key string, value []byte, ttl int64) (rev int64, err error) {
+func (d *Generic) Create(ctx context.Context, key string, value []byte, ttl int64) (rev int64, succeeded bool, err error) {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Create", otelName))
 
 	defer func() {
@@ -529,16 +521,17 @@ func (d *Generic) Create(ctx context.Context, key string, value []byte, ttl int6
 	result, err := d.execute(ctx, "create_sql", d.CreateSQL, key, ttl, value, key)
 	if err != nil {
 		logrus.WithError(err).Error("failed to create key")
-		return 0, err
+		return 0, false, err
 	}
-
 	if insertCount, err := result.RowsAffected(); err != nil {
-		return 0, err
+		return 0, false, err
 	} else if insertCount == 0 {
-		return 0, server.ErrKeyExists
+		return 0, false, nil
 	}
-	return result.LastInsertId()
+	rev, err = result.LastInsertId()
+	return rev, true, err
 }
+
 func (d *Generic) Update(ctx context.Context, key string, value []byte, preRev, ttl int64) (rev int64, updated bool, err error) {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Update", otelName))
 	defer func() {
