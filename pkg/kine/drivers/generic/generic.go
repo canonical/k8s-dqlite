@@ -131,30 +131,27 @@ type ErrCode func(error) string
 type Generic struct {
 	sync.Mutex
 
-	LockWrites            bool
-	LastInsertID          bool
-	DB                    *prepared.DB
-	GetCurrentSQL         string
-	RevisionSQL           string
-	ListRevisionStartSQL  string
-	GetRevisionAfterSQL   string
-	CountCurrentSQL       string
-	CountRevisionSQL      string
-	AfterSQLPrefix        string
-	AfterSQL              string
-	DeleteRevSQL          string
-	CompactSQL            string
-	UpdateCompactSQL      string
-	DeleteSQL             string
-	InsertSQL             string
-	FillSQL               string
-	InsertLastInsertIDSQL string
-	CreateSQL             string
-	UpdateSQL             string
-	GetSizeSQL            string
-	Retry                 ErrRetry
-	TranslateErr          TranslateErr
-	ErrCode               ErrCode
+	LockWrites           bool
+	DB                   *prepared.DB
+	GetCurrentSQL        string
+	RevisionSQL          string
+	ListRevisionStartSQL string
+	GetRevisionAfterSQL  string
+	CountCurrentSQL      string
+	CountRevisionSQL     string
+	AfterSQLPrefix       string
+	AfterSQL             string
+	DeleteRevSQL         string
+	CompactSQL           string
+	UpdateCompactSQL     string
+	DeleteSQL            string
+	FillSQL              string
+	CreateSQL            string
+	UpdateSQL            string
+	GetSizeSQL           string
+	Retry                ErrRetry
+	TranslateErr         TranslateErr
+	ErrCode              ErrCode
 
 	// CompactInterval is interval between database compactions performed by kine.
 	CompactInterval time.Duration
@@ -287,12 +284,6 @@ func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig
 			UPDATE kine
 			SET prev_revision = max(prev_revision, ?)
 			WHERE name = 'compact_rev_key'`, paramCharacter, numbered),
-
-		InsertLastInsertIDSQL: q(`INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
-			VALUES(?, ?, ?, ?, ?, ?, ?, ?)`, paramCharacter, numbered),
-
-		InsertSQL: q(`INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
-			VALUES(?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`, paramCharacter, numbered),
 
 		DeleteSQL: q(`
 			INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
@@ -818,51 +809,6 @@ func (d *Generic) Fill(ctx context.Context, revision int64) error {
 
 func (d *Generic) IsFill(key string) bool {
 	return strings.HasPrefix(key, "gap-")
-}
-
-func (d *Generic) Insert(ctx context.Context, key string, create, delete bool, createRevision, previousRevision int64, ttl int64, value, prevValue []byte) (id int64, err error) {
-	if d.TranslateErr != nil {
-		defer func() {
-			if err != nil {
-				err = d.TranslateErr(err)
-			}
-		}()
-	}
-
-	cVal := 0
-	dVal := 0
-	if create {
-		cVal = 1
-	}
-	if delete {
-		dVal = 1
-	}
-
-	if d.LastInsertID {
-		row, err := d.execute(ctx, "insert_last_insert_id_sql", d.InsertLastInsertIDSQL, key, cVal, dVal, createRevision, previousRevision, ttl, value, prevValue)
-		if err != nil {
-			return 0, err
-		}
-		return row.LastInsertId()
-	}
-
-	rows, err := d.query(ctx, "insert_sql", d.InsertSQL, key, cVal, dVal, createRevision, previousRevision, ttl, value, prevValue)
-	if err != nil {
-		return 0, err
-	}
-	defer rows.Close()
-
-	if !rows.Next() {
-		if err := rows.Err(); err != nil {
-			return 0, err
-		}
-		return 0, sql.ErrNoRows
-	}
-
-	if err := rows.Scan(&id); err != nil {
-		return 0, err
-	}
-	return id, nil
 }
 
 func (d *Generic) GetSize(ctx context.Context) (int64, error) {
