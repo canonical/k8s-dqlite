@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/canonical/k8s-dqlite/pkg/kine/prepared"
-	"github.com/canonical/k8s-dqlite/pkg/kine/server"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
@@ -508,7 +507,7 @@ func (d *Generic) Count(ctx context.Context, prefix, startKey string, revision i
 	return rev.Int64, id, err
 }
 
-func (d *Generic) Create(ctx context.Context, key string, value []byte, ttl int64) (rev int64, err error) {
+func (d *Generic) Create(ctx context.Context, key string, value []byte, ttl int64) (rev int64, succeeded bool, err error) {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Create", otelName))
 
 	defer func() {
@@ -529,16 +528,17 @@ func (d *Generic) Create(ctx context.Context, key string, value []byte, ttl int6
 	result, err := d.execute(ctx, "create_sql", d.CreateSQL, key, ttl, value, key)
 	if err != nil {
 		logrus.WithError(err).Error("failed to create key")
-		return 0, err
+		return 0, false, err
 	}
-
 	if insertCount, err := result.RowsAffected(); err != nil {
-		return 0, err
+		return 0, false, err
 	} else if insertCount == 0 {
-		return 0, server.ErrKeyExists
+		return 0, false, nil
 	}
-	return result.LastInsertId()
+	rev, err = result.LastInsertId()
+	return rev, true, err
 }
+
 func (d *Generic) Update(ctx context.Context, key string, value []byte, preRev, ttl int64) (rev int64, updated bool, err error) {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Update", otelName))
 	defer func() {
