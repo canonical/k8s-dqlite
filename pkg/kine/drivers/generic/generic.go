@@ -29,8 +29,12 @@ var (
 	otelTracer       trace.Tracer
 	otelMeter        metric.Meter
 	compactCnt       metric.Int64Counter
+	compactBatchCnt  metric.Int64Counter
 	deleteRevCnt     metric.Int64Counter
 	deleteCnt        metric.Int64Counter
+	createCnt        metric.Int64Counter
+	updateCnt        metric.Int64Counter
+	fillCnt          metric.Int64Counter
 	currentRevCnt    metric.Int64Counter
 	getCompactRevCnt metric.Int64Counter
 )
@@ -43,11 +47,27 @@ func init() {
 	if err != nil {
 		logrus.WithError(err).Warning("Otel failed to create create counter")
 	}
+	compactBatchCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.compact_batch", otelName), metric.WithDescription("Number of compact batch requests"))
+	if err != nil {
+		logrus.WithError(err).Warning("Otel failed to create create counter")
+	}
 	deleteRevCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.delete_rev", otelName), metric.WithDescription("Number of delete revision requests"))
 	if err != nil {
 		logrus.WithError(err).Warning("Otel failed to create create counter")
 	}
+	createCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.create", otelName), metric.WithDescription("Number of create requests"))
+	if err != nil {
+		logrus.WithError(err).Warning("Otel failed to create create counter")
+	}
+	updateCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.update", otelName), metric.WithDescription("Number of update requests"))
+	if err != nil {
+		logrus.WithError(err).Warning("Otel failed to create create counter")
+	}
 	deleteCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.delete", otelName), metric.WithDescription("Number of delete requests"))
+	if err != nil {
+		logrus.WithError(err).Warning("Otel failed to create create counter")
+	}
+	fillCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.fill", otelName), metric.WithDescription("Number of fill requests"))
 	if err != nil {
 		logrus.WithError(err).Warning("Otel failed to create create counter")
 	}
@@ -516,6 +536,7 @@ func (d *Generic) Create(ctx context.Context, key string, value []byte, ttl int6
 		attribute.String("key", key),
 		attribute.Int64("ttl", ttl),
 	)
+	createCnt.Add(ctx, 1)
 
 	result, err := d.execute(ctx, "create_sql", d.CreateSQL, key, ttl, value, key)
 	if err != nil {
@@ -542,6 +563,7 @@ func (d *Generic) Update(ctx context.Context, key string, value []byte, preRev, 
 		span.End()
 	}()
 
+	updateCnt.Add(ctx, 1)
 	result, err := d.execute(ctx, "update_sql", d.UpdateSQL, key, ttl, value, key, preRev)
 	if err != nil {
 		logrus.WithError(err).Error("failed to update key")
@@ -623,6 +645,7 @@ func (d *Generic) tryCompact(ctx context.Context, start, end int64) (err error) 
 		span.End()
 	}()
 	span.SetAttributes(attribute.Int64("start", start), attribute.Int64("end", end))
+	compactBatchCnt.Add(ctx, 1)
 
 	tx, err := d.DB.BeginTx(ctx, nil)
 	if err != nil {
@@ -803,6 +826,7 @@ func (d *Generic) After(ctx context.Context, rev, limit int64) (*sql.Rows, error
 }
 
 func (d *Generic) Fill(ctx context.Context, revision int64) error {
+	fillCnt.Add(ctx, 1)
 	_, err := d.execute(ctx, "fill_sql", d.FillSQL, revision, fmt.Sprintf("gap-%d", revision), 0, 1, 0, 0, 0, nil, nil)
 	return err
 }
