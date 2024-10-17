@@ -52,7 +52,7 @@ func setupOTelSDK(ctx context.Context, otelEndpoint string) (shutdown func(conte
 	tracerProvider := newTraceProvider(traceExporter, res)
 	otel.SetTracerProvider(tracerProvider)
 
-	meterProvider, err := newMeterProvider(ctx, res, conn)
+	meterExporter, err := newMeterExporter(ctx, conn)
 	if err != nil {
 		var shutdownErrs error
 		shutdownErr := tracerProvider.Shutdown(ctx)
@@ -68,6 +68,7 @@ func setupOTelSDK(ctx context.Context, otelEndpoint string) (shutdown func(conte
 			return nil, fmt.Errorf("failed to create meter provider: %w", err)
 		}
 	}
+	meterProvider, err := newMeterProvider(meterExporter, res)
 	otel.SetMeterProvider(meterProvider)
 
 	shutdown = func(ctx context.Context) error {
@@ -120,12 +121,15 @@ func newTraceProvider(traceExporter trace.SpanExporter, res *resource.Resource) 
 	return traceProvider
 }
 
-func newMeterProvider(ctx context.Context, res *resource.Resource, conn *grpc.ClientConn) (*metric.MeterProvider, error) {
+func newMeterExporter(ctx context.Context, conn *grpc.ClientConn) (*otlpmetricgrpc.Exporter, error) {
 	metricExporter, err := otlpmetricgrpc.New(ctx, otlpmetricgrpc.WithGRPCConn(conn))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create metric exporter: %w", err)
 	}
+	return metricExporter, nil
+}
 
+func newMeterProvider(metricExporter *otlpmetricgrpc.Exporter, res *resource.Resource) (*metric.MeterProvider, error) {
 	meterProvider := sdkmetric.NewMeterProvider(
 		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(metricExporter)),
 		sdkmetric.WithResource(res),
