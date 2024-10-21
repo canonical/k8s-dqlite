@@ -40,7 +40,9 @@ With k8s-dqlite `v1.2.0` you will need to enable the `metrics` endpoint first be
 
 Starting with k8s-dqlite `v1.2.0`, [Otel](https://opentelemetry.io/) can be used to gather insights on
 traces on queries to Dqlite using a tool like Jaeger.
-To gather insights on traces locally, you can start the Jaeger all-in-one container by running the script under `k8s-dqlite/hack/jaeger.sh` and navigate to `http://localhost:16686`.
+To gather insights on traces and metrics locally, run `docker-compose up` in the `./hack/otel` directory.
+This sets up the Otel collector, Jaeger, and Prometheus. Navigate to `http://localhost:16686` to view the traces
+in Jaeger and to `http://localhost:9090` to view the metrics in Prometheus.
 
 ## Connection Pool Configuration
 
