@@ -1,0 +1,107 @@
+name: Performance Test K8s-snap
+
+on:
+  push:
+    branches: ["master", "KU-1866/performance-test"] #TODO rm test trigger
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BASE_SHA: ${{ github.before || github.event.pull_request.base.sha }}
+  BASE_BRANCH: ${{ github.base_ref || github.ref }}
+  TARGET_SHA: ${{ github.sha }}
+
+jobs:
+  build:
+    name: K8s-snap Performance Test
+    runs-on: [self-hosted, linux, X64, jammy, large]
+    strategy:
+      matrix:
+        dqlite: ["v1.16.7", "v1.17.0-rc1"]
+
+    steps:
+      - name: Checking out repo
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.8"
+      - name: Install tox
+        run: pip install tox
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+      - name: Install lxd
+        run: |
+          sudo snap refresh lxd --channel 5.21/stable
+          sudo lxd init --auto
+          sudo usermod --append --groups lxd $USER
+          sg lxd -c 'lxc version'
+      - name: Download latest k8s-snap
+        run: |
+          sudo snap download k8s --channel=latest/edge --basename k8s
+      - name: Set Dqlite version
+        run: |
+          sed -i 's/^TAG_DQLITE=.*$/TAG_DQLITE=\"${{ matrix.dqlite }}"/' hack/env.sh;
+      - name: Build k8s-dqlite
+        run: |
+          make static
+      - name: Unpack Snap
+        run: |
+          sudo unsquashfs -d snap-unpack-dir k8s.snap
+      - name: Replace k8s-dqlite binary
+        run: |
+          sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
+          sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
+      - name: Repack Snap
+        run: |
+          sudo mksquashfs snap-unpack-dir k8s-updated.snap -noappend -comp lzo -no-fragments
+      - name: Run Performance test
+        env:
+          TEST_SNAP: ${{ github.workspace }}/k8s-updated.snap
+          TEST_SUBSTRATE: lxd
+          TEST_LXD_IMAGE: ubuntu:22.04
+        run: |
+          echo "test"
+
+      - name: Download base code snap
+        run: |
+          sudo snap download k8s --channel=latest/edge --basename k8s
+      - name: Checkout base code
+        run: |
+          set -o pipefail
+          git fetch origin $BASE_BRANCH
+          git reset --hard $BASE_SHA
+
+      - name: Set Dqlite version
+        run: |
+          sed -i 's/^TAG_DQLITE=.*$/TAG_DQLITE=\"${{ matrix.dqlite }}"/' hack/env.sh;
+      - name: Build k8s-dqlite
+        run: |
+          make static
+      - name: Unpack Snap
+        run: |
+          sudo unsquashfs -d snap-unpack-dir k8s.snap
+      - name: Replace k8s-dqlite binary
+        run: |
+          sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
+          sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
+      - name: Repack Snap
+        run: |
+          sudo mksquashfs snap-unpack-dir k8s-base-code.snap -noappend -comp lzo -no-fragments
+
+      - name: Run Performance test for base code
+        env:
+          TEST_SNAP: ${{ github.workspace }}/k8s-base-code.snap
+          TEST_SUBSTRATE: lxd
+          TEST_LXD_IMAGE: ubuntu:22.04
+        run: |
+          echo "base code test"
+          git reset --hard $TARGET_SHA
