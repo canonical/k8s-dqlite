@@ -1,23 +1,14 @@
-package generic
+package database
 
 import (
 	"context"
 	"database/sql"
 	"sync"
-
-	"github.com/canonical/k8s-dqlite/pkg/kine/prepared"
 )
 
-type BatchConn interface {
+type Execer interface {
 	ExecContext(ctx context.Context, query string, args ...any) (result sql.Result, err error)
 }
-
-var _ BatchConn = &sql.DB{}
-var _ BatchConn = &sql.Tx{}
-var _ BatchConn = &sql.Conn{}
-
-var _ BatchConn = &prepared.DB{}
-var _ BatchConn = &prepared.Tx{}
 
 type batchStatus int
 
@@ -27,8 +18,9 @@ const (
 	batchRunning
 )
 
-type Batch struct {
-	db     *prepared.DB
+type batchedDb struct {
+	Interface
+
 	mu     sync.Mutex
 	cv     sync.Cond
 	status batchStatus
@@ -37,15 +29,15 @@ type Batch struct {
 	runId int64
 }
 
-func NewBatch(db *prepared.DB) *Batch {
-	b := &Batch{
-		db: db,
+func NewBatched(db Interface) Interface {
+	b := &batchedDb{
+		Interface: db,
 	}
 	b.cv.L = &b.mu
 	return b
 }
 
-func (b *Batch) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+func (b *batchedDb) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -76,11 +68,12 @@ func (b *Batch) ExecContext(ctx context.Context, query string, args ...any) (sql
 	return job, nil
 }
 
-// run starts a batching job which will run until queue exaustion.
-// run does not block other goroutine from enqueuing new jobs.
+// run starts the batching job if it has not already been started
+// which will run until queue exaustion. run does not block other
+// goroutine from enqueuing new jobs.
 //
-// It must be called while holding the mu lock.
-func (b *Batch) run() {
+// It must be called while holding the Batch's mu lock.
+func (b *batchedDb) run() {
 	if b.status == batchNotStarted {
 		b.status = batchStarted
 
@@ -106,19 +99,19 @@ func (b *Batch) run() {
 	}
 }
 
-func (b *Batch) execQueue(ctx context.Context, queue []*batchJob) {
+func (b *batchedDb) execQueue(ctx context.Context, queue []*batchJob) {
 	if len(queue) == 0 {
 		return // This should never happen.
 	}
 	if len(queue) == 1 {
 		// We don't need to address the error here as it will be
 		// handled by the goroutine waiting for this result
-		queue[0].exec(queue[0].ctx, b.db)
+		queue[0].exec(queue[0].ctx, b.Interface)
 		return
 	}
 
 	transaction := func() error {
-		tx, err := b.db.BeginTx(ctx, nil)
+		tx, err := b.BeginTx(ctx, nil)
 		if err != nil {
 			return err
 		}
@@ -165,11 +158,11 @@ type batchJob struct {
 
 var _ sql.Result = &batchJob{}
 
-func (bj *batchJob) exec(ctx context.Context, conn BatchConn) error {
+func (job *batchJob) exec(ctx context.Context, execer Execer) error {
 	select {
-	case <-bj.ctx.Done():
-		bj.err = bj.ctx.Err()
-		return bj.err
+	case <-job.ctx.Done():
+		job.err = job.ctx.Err()
+		return job.err
 	default:
 		// From this point on, the job is not interruptible anymore
 		// as interrupting would mean that we would be forced to
@@ -177,30 +170,30 @@ func (bj *batchJob) exec(ctx context.Context, conn BatchConn) error {
 	}
 
 	var result sql.Result
-	result, bj.err = conn.ExecContext(ctx, bj.query, bj.args...)
-	if bj.err != nil {
-		return bj.err
+	result, job.err = execer.ExecContext(ctx, job.query, job.args...)
+	if job.err != nil {
+		return job.err
 	}
 
-	bj.rowsAffected, bj.err = result.RowsAffected()
-	if bj.err != nil {
-		return bj.err
+	job.rowsAffected, job.err = result.RowsAffected()
+	if job.err != nil {
+		return job.err
 	}
 
-	bj.lastInsertId, bj.err = result.LastInsertId()
-	if bj.err != nil {
-		return bj.err
+	job.lastInsertId, job.err = result.LastInsertId()
+	if job.err != nil {
+		return job.err
 	}
 
 	return nil
 }
 
 // LastInsertId implements sql.Result.
-func (bj *batchJob) LastInsertId() (int64, error) {
-	return bj.lastInsertId, nil
+func (job *batchJob) LastInsertId() (int64, error) {
+	return job.lastInsertId, nil
 }
 
 // RowsAffected implements sql.Result.
-func (bj *batchJob) RowsAffected() (int64, error) {
-	return bj.rowsAffected, nil
+func (job *batchJob) RowsAffected() (int64, error) {
+	return job.rowsAffected, nil
 }

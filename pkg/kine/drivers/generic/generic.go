@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/canonical/k8s-dqlite/pkg/kine/prepared"
+	"github.com/canonical/k8s-dqlite/pkg/database"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
@@ -128,8 +128,7 @@ type ErrCode func(error) string
 
 type Generic struct {
 	LastInsertID          bool
-	DB                    *prepared.DB
-	batch                 *Batch
+	DB                    database.Interface
 	GetCurrentSQL         string
 	RevisionSQL           string
 	ListRevisionStartSQL  string
@@ -240,11 +239,9 @@ func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig
 	}
 
 	configureConnectionPooling(connPoolConfig, db)
-	wrappedDb := prepared.New(db)
 
 	return &Generic{
-		DB:    wrappedDb,
-		batch: NewBatch(wrappedDb),
+		DB: database.NewBatched(database.NewPrepared(database.Wrap(db))),
 
 		GetCurrentSQL:        q(fmt.Sprintf(listSQL, ""), paramCharacter, numbered),
 		ListRevisionStartSQL: q(fmt.Sprintf(listSQL, "AND mkv.id <= ?"), paramCharacter, numbered),
@@ -429,7 +426,7 @@ func (d *Generic) execute(ctx context.Context, txName, query string, args ...int
 		} else {
 			logrus.Tracef("EXEC (try: %d) %v : %s", retryCount, args, Stripped(query))
 		}
-		result, err = d.batch.ExecContext(ctx, query, args...)
+		result, err = d.DB.ExecContext(ctx, query, args...)
 		if err == nil {
 			break
 		}
