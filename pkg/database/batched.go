@@ -152,7 +152,6 @@ func (b *batchedDb) execQueue(ctx context.Context, queue []*batchJob) {
 
 		return tx.Commit()
 	}
-
 	if err := transaction(); err != nil {
 		for _, q := range queue {
 			q.err = err
@@ -208,25 +207,34 @@ func (job *batchJob) exec(ctx context.Context, execer Execer) error {
 		return job.err
 	}
 
-	job.rowsAffected, job.err = result.RowsAffected()
-	if job.err != nil {
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		job.err = err
 		return job.err
 	}
+	job.rowsAffected = rowsAffected
 
-	job.lastInsertId, job.err = result.LastInsertId()
-	if job.err != nil {
+	lastInsertId, err := result.LastInsertId()
+	if err != nil {
+		job.err = err
 		return job.err
 	}
-
+	job.lastInsertId = lastInsertId
 	return nil
 }
 
 // LastInsertId implements sql.Result.
 func (job *batchJob) LastInsertId() (int64, error) {
+	if job.err != nil {
+		return 0, job.err
+	}
 	return job.lastInsertId, nil
 }
 
 // RowsAffected implements sql.Result.
 func (job *batchJob) RowsAffected() (int64, error) {
+	if job.err != nil {
+		return 0, job.err
+	}
 	return job.rowsAffected, nil
 }
