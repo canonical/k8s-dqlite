@@ -128,7 +128,7 @@ func newKineServer(ctx context.Context, tb testing.TB, options *kineOptions) *ki
 }
 
 func startSqlite(_ context.Context, tb testing.TB, dir string) (*endpoint.Config, *sql.DB) {
-	dbPath := path.Join(dir, "data.db")
+	dbPath := path.Join(dir, "data.db") + "?_journal=WAL&_synchronous=FULL&_foreign_keys=1"
 
 	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
