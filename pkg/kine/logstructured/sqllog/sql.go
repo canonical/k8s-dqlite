@@ -65,7 +65,7 @@ type Dialect interface {
 	CurrentRevision(ctx context.Context) (int64, error)
 	AfterPrefix(ctx context.Context, prefix string, rev, limit int64) (*sql.Rows, error)
 	After(ctx context.Context, rev, limit int64) (*sql.Rows, error)
-	Create(ctx context.Context, key string, value []byte, lease int64) (int64, error)
+	Create(ctx context.Context, key string, value []byte, lease int64) (int64, bool, error)
 	Update(ctx context.Context, key string, value []byte, prevRev, lease int64) (int64, bool, error)
 	Delete(ctx context.Context, key string, revision int64) (int64, bool, error)
 	DeleteRevision(ctx context.Context, revision int64) error
@@ -106,7 +106,7 @@ func (s *SQLLog) compactStart(ctx context.Context) error {
 	}
 
 	if len(events) == 0 {
-		_, err := s.Create(ctx, "compact_rev_key", []byte(""), 0)
+		_, _, err := s.Create(ctx, "compact_rev_key", []byte(""), 0)
 		return err
 	} else if len(events) == 1 {
 		return nil
@@ -493,14 +493,15 @@ func (s *SQLLog) Count(ctx context.Context, prefix, startKey string, revision in
 	return s.d.Count(ctx, prefix, startKey, revision)
 }
 
-func (s *SQLLog) Create(ctx context.Context, key string, value []byte, lease int64) (rev int64, err error) {
-	rev, err = s.d.Create(ctx, key, value, lease)
+func (s *SQLLog) Create(ctx context.Context, key string, value []byte, lease int64) (int64, bool, error) {
+	rev, created, err := s.d.Create(ctx, key, value, lease)
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
-
-	s.notifyWatcherPoll(rev)
-	return rev, nil
+	if created {
+		s.notifyWatcherPoll(rev)
+	}
+	return rev, created, nil
 }
 
 func (s *SQLLog) Delete(ctx context.Context, key string, revision int64) (rev int64, deleted bool, err error) {
