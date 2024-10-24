@@ -1,6 +1,5 @@
 #
-# Copyright 2024 Canonical, Ltd.
-#
+# Copyright 2024 Canonical, Ltd.#
 import subprocess
 from functools import cached_property, partial
 

@@ -1,6 +1,5 @@
 #
-# Copyright 2024 Canonical, Ltd.
-#
+# Copyright 2024 Canonical, Ltd.#
 import json
 import logging
 import re

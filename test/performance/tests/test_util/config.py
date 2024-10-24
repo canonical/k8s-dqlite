@@ -1,3 +1,5 @@
+#
+# Copyright 2024 Canonical, Ltd.#
 import os
 from pathlib import Path
 
@@ -16,7 +18,7 @@ INSPECTION_REPORTS_DIR = os.getenv("TEST_INSPECTION_REPORTS_DIR")
 SKIP_CLEANUP = (os.getenv("TEST_SKIP_CLEANUP") or "") == "1"
 
 # SNAP is the path to the snap under test.
-SNAP = os.getenv('TEST_SNAP') or ""
+SNAP = os.getenv("TEST_SNAP") or ""
 
 # SNAP_NAME is the name of the snap under test.
 SNAP_NAME = os.getenv("TEST_SNAP_NAME") or "k8s"

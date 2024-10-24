@@ -1,6 +1,5 @@
 #
-# Copyright 2024 Canonical, Ltd.
-#
+# Copyright 2024 Canonical, Ltd.#
 import logging
 from typing import List
 

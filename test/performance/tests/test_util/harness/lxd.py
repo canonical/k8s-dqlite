@@ -1,6 +1,5 @@
 #
-# Copyright 2024 Canonical, Ltd.
-#
+# Copyright 2024 Canonical, Ltd.#
 import logging
 import os
 import shlex
