@@ -161,6 +161,24 @@ func (b *batchedDb[T]) execQueue(ctx context.Context, queue []*batchJob) {
 	}
 }
 
+func (b *batchedDb) Close() error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if b.closed {
+		return errDBClosed
+	}
+
+	b.closed = true
+	b.stopWorker()
+
+	for b.status != batchNotStarted {
+		b.cv.Wait()
+	}
+
+	return b.Interface.Close()
+}
+
 type batchJob struct {
 	ctx   context.Context
 	query string
