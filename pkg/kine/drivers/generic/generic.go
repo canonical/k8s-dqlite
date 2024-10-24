@@ -474,6 +474,7 @@ func (d *Generic) Update(ctx context.Context, key string, value []byte, preRev, 
 		span.End()
 	}()
 
+	updateCnt.Add(ctx, 1)
 	result, err := d.execute(ctx, "update_sql", updateSQL, key, ttl, value, key, preRev)
 	if err != nil {
 		logrus.WithError(err).Error("failed to update key")
