@@ -28,8 +28,12 @@ var (
 	otelTracer       trace.Tracer
 	otelMeter        metric.Meter
 	compactCnt       metric.Int64Counter
+	compactBatchCnt  metric.Int64Counter
 	deleteRevCnt     metric.Int64Counter
 	deleteCnt        metric.Int64Counter
+	createCnt        metric.Int64Counter
+	updateCnt        metric.Int64Counter
+	fillCnt          metric.Int64Counter
 	currentRevCnt    metric.Int64Counter
 	getCompactRevCnt metric.Int64Counter
 )
@@ -42,11 +46,27 @@ func init() {
 	if err != nil {
 		logrus.WithError(err).Warning("Otel failed to create create counter")
 	}
+	compactBatchCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.compact_batch", otelName), metric.WithDescription("Number of compact batch requests"))
+	if err != nil {
+		logrus.WithError(err).Warning("Otel failed to create create counter")
+	}
 	deleteRevCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.delete_rev", otelName), metric.WithDescription("Number of delete revision requests"))
 	if err != nil {
 		logrus.WithError(err).Warning("Otel failed to create create counter")
 	}
+	createCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.create", otelName), metric.WithDescription("Number of create requests"))
+	if err != nil {
+		logrus.WithError(err).Warning("Otel failed to create create counter")
+	}
+	updateCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.update", otelName), metric.WithDescription("Number of update requests"))
+	if err != nil {
+		logrus.WithError(err).Warning("Otel failed to create create counter")
+	}
 	deleteCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.delete", otelName), metric.WithDescription("Number of delete requests"))
+	if err != nil {
+		logrus.WithError(err).Warning("Otel failed to create create counter")
+	}
+	fillCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.fill", otelName), metric.WithDescription("Number of fill requests"))
 	if err != nil {
 		logrus.WithError(err).Warning("Otel failed to create create counter")
 	}
@@ -130,30 +150,27 @@ type ErrCode func(error) string
 type Generic struct {
 	sync.Mutex
 
-	LockWrites            bool
-	LastInsertID          bool
-	DB                    *prepared.DB
-	GetCurrentSQL         string
-	RevisionSQL           string
-	ListRevisionStartSQL  string
-	GetRevisionAfterSQL   string
-	CountCurrentSQL       string
-	CountRevisionSQL      string
-	AfterSQLPrefix        string
-	AfterSQL              string
-	DeleteRevSQL          string
-	CompactSQL            string
-	UpdateCompactSQL      string
-	DeleteSQL             string
-	InsertSQL             string
-	FillSQL               string
-	InsertLastInsertIDSQL string
-	CreateSQL             string
-	UpdateSQL             string
-	GetSizeSQL            string
-	Retry                 ErrRetry
-	TranslateErr          TranslateErr
-	ErrCode               ErrCode
+	LockWrites           bool
+	DB                   *prepared.DB
+	GetCurrentSQL        string
+	RevisionSQL          string
+	ListRevisionStartSQL string
+	GetRevisionAfterSQL  string
+	CountCurrentSQL      string
+	CountRevisionSQL     string
+	AfterSQLPrefix       string
+	AfterSQL             string
+	DeleteRevSQL         string
+	CompactSQL           string
+	UpdateCompactSQL     string
+	DeleteSQL            string
+	FillSQL              string
+	CreateSQL            string
+	UpdateSQL            string
+	GetSizeSQL           string
+	Retry                ErrRetry
+	TranslateErr         TranslateErr
+	ErrCode              ErrCode
 
 	// CompactInterval is interval between database compactions performed by kine.
 	CompactInterval time.Duration
@@ -286,12 +303,6 @@ func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig
 			UPDATE kine
 			SET prev_revision = max(prev_revision, ?)
 			WHERE name = 'compact_rev_key'`, paramCharacter, numbered),
-
-		InsertLastInsertIDSQL: q(`INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
-			VALUES(?, ?, ?, ?, ?, ?, ?, ?)`, paramCharacter, numbered),
-
-		InsertSQL: q(`INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
-			VALUES(?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`, paramCharacter, numbered),
 
 		DeleteSQL: q(`
 			INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
@@ -524,6 +535,7 @@ func (d *Generic) Create(ctx context.Context, key string, value []byte, ttl int6
 		attribute.String("key", key),
 		attribute.Int64("ttl", ttl),
 	)
+	createCnt.Add(ctx, 1)
 
 	result, err := d.execute(ctx, "create_sql", d.CreateSQL, key, ttl, value, key)
 	if err != nil {
@@ -551,6 +563,7 @@ func (d *Generic) Update(ctx context.Context, key string, value []byte, preRev, 
 		span.End()
 	}()
 
+	updateCnt.Add(ctx, 1)
 	result, err := d.execute(ctx, "update_sql", d.UpdateSQL, key, ttl, value, key, preRev)
 	if err != nil {
 		logrus.WithError(err).Error("failed to update key")
@@ -632,6 +645,7 @@ func (d *Generic) tryCompact(ctx context.Context, start, end int64) (err error) 
 		span.End()
 	}()
 	span.SetAttributes(attribute.Int64("start", start), attribute.Int64("end", end))
+	compactBatchCnt.Add(ctx, 1)
 
 	tx, err := d.DB.BeginTx(ctx, nil)
 	if err != nil {
@@ -812,57 +826,13 @@ func (d *Generic) After(ctx context.Context, rev, limit int64) (*sql.Rows, error
 }
 
 func (d *Generic) Fill(ctx context.Context, revision int64) error {
+	fillCnt.Add(ctx, 1)
 	_, err := d.execute(ctx, "fill_sql", d.FillSQL, revision, fmt.Sprintf("gap-%d", revision), 0, 1, 0, 0, 0, nil, nil)
 	return err
 }
 
 func (d *Generic) IsFill(key string) bool {
 	return strings.HasPrefix(key, "gap-")
-}
-
-func (d *Generic) Insert(ctx context.Context, key string, create, delete bool, createRevision, previousRevision int64, ttl int64, value, prevValue []byte) (id int64, err error) {
-	if d.TranslateErr != nil {
-		defer func() {
-			if err != nil {
-				err = d.TranslateErr(err)
-			}
-		}()
-	}
-
-	cVal := 0
-	dVal := 0
-	if create {
-		cVal = 1
-	}
-	if delete {
-		dVal = 1
-	}
-
-	if d.LastInsertID {
-		row, err := d.execute(ctx, "insert_last_insert_id_sql", d.InsertLastInsertIDSQL, key, cVal, dVal, createRevision, previousRevision, ttl, value, prevValue)
-		if err != nil {
-			return 0, err
-		}
-		return row.LastInsertId()
-	}
-
-	rows, err := d.query(ctx, "insert_sql", d.InsertSQL, key, cVal, dVal, createRevision, previousRevision, ttl, value, prevValue)
-	if err != nil {
-		return 0, err
-	}
-	defer rows.Close()
-
-	if !rows.Next() {
-		if err := rows.Err(); err != nil {
-			return 0, err
-		}
-		return 0, sql.ErrNoRows
-	}
-
-	if err := rows.Scan(&id); err != nil {
-		return 0, err
-	}
-	return id, nil
 }
 
 func (d *Generic) GetSize(ctx context.Context) (int64, error) {

@@ -65,7 +65,6 @@ type Dialect interface {
 	CurrentRevision(ctx context.Context) (int64, error)
 	AfterPrefix(ctx context.Context, prefix string, rev, limit int64) (*sql.Rows, error)
 	After(ctx context.Context, rev, limit int64) (*sql.Rows, error)
-	Insert(ctx context.Context, key string, create, delete bool, createRevision, previousRevision int64, ttl int64, value, prevValue []byte) (int64, error)
 	Create(ctx context.Context, key string, value []byte, lease int64) (int64, bool, error)
 	Update(ctx context.Context, key string, value []byte, prevRev, lease int64) (int64, bool, error)
 	Delete(ctx context.Context, key string, revision int64) (int64, bool, error)
@@ -107,13 +106,7 @@ func (s *SQLLog) compactStart(ctx context.Context) error {
 	}
 
 	if len(events) == 0 {
-		_, err := s.Append(ctx, &server.Event{
-			Create: true,
-			KV: &server.KeyValue{
-				Key:   "compact_rev_key",
-				Value: []byte(""),
-			},
-		})
+		_, _, err := s.Create(ctx, "compact_rev_key", []byte(""), 0)
 		return err
 	} else if len(events) == 1 {
 		return nil
@@ -498,40 +491,6 @@ func (s *SQLLog) Count(ctx context.Context, prefix, startKey string, revision in
 	}
 
 	return s.d.Count(ctx, prefix, startKey, revision)
-}
-
-func (s *SQLLog) Append(ctx context.Context, event *server.Event) (int64, error) {
-	var err error
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Append", otelName))
-	defer func() {
-		span.RecordError(err)
-		span.End()
-	}()
-
-	e := *event
-	if e.KV == nil {
-		e.KV = &server.KeyValue{}
-	}
-	if e.PrevKV == nil {
-		e.PrevKV = &server.KeyValue{}
-	}
-
-	rev, err := s.d.Insert(ctx, e.KV.Key,
-		e.Create,
-		e.Delete,
-		e.KV.CreateRevision,
-		e.PrevKV.ModRevision,
-		e.KV.Lease,
-		e.KV.Value,
-		e.PrevKV.Value,
-	)
-	span.SetAttributes(attribute.Int64("revision", rev))
-
-	if err != nil {
-		return 0, err
-	}
-	s.notifyWatcherPoll(rev)
-	return rev, nil
 }
 
 func (s *SQLLog) Create(ctx context.Context, key string, value []byte, lease int64) (int64, bool, error) {
