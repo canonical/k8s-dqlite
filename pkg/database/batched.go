@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"sync"
 )
 
@@ -18,10 +19,16 @@ const (
 	batchRunning
 )
 
+var errDBClosed = errors.New("sql: database is closed")
+
 type batchedDb struct {
 	Interface
 
-	mu     sync.Mutex
+	mu            sync.Mutex
+	workerContext context.Context
+	stopWorker    func()
+	closed        bool
+
 	cv     sync.Cond
 	status batchStatus
 
@@ -30,8 +37,12 @@ type batchedDb struct {
 }
 
 func NewBatched(db Interface) Interface {
+	workerContext, stopWorker := context.WithCancel(context.Background())
+
 	b := &batchedDb{
-		Interface: db,
+		Interface:     db,
+		workerContext: workerContext,
+		stopWorker:    stopWorker,
 	}
 	b.cv.L = &b.mu
 	return b
@@ -40,6 +51,10 @@ func NewBatched(db Interface) Interface {
 func (b *batchedDb) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
+	if b.closed {
+		return nil, errDBClosed
+	}
 
 	runId := b.runId
 	if b.status == batchRunning {
@@ -89,7 +104,7 @@ func (b *batchedDb) run() {
 				b.queue = nil
 
 				b.mu.Unlock()
-				b.execQueue(context.TODO(), queue)
+				b.execQueue(b.workerContext, queue)
 				b.mu.Lock()
 
 				b.runId++
