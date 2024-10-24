@@ -7,10 +7,9 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/canonical/k8s-dqlite/pkg/kine/prepared"
+	"github.com/canonical/k8s-dqlite/pkg/database"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
@@ -148,10 +147,8 @@ type TranslateErr func(error) error
 type ErrCode func(error) string
 
 type Generic struct {
-	sync.Mutex
-
-	LockWrites           bool
-	DB                   *prepared.DB
+	LastInsertID         bool
+	DB                   database.Interface
 	GetCurrentSQL        string
 	RevisionSQL          string
 	ListRevisionStartSQL string
@@ -262,7 +259,7 @@ func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig
 	configureConnectionPooling(connPoolConfig, db)
 
 	return &Generic{
-		DB: prepared.New(db),
+		DB: database.NewBatched(database.NewPrepared(database.Wrap(db))),
 
 		GetCurrentSQL:        q(fmt.Sprintf(listSQL, ""), paramCharacter, numbered),
 		ListRevisionStartSQL: q(fmt.Sprintf(listSQL, "AND mkv.id <= ?"), paramCharacter, numbered),
@@ -426,12 +423,6 @@ func (d *Generic) execute(ctx context.Context, txName, query string, args ...int
 	span.SetAttributes(
 		attribute.String("tx_name", txName),
 	)
-
-	if d.LockWrites {
-		d.Lock()
-		defer d.Unlock()
-		span.AddEvent("acquired write lock")
-	}
 
 	start := time.Now()
 	retryCount := 0
