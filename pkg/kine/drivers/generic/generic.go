@@ -242,7 +242,6 @@ type Generic struct {
 
 	LockWrites bool
 	DB         database.Interface
-	batch      *Batch
 	Retry      ErrRetry
 	ErrCode    ErrCode
 
@@ -319,10 +318,8 @@ func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig
 
 	configureConnectionPooling(connPoolConfig, db)
 
-	wrapped := database.NewPrepared(db)
 	return &Generic{
-		DB:    wrapped,
-		batch: NewBatch(wrapped),
+		DB: database.NewBatched(database.NewPrepared(db)),
 	}, err
 }
 
@@ -404,7 +401,7 @@ func (d *Generic) execute(ctx context.Context, txName, query string, args ...int
 		} else {
 			logrus.Tracef("EXEC (try: %d) %v : %s", retryCount, args, Stripped(query))
 		}
-		result, err = d.batch.ExecContext(ctx, query, args...)
+		result, err = d.DB.ExecContext(ctx, query, args...)
 		if err == nil {
 			break
 		}
