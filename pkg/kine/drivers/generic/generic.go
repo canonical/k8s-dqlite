@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/canonical/k8s-dqlite/pkg/kine/prepared"
+	"github.com/canonical/k8s-dqlite/pkg/database"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -223,8 +223,7 @@ type Generic struct {
 	sync.Mutex
 
 	LockWrites   bool
-	DB           *prepared.DB
-	batch        *Batch
+	DB           database.Interface
 	Retry        ErrRetry
 	TranslateErr TranslateErr
 	ErrCode      ErrCode
@@ -301,11 +300,9 @@ func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig
 	}
 
 	configureConnectionPooling(connPoolConfig, db)
-	wrappedDb := prepared.New(db)
 
 	return &Generic{
-		DB:    wrappedDb,
-		batch: NewBatch(wrappedDb),
+		DB: database.NewBatched(database.NewPrepared(database.Wrap(db))),
 	}, err
 }
 
@@ -387,7 +384,7 @@ func (d *Generic) execute(ctx context.Context, txName, query string, args ...int
 		} else {
 			logrus.Tracef("EXEC (try: %d) %v : %s", retryCount, args, Stripped(query))
 		}
-		result, err = d.batch.ExecContext(ctx, query, args...)
+		result, err = d.DB.ExecContext(ctx, query, args...)
 		if err == nil {
 			break
 		}
