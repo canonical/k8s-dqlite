@@ -40,7 +40,7 @@ func (db *preparedDb) ExecContext(ctx context.Context, query string, args ...any
 		span.End()
 	}()
 
-	stmt, err := db.PrepareContext(ctx, query)
+	stmt, err := db.prepare(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +54,7 @@ func (db *preparedDb) QueryContext(ctx context.Context, query string, args ...an
 		span.End()
 	}()
 
-	stmt, err := db.PrepareContext(ctx, query)
+	stmt, err := db.prepare(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -62,6 +62,10 @@ func (db *preparedDb) QueryContext(ctx context.Context, query string, args ...an
 }
 
 func (db *preparedDb) PrepareContext(ctx context.Context, query string) (stmt *sql.Stmt, err error) {
+	return db.underlying.PrepareContext(ctx, query)
+}
+
+func (db *preparedDb) prepare(ctx context.Context, query string) (stmt *sql.Stmt, err error) {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.prepare", otelName))
 	defer func() {
 		span.RecordError(err)
@@ -70,7 +74,6 @@ func (db *preparedDb) PrepareContext(ctx context.Context, query string) (stmt *s
 	span.SetAttributes(attribute.String("query", query))
 
 	db.mu.RLock()
-	span.AddEvent("acquired read lock")
 	stmt = db.store[query]
 	db.mu.RUnlock()
 	if stmt != nil {
@@ -78,11 +81,10 @@ func (db *preparedDb) PrepareContext(ctx context.Context, query string) (stmt *s
 	}
 
 	db.mu.Lock()
-	span.AddEvent("acquired read-write lock")
 	defer db.mu.Unlock()
 
 	if db.underlying == nil {
-		return nil, errors.New("database is closed")
+		return nil, errDBClosed
 	}
 
 	// Check again if the query was prepared during locking
@@ -91,11 +93,10 @@ func (db *preparedDb) PrepareContext(ctx context.Context, query string) (stmt *s
 		return stmt, nil
 	}
 
-	prepared, err := db.underlying.PrepareContext(ctx, query)
+	prepared, err := db.PrepareContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
-
 	db.store[query] = prepared
 	return prepared, nil
 }
@@ -142,7 +143,7 @@ type preparedTx struct {
 }
 
 func (tx *preparedTx) PrepareContext(ctx context.Context, query string) (*sql.Stmt, error) {
-	stmt, err := tx.db.PrepareContext(ctx, query)
+	stmt, err := tx.db.prepare(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +155,6 @@ func (tx *preparedTx) ExecContext(ctx context.Context, query string, args ...any
 	if err != nil {
 		return nil, err
 	}
-
 	return stmt.ExecContext(ctx, args...)
 }
 
