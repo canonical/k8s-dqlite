@@ -19,7 +19,7 @@ env:
 
 jobs:
   build:
-    name: K8s-snap Performance Test
+    name: K8s-snap Performance Test Dqlite ${{ matrix.dqlite }}
     runs-on: [self-hosted, linux, X64, jammy, large]
     strategy:
       matrix:
@@ -50,20 +50,20 @@ jobs:
         run: |
           sudo unsquashfs -d snap-unpack-dir k8s.snap
 
-      - name: Swap out k8s-dqlite and dqlite version for ${{ github.sha }} ${{ matrix.dqlite }} snap
+      - name: Swap out k8s-dqlite and dqlite version for ${{ github.head_ref }} ${{ matrix.dqlite }} snap
         run: |
           sed -i 's/^TAG_DQLITE=.*$/TAG_DQLITE=\"${{ matrix.dqlite }}"/' hack/env.sh;
           make static
           sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
           sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
-          sudo mksquashfs snap-unpack-dir current.snap -noappend -comp lzo -no-fragments
-      - name: Run Performance test ${{ github.sha }} ${{ matrix.dqlite }} snap
+          sudo mksquashfs snap-unpack-dir head.snap -noappend -comp lzo -no-fragments
+      - name: Run Performance test ${{ github.head_ref }} ${{ matrix.dqlite }} snap
         env:
-          TEST_SNAP: ${{ github.workspace }}/current.snap
+          TEST_SNAP: ${{ github.workspace }}/head.snap
           TEST_SUBSTRATE: lxd
           TEST_LXD_IMAGE: ubuntu:22.04
         run: |
-          echo "test"
+          cd test/performance && tox -e performance
 
       - name: Swap out k8s-dqlite and dqlite version for base code ${{ matrix.dqlite }} snap
         run: |
@@ -82,7 +82,7 @@ jobs:
           TEST_SUBSTRATE: lxd
           TEST_LXD_IMAGE: ubuntu:22.04
         run: |
-          echo "base code test"
+          cd test/performance && tox -e performance
           git reset --hard $TARGET_SHA
 
       - name: Swap out k8s-dqlite and dqlite version for v1.1.11 ${{ matrix.dqlite }} snap
@@ -102,7 +102,7 @@ jobs:
           TEST_SUBSTRATE: lxd
           TEST_LXD_IMAGE: ubuntu:22.04
         run: |
-          echo "base code test"
+          cd test/performance && tox -e performance
           git reset --hard $TARGET_SHA
 
       - name: Swap out k8s-dqlite and dqlite version for v1.2.0 ${{ matrix.dqlite }} snap
@@ -122,5 +122,5 @@ jobs:
           TEST_SUBSTRATE: lxd
           TEST_LXD_IMAGE: ubuntu:22.04
         run: |
-          echo "base code test"
+          cd test/performance && tox -e performance
           git reset --hard $TARGET_SHA

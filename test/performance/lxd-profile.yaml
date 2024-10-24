@@ -1,0 +1,105 @@
+description: "LXD profile for Canonical Kubernetes"
+config:
+  linux.kernel_modules: ip_vs,ip_vs_rr,ip_vs_wrr,ip_vs_sh,ip_tables,ip6_tables,iptable_raw,netlink_diag,nf_nat,overlay,br_netfilter,xt_socket
+  raw.lxc: |
+    lxc.apparmor.profile=unconfined
+    lxc.mount.auto=proc:rw sys:rw cgroup:rw
+    lxc.cgroup.devices.allow=a
+    lxc.cap.drop=
+  security.nesting: "true"
+  security.privileged: "true"
+devices:
+  aadisable2:
+    path: /dev/kmsg
+    source: /dev/kmsg
+    type: unix-char
+  dev-loop-control:
+    major: "10"
+    minor: "237"
+    path: /dev/loop-control
+    type: unix-char
+  dev-loop0:
+    major: "7"
+    minor: "0"
+    path: /dev/loop0
+    type: unix-block
+  dev-loop1:
+    major: "7"
+    minor: "1"
+    path: /dev/loop1
+    type: unix-block
+  dev-loop2:
+    major: "7"
+    minor: "2"
+    path: /dev/loop2
+    type: unix-block
+  dev-loop3:
+    major: "7"
+    minor: "3"
+    path: /dev/loop3
+    type: unix-block
+  dev-loop4:
+    major: "7"
+    minor: "4"
+    path: /dev/loop4
+    type: unix-block
+  dev-loop5:
+    major: "7"
+    minor: "5"
+    path: /dev/loop5
+    type: unix-block
+  dev-loop6:
+    major: "7"
+    minor: "6"
+    path: /dev/loop6
+    type: unix-block
+  dev-loop7:
+    major: "7"
+    minor: "7"
+    path: /dev/loop7
+    type: unix-block
+  dev-loop8:
+    major: "7"
+    minor: "8"
+    path: /dev/loop8
+    type: unix-block
+  dev-loop9:
+    major: "7"
+    minor: "9"
+    path: /dev/loop9
+    type: unix-block
+  dev-loop10:
+    major: "7"
+    minor: "10"
+    path: /dev/loop10
+    type: unix-block
+  dev-loop11:
+    major: "7"
+    minor: "11"
+    path: /dev/loop11
+    type: unix-block
+  dev-loop12:
+    major: "7"
+    minor: "12"
+    path: /dev/loop12
+    type: unix-block
+  dev-loop13:
+    major: "7"
+    minor: "13"
+    path: /dev/loop13
+    type: unix-block
+  dev-loop14:
+    major: "7"
+    minor: "14"
+    path: /dev/loop14
+    type: unix-block
+  dev-loop15:
+    major: "7"
+    minor: "15"
+    path: /dev/loop15
+    type: unix-block
+  dev-loop16:
+    major: "7"
+    minor: "16"
+    path: /dev/loop16
+    type: unix-block

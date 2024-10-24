@@ -1,0 +1,5 @@
+coverage[toml]==7.2.5
+pytest==7.3.1
+PyYAML==6.0.1
+tenacity==8.2.3
+pylint==3.2.5
