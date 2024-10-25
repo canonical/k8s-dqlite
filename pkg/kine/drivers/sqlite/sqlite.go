@@ -70,6 +70,7 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string, connecti
 			if err != nil {
 				return err
 			}
+			defer conn.Close()
 			return setup(ctx, conn)
 		}()
 		if err == nil {
