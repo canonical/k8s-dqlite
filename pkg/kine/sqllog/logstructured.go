@@ -125,23 +125,6 @@ func (l *LogStructured) List(ctx context.Context, prefix, startKey string, limit
 	return rev, kvs, nil
 }
 
-func (l *LogStructured) Count(ctx context.Context, prefix, startKey string, revision int64) (revRet int64, count int64, err error) {
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Count", otelName))
-	defer func() {
-		logrus.Debugf("COUNT prefix=%s startKey=%s => rev=%d, count=%d, err=%v", prefix, startKey, revRet, count, err)
-		span.SetAttributes(
-			attribute.String("prefix", prefix),
-			attribute.String("startKey", startKey),
-			attribute.Int64("revision", revision),
-			attribute.Int64("current-revision", revRet),
-			attribute.Int64("count", count),
-		)
-		span.RecordError(err)
-		span.End()
-	}()
-	return l.SQLLog.Count(ctx, prefix, startKey, revision)
-}
-
 func (l *LogStructured) ttlEvents(ctx context.Context) chan *server.Event {
 	result := make(chan *server.Event)
 	var shouldClose atomic.Bool
