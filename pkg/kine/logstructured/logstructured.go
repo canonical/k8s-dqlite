@@ -44,12 +44,6 @@ type LogStructured struct {
 	wg  sync.WaitGroup
 }
 
-func New(log Log) *LogStructured {
-	return &LogStructured{
-		log: log,
-	}
-}
-
 func (l *LogStructured) DoCompact(ctx context.Context) error {
 	return l.log.DoCompact(ctx)
 }
@@ -311,7 +305,7 @@ func (l *LogStructured) Watch(ctx context.Context, prefix string, revision int64
 
 		// always ensure we fully read the channel
 		for i := range readChan {
-			result <- filter(i, lastRevision)
+			result <- filterRevision(i, lastRevision)
 		}
 		close(result)
 		cancel()
@@ -320,7 +314,7 @@ func (l *LogStructured) Watch(ctx context.Context, prefix string, revision int64
 	return result
 }
 
-func filter(events []*server.Event, rev int64) []*server.Event {
+func filterRevision(events []*server.Event, rev int64) []*server.Event {
 	for len(events) > 0 && events[0].KV.ModRevision <= rev {
 		events = events[1:]
 	}

@@ -1,4 +1,4 @@
-package sqllog
+package logstructured
 
 import (
 	"context"
@@ -15,17 +15,14 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/trace"
 )
 
 const (
 	SupersededCount  = 100
 	compactBatchSize = 1000
-	otelName         = "sqllog"
 )
 
 var (
-	otelTracer trace.Tracer
 	otelMeter  metric.Meter
 	compactCnt metric.Int64Counter
 )
@@ -49,12 +46,14 @@ type SQLLog struct {
 	wg          sync.WaitGroup
 }
 
-func New(d Dialect) *SQLLog {
-	l := &SQLLog{
+func NewSQLLog(d Dialect) *LogStructured {
+	log := &SQLLog{
 		d:      d,
 		notify: make(chan int64, 1024),
 	}
-	return l
+	return &LogStructured{
+		log: log,
+	}
 }
 
 type Dialect interface {
@@ -293,7 +292,7 @@ func (s *SQLLog) Watch(ctx context.Context, prefix string) <-chan []*server.Even
 		defer close(res)
 
 		for i := range values {
-			events, ok := filter(i, checkPrefix, prefix)
+			events, ok := filterKey(i.([]*server.Event), checkPrefix, prefix)
 			if ok {
 				res <- events
 			}
@@ -303,11 +302,10 @@ func (s *SQLLog) Watch(ctx context.Context, prefix string) <-chan []*server.Even
 	return res
 }
 
-func filter(events interface{}, checkPrefix bool, prefix string) ([]*server.Event, bool) {
-	eventList := events.([]*server.Event)
-	filteredEventList := make([]*server.Event, 0, len(eventList))
+func filterKey(events []*server.Event, checkPrefix bool, prefix string) ([]*server.Event, bool) {
+	filteredEventList := make([]*server.Event, 0, len(events))
 
-	for _, event := range eventList {
+	for _, event := range events {
 		if (checkPrefix && strings.HasPrefix(event.KV.Key, prefix)) || event.KV.Key == prefix {
 			filteredEventList = append(filteredEventList, event)
 		}
