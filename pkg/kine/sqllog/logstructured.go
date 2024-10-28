@@ -9,20 +9,8 @@ import (
 
 	"github.com/canonical/k8s-dqlite/pkg/kine/server"
 	"github.com/sirupsen/logrus"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
 )
-
-const otelName = "logstructured"
-
-var (
-	otelTracer trace.Tracer
-)
-
-func init() {
-	otelTracer = otel.Tracer(otelName)
-}
 
 type Log interface {
 	Start(ctx context.Context) error
@@ -40,16 +28,11 @@ type Log interface {
 }
 
 type LogStructured struct {
-	log Log
-	wg  sync.WaitGroup
-}
-
-func (l *LogStructured) DoCompact(ctx context.Context) error {
-	return l.log.DoCompact(ctx)
+	*SQLLog
 }
 
 func (l *LogStructured) Start(ctx context.Context) error {
-	if err := l.log.Start(ctx); err != nil {
+	if err := l.SQLLog.Start(ctx); err != nil {
 		return err
 	}
 	l.Create(ctx, "/registry/health", []byte(`{"health":"true"}`), 0)
@@ -60,11 +43,6 @@ func (l *LogStructured) Start(ctx context.Context) error {
 		l.ttl(ctx)
 	}()
 	return nil
-}
-
-func (l *LogStructured) Wait() {
-	l.wg.Wait()
-	l.log.Wait()
 }
 
 func (l *LogStructured) Get(ctx context.Context, key, rangeEnd string, limit, revision int64) (revRet int64, kvRet *server.KeyValue, errRet error) {
@@ -103,7 +81,7 @@ func (l *LogStructured) get(ctx context.Context, key, rangeEnd string, limit, re
 		attribute.Int64("revision", revision),
 		attribute.Bool("includeDeletes", includeDeletes),
 	)
-	rev, events, err := l.log.List(ctx, key, rangeEnd, limit, revision, includeDeletes)
+	rev, events, err := l.SQLLog.List(ctx, key, rangeEnd, limit, revision, includeDeletes)
 	if err == server.ErrCompacted {
 		span.AddEvent("key already compacted")
 		// ignore compacted when getting by revision
@@ -118,18 +96,6 @@ func (l *LogStructured) get(ctx context.Context, key, rangeEnd string, limit, re
 		return rev, nil, nil
 	}
 	return rev, events[0], nil
-}
-
-func (l *LogStructured) Create(ctx context.Context, key string, value []byte, lease int64) (rev int64, created bool, err error) {
-	rev, created, err = l.log.Create(ctx, key, value, lease)
-	logrus.Debugf("CREATE %s, size=%d, lease=%d => rev=%d, err=%v", key, len(value), lease, rev, err)
-	return rev, created, err
-}
-
-func (l *LogStructured) Delete(ctx context.Context, key string, revision int64) (revRet int64, deleted bool, errRet error) {
-	rev, del, err := l.log.Delete(ctx, key, revision)
-	logrus.Debugf("DELETE %s, rev=%d => rev=%d, deleted=%v, err=%v", key, revision, rev, del, err)
-	return rev, del, err
 }
 
 func (l *LogStructured) List(ctx context.Context, prefix, startKey string, limit, revision int64) (revRet int64, kvRet []*server.KeyValue, errRet error) {
@@ -147,7 +113,7 @@ func (l *LogStructured) List(ctx context.Context, prefix, startKey string, limit
 		span.End()
 	}()
 
-	rev, events, err := l.log.List(ctx, prefix, startKey, limit, revision, false)
+	rev, events, err := l.SQLLog.List(ctx, prefix, startKey, limit, revision, false)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -173,24 +139,7 @@ func (l *LogStructured) Count(ctx context.Context, prefix, startKey string, revi
 		span.RecordError(err)
 		span.End()
 	}()
-	return l.log.Count(ctx, prefix, startKey, revision)
-}
-
-func (l *LogStructured) Update(ctx context.Context, key string, value []byte, revision, lease int64) (revRet int64, updateRet bool, errRet error) {
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Update", otelName))
-	defer func() {
-		logrus.Debugf("UPDATE %s, value=%d, rev=%d, lease=%v => rev=%d, updated=%v, err=%v", key, len(value), revision, lease, revRet, updateRet, errRet)
-		span.SetAttributes(
-			attribute.String("key", key),
-			attribute.Int64("revision", revision),
-			attribute.Int64("lease", lease),
-			attribute.Int64("value-size", int64(len(value))),
-			attribute.Int64("current-revision", revRet),
-			attribute.Bool("updated", updateRet),
-		)
-		span.End()
-	}()
-	return l.log.Update(ctx, key, value, revision, lease)
+	return l.SQLLog.Count(ctx, prefix, startKey, revision)
 }
 
 func (l *LogStructured) ttlEvents(ctx context.Context) chan *server.Event {
@@ -201,7 +150,7 @@ func (l *LogStructured) ttlEvents(ctx context.Context) chan *server.Event {
 	go func() {
 		defer l.wg.Done()
 
-		rev, events, err := l.log.List(ctx, "/", "", 1000, 0, false)
+		rev, events, err := l.SQLLog.List(ctx, "/", "", 1000, 0, false)
 		for len(events) > 0 {
 			if err != nil {
 				logrus.Errorf("failed to read old events for ttl: %v", err)
@@ -214,7 +163,7 @@ func (l *LogStructured) ttlEvents(ctx context.Context) chan *server.Event {
 				}
 			}
 
-			_, events, err = l.log.List(ctx, "/", events[len(events)-1].KV.Key, 1000, rev, false)
+			_, events, err = l.SQLLog.List(ctx, "/", events[len(events)-1].KV.Key, 1000, rev, false)
 		}
 
 		if !shouldClose.CompareAndSwap(false, true) {
@@ -225,7 +174,7 @@ func (l *LogStructured) ttlEvents(ctx context.Context) chan *server.Event {
 	go func() {
 		defer l.wg.Done()
 
-		for events := range l.log.Watch(ctx, "/") {
+		for events := range l.SQLLog.Watch(ctx, "/") {
 			for _, event := range events {
 				if event.KV.Lease > 0 {
 					result <- event
@@ -269,7 +218,7 @@ func (l *LogStructured) Watch(ctx context.Context, prefix string, revision int64
 
 	// starting watching right away so we don't miss anything
 	ctx, cancel := context.WithCancel(ctx)
-	readChan := l.log.Watch(ctx, prefix)
+	readChan := l.SQLLog.Watch(ctx, prefix)
 
 	// include the current revision in list
 	if revision > 0 {
@@ -278,7 +227,7 @@ func (l *LogStructured) Watch(ctx context.Context, prefix string, revision int64
 
 	result := make(chan []*server.Event, 100)
 
-	rev, kvs, err := l.log.After(ctx, prefix, revision, 0)
+	rev, kvs, err := l.SQLLog.After(ctx, prefix, revision, 0)
 	if err != nil {
 		logrus.Errorf("failed to list %s for revision %d", prefix, revision)
 		msg := fmt.Sprintf("failed to list %s for revision %d", prefix, revision)
@@ -320,8 +269,4 @@ func filterRevision(events []*server.Event, rev int64) []*server.Event {
 	}
 
 	return events
-}
-
-func (l *LogStructured) DbSize(ctx context.Context) (int64, error) {
-	return l.log.DbSize(ctx)
 }

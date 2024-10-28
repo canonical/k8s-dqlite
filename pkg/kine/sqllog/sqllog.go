@@ -15,14 +15,17 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
+	otelName         = "logstructured"
 	SupersededCount  = 100
 	compactBatchSize = 1000
 )
 
 var (
+	otelTracer trace.Tracer
 	otelMeter  metric.Meter
 	compactCnt metric.Int64Counter
 )
@@ -35,24 +38,6 @@ func init() {
 	compactCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.compact", otelName), metric.WithDescription("Number of compact requests"))
 	if err != nil {
 		logrus.WithError(err).Warning("Otel failed to create create counter")
-	}
-}
-
-type SQLLog struct {
-	d           Dialect
-	broadcaster broadcaster.Broadcaster
-	ctx         context.Context
-	notify      chan int64
-	wg          sync.WaitGroup
-}
-
-func New(d Dialect) *LogStructured {
-	log := &SQLLog{
-		d:      d,
-		notify: make(chan int64, 1024),
-	}
-	return &LogStructured{
-		log: log,
 	}
 }
 
@@ -75,6 +60,23 @@ type Dialect interface {
 	GetWatchQueryTimeout() time.Duration
 	GetPollInterval() time.Duration
 	Close() error
+}
+
+type SQLLog struct {
+	d           Dialect
+	broadcaster broadcaster.Broadcaster
+	ctx         context.Context
+	notify      chan int64
+	wg          sync.WaitGroup
+}
+
+func New(d Dialect) *LogStructured {
+	return &LogStructured{
+		SQLLog: &SQLLog{
+			d:      d,
+			notify: make(chan int64, 1024),
+		},
+	}
 }
 
 func (s *SQLLog) Start(ctx context.Context) (err error) {
