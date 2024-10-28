@@ -84,7 +84,6 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string, connecti
 		}
 		return err
 	}
-	dialect.GetSizeSQL = `SELECT (page_count - freelist_count) * page_size FROM pragma_page_count(), pragma_page_size(), pragma_freelist_count()`
 
 	dialect.CompactInterval = opts.compactInterval
 	dialect.PollInterval = opts.pollInterval
