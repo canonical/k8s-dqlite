@@ -1,4 +1,4 @@
-package logstructured
+package sqllog
 
 import (
 	"context"
