@@ -260,12 +260,6 @@ func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revis
 		return 0, nil, err
 	}
 
-	if revision > 0 && revision < compactRevision {
-		return currentRevision, result, server.ErrCompacted
-	}
-
-	s.notifyWatcherPoll(currentRevision)
-
 	return currentRevision, result, err
 }
 

@@ -81,9 +81,8 @@ func (l *LogStructured) Get(ctx context.Context, key, rangeEnd string, limit, re
 		attribute.Int64("revision", revision),
 	)
 	defer func() {
-		l.adjustRevision(ctx, &revRet)
 		logrus.Debugf("GET %s, rev=%d => rev=%d, kv=%v, err=%v", key, revision, revRet, kvRet != nil, errRet)
-		span.SetAttributes(attribute.Int64("adjusted-revision", revRet))
+		span.SetAttributes(attribute.Int64("current-revision", revRet))
 		span.RecordError(errRet)
 		span.End()
 	}()
@@ -114,8 +113,7 @@ func (l *LogStructured) get(ctx context.Context, key, rangeEnd string, limit, re
 		span.AddEvent("key already compacted")
 		// ignore compacted when getting by revision
 		err = nil
-	}
-	if err != nil {
+	} else if err != nil {
 		return 0, nil, err
 	}
 	if revision != 0 {
@@ -125,16 +123,6 @@ func (l *LogStructured) get(ctx context.Context, key, rangeEnd string, limit, re
 		return rev, nil, nil
 	}
 	return rev, events[0], nil
-}
-
-func (l *LogStructured) adjustRevision(ctx context.Context, rev *int64) {
-	if *rev != 0 {
-		return
-	}
-
-	if newRev, err := l.log.CurrentRevision(ctx); err == nil {
-		*rev = newRev
-	}
 }
 
 func (l *LogStructured) Create(ctx context.Context, key string, value []byte, lease int64) (rev int64, created bool, err error) {
@@ -184,7 +172,7 @@ func (l *LogStructured) Count(ctx context.Context, prefix, startKey string, revi
 			attribute.String("prefix", prefix),
 			attribute.String("startKey", startKey),
 			attribute.Int64("revision", revision),
-			attribute.Int64("adjusted-revision", revRet),
+			attribute.Int64("current-revision", revRet),
 			attribute.Int64("count", count),
 		)
 		span.RecordError(err)
@@ -202,7 +190,7 @@ func (l *LogStructured) Update(ctx context.Context, key string, value []byte, re
 			attribute.Int64("revision", revision),
 			attribute.Int64("lease", lease),
 			attribute.Int64("value-size", int64(len(value))),
-			attribute.Int64("adjusted-revision", revRet),
+			attribute.Int64("current-revision", revRet),
 			attribute.Bool("updated", updateRet),
 		)
 		span.End()
