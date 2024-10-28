@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -186,22 +185,6 @@ func configureConnectionPooling(connPoolConfig *ConnectionPoolConfig, db *sql.DB
 	db.SetConnMaxIdleTime(connPoolConfig.MaxIdleTime)
 }
 
-func q(sql, param string, numbered bool) string {
-	if param == "?" && !numbered {
-		return sql
-	}
-
-	regex := regexp.MustCompile(`\?`)
-	n := 0
-	return regex.ReplaceAllStringFunc(sql, func(string) string {
-		if numbered {
-			n++
-			return param + strconv.Itoa(n)
-		}
-		return param
-	})
-}
-
 func openAndTest(driverName, dataSourceName string) (*sql.DB, error) {
 	db, err := sql.Open(driverName, dataSourceName)
 	if err != nil {
@@ -218,7 +201,7 @@ func openAndTest(driverName, dataSourceName string) (*sql.DB, error) {
 	return db, nil
 }
 
-func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig *ConnectionPoolConfig, paramCharacter string, numbered bool) (*Generic, error) {
+func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig *ConnectionPoolConfig) (*Generic, error) {
 	var (
 		db  *sql.DB
 		err error
@@ -242,39 +225,39 @@ func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig
 	return &Generic{
 		DB: prepared.New(db),
 
-		ListRevisionStartSQL: q(listSQL, paramCharacter, numbered),
+		ListRevisionStartSQL: listSQL,
 
-		CountRevisionSQL: q(fmt.Sprintf(`
+		CountRevisionSQL: fmt.Sprintf(`
 			SELECT COUNT(*)
 			FROM (
 				%s
-			)`, listSQL), paramCharacter, numbered),
+			)`, listSQL),
 
-		AfterSQLPrefix: q(fmt.Sprintf(`
+		AfterSQLPrefix: fmt.Sprintf(`
 			SELECT %s
 			FROM kine AS kv
 			WHERE
 				kv.name >= ? AND kv.name < ?
 				AND kv.id > ?
-			ORDER BY kv.id ASC`, columns), paramCharacter, numbered),
+			ORDER BY kv.id ASC`, columns),
 
-		AfterSQL: q(fmt.Sprintf(`
+		AfterSQL: fmt.Sprintf(`
 			SELECT %s
 				FROM kine AS kv
 				WHERE kv.id > ?
 				ORDER BY kv.id ASC
-		`, columns), paramCharacter, numbered),
+		`, columns),
 
-		DeleteRevSQL: q(`
+		DeleteRevSQL: `
 			DELETE FROM kine
-			WHERE id = ?`, paramCharacter, numbered),
+			WHERE id = ?`,
 
-		UpdateCompactSQL: q(`
+		UpdateCompactSQL: `
 			UPDATE kine
 			SET prev_revision = max(prev_revision, ?)
-			WHERE name = 'compact_rev_key'`, paramCharacter, numbered),
+			WHERE name = 'compact_rev_key'`,
 
-		DeleteSQL: q(`
+		DeleteSQL: `
 			INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
 			SELECT 
 				name,
@@ -290,9 +273,9 @@ func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig
 				value AS old_value
 			FROM kine WHERE id = (SELECT MAX(id) FROM kine WHERE name = ?)
     			AND deleted = 0
-				AND id = ?`, paramCharacter, numbered),
+				AND id = ?`,
 
-		CreateSQL: q(`
+		CreateSQL: `
 			INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
 			SELECT 
 				? AS name,
@@ -308,9 +291,9 @@ func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig
 				FROM kine
 				WHERE name = ?
 			) maxkv
-			WHERE maxkv.deleted = 1 OR id IS NULL`, paramCharacter, numbered),
+			WHERE maxkv.deleted = 1 OR id IS NULL`,
 
-		UpdateSQL: q(`
+		UpdateSQL: `
 			INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
 			SELECT 
 				? AS name,
@@ -326,10 +309,10 @@ func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig
 				value AS old_value
 			FROM kine WHERE id = (SELECT MAX(id) FROM kine WHERE name = ?)
     			AND deleted = 0
-    			AND id = ?`, paramCharacter, numbered),
+    			AND id = ?`,
 
-		FillSQL: q(`INSERT INTO kine(id, name, created, deleted, create_revision, prev_revision, lease, value, old_value)
-			VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`, paramCharacter, numbered),
+		FillSQL: `INSERT INTO kine(id, name, created, deleted, create_revision, prev_revision, lease, value, old_value)
+			VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 	}, err
 }
 
