@@ -1,4 +1,4 @@
-package logstructured
+package sqllog
 
 import (
 	"context"
@@ -46,7 +46,7 @@ type SQLLog struct {
 	wg          sync.WaitGroup
 }
 
-func NewSQLLog(d Dialect) *LogStructured {
+func New(d Dialect) *LogStructured {
 	log := &SQLLog{
 		d:      d,
 		notify: make(chan int64, 1024),

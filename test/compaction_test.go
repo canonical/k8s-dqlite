@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/canonical/k8s-dqlite/pkg/kine/endpoint"
-	"github.com/canonical/k8s-dqlite/pkg/kine/logstructured"
+	"github.com/canonical/k8s-dqlite/pkg/kine/sqllog"
 	. "github.com/onsi/gomega"
 )
 
@@ -103,7 +103,7 @@ func BenchmarkCompaction(b *testing.B) {
 				setup: func(ctx context.Context, tx *sql.Tx) error {
 					// Make sure there are enough rows deleted to have
 					// b.N rows to compact.
-					delCount := b.N + logstructured.SupersededCount
+					delCount := b.N + sqllog.SupersededCount
 
 					// Also, make sure there are uncollectable data, so
 					// that the deleted rows are about 5% of the total.

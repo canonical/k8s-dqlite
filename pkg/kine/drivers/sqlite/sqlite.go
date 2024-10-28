@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/generic"
-	"github.com/canonical/k8s-dqlite/pkg/kine/logstructured"
 	"github.com/canonical/k8s-dqlite/pkg/kine/server"
+	"github.com/canonical/k8s-dqlite/pkg/kine/sqllog"
 	"github.com/mattn/go-sqlite3"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -97,7 +97,7 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string, connecti
 		}
 	}
 
-	return logstructured.NewSQLLog(dialect), dialect, nil
+	return sqllog.New(dialect), dialect, nil
 }
 
 // setup performs table setup, which may include creation of the Kine table if
