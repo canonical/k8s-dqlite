@@ -58,10 +58,8 @@ func New(d Dialect) *SQLLog {
 }
 
 type Dialect interface {
-	ListCurrent(ctx context.Context, prefix, startKey string, limit int64, includeDeleted bool) (*sql.Rows, error)
 	List(ctx context.Context, prefix, startKey string, limit, revision int64, includeDeleted bool) (*sql.Rows, error)
-	CountCurrent(ctx context.Context, prefix, startKey string) (int64, int64, error)
-	Count(ctx context.Context, prefix, startKey string, revision int64) (int64, int64, error)
+	Count(ctx context.Context, prefix, startKey string, revision int64) (int64, error)
 	CurrentRevision(ctx context.Context) (int64, error)
 	AfterPrefix(ctx context.Context, prefix string, rev, limit int64) (*sql.Rows, error)
 	After(ctx context.Context, rev, limit int64) (*sql.Rows, error)
@@ -192,6 +190,17 @@ func (s *SQLLog) After(ctx context.Context, prefix string, revision, limit int64
 		attribute.Int64("revision", revision),
 		attribute.Int64("limit", limit),
 	)
+
+	compactRevision, currentRevision, err := s.d.GetCompactRevision(ctx)
+	if err != nil {
+		return 0, nil, err
+	}
+	if revision == 0 || revision > currentRevision {
+		revision = currentRevision
+	} else if revision < compactRevision {
+		return currentRevision, nil, server.ErrCompacted
+	}
+
 	rows, err := s.d.AfterPrefix(ctx, prefix, revision, limit)
 	if err != nil {
 		return 0, nil, err
@@ -201,25 +210,12 @@ func (s *SQLLog) After(ctx context.Context, prefix string, revision, limit int64
 	if err != nil {
 		return 0, nil, err
 	}
-
-	compact, rev, err := s.d.GetCompactRevision(ctx)
-
-	if err != nil {
-		return 0, nil, err
-	}
-
-	if revision > 0 && revision < compact {
-		return rev, result, server.ErrCompacted
-	}
-
-	return rev, result, err
+	return currentRevision, result, err
 }
 
 func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revision int64, includeDeleted bool) (int64, []*server.Event, error) {
-	var (
-		rows *sql.Rows
-		err  error
-	)
+	var err error
+
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.List", otelName))
 	defer func() {
 		span.RecordError(err)
@@ -233,6 +229,16 @@ func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revis
 		attribute.Bool("includeDeleted", includeDeleted),
 	)
 
+	compactRevision, currentRevision, err := s.d.GetCompactRevision(ctx)
+	if err != nil {
+		return 0, nil, err
+	}
+	if revision == 0 || revision > currentRevision {
+		revision = currentRevision
+	} else if revision < compactRevision {
+		return currentRevision, nil, server.ErrCompacted
+	}
+
 	// It's assumed that when there is a start key that that key exists.
 	if strings.HasSuffix(prefix, "/") {
 		// In the situation of a list start the startKey will not exist so set to ""
@@ -244,11 +250,7 @@ func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revis
 		startKey = ""
 	}
 
-	if revision == 0 {
-		rows, err = s.d.ListCurrent(ctx, prefix, startKey, limit, includeDeleted)
-	} else {
-		rows, err = s.d.List(ctx, prefix, startKey, limit, revision, includeDeleted)
-	}
+	rows, err := s.d.List(ctx, prefix, startKey, limit, revision, includeDeleted)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -258,18 +260,7 @@ func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revis
 		return 0, nil, err
 	}
 
-	compact, rev, err := s.d.GetCompactRevision(ctx)
-	if err != nil {
-		return 0, nil, err
-	}
-
-	if revision > 0 && revision < compact {
-		return rev, result, server.ErrCompacted
-	}
-
-	s.notifyWatcherPoll(rev)
-
-	return rev, result, err
+	return currentRevision, result, err
 }
 
 func RowsToEvents(rows *sql.Rows) ([]*server.Event, error) {
@@ -486,11 +477,21 @@ func (s *SQLLog) Count(ctx context.Context, prefix, startKey string, revision in
 		attribute.String("startKey", startKey),
 		attribute.Int64("revision", revision),
 	)
-	if revision == 0 {
-		return s.d.CountCurrent(ctx, prefix, startKey)
-	}
 
-	return s.d.Count(ctx, prefix, startKey, revision)
+	compactRevision, currentRevision, err := s.d.GetCompactRevision(ctx)
+	if err != nil {
+		return 0, 0, err
+	}
+	if revision == 0 || revision > currentRevision {
+		revision = currentRevision
+	} else if revision < compactRevision {
+		return currentRevision, 0, server.ErrCompacted
+	}
+	count, err := s.d.Count(ctx, prefix, startKey, revision)
+	if err != nil {
+		return 0, 0, err
+	}
+	return currentRevision, count, nil
 }
 
 func (s *SQLLog) Create(ctx context.Context, key string, value []byte, lease int64) (int64, bool, error) {

@@ -70,6 +70,7 @@ func (l *LogStructured) Start(ctx context.Context) error {
 
 func (l *LogStructured) Wait() {
 	l.wg.Wait()
+	l.log.Wait()
 }
 
 func (l *LogStructured) Get(ctx context.Context, key, rangeEnd string, limit, revision int64) (revRet int64, kvRet *server.KeyValue, errRet error) {
@@ -81,9 +82,8 @@ func (l *LogStructured) Get(ctx context.Context, key, rangeEnd string, limit, re
 		attribute.Int64("revision", revision),
 	)
 	defer func() {
-		l.adjustRevision(ctx, &revRet)
 		logrus.Debugf("GET %s, rev=%d => rev=%d, kv=%v, err=%v", key, revision, revRet, kvRet != nil, errRet)
-		span.SetAttributes(attribute.Int64("adjusted-revision", revRet))
+		span.SetAttributes(attribute.Int64("current-revision", revRet))
 		span.RecordError(errRet)
 		span.End()
 	}()
@@ -114,8 +114,7 @@ func (l *LogStructured) get(ctx context.Context, key, rangeEnd string, limit, re
 		span.AddEvent("key already compacted")
 		// ignore compacted when getting by revision
 		err = nil
-	}
-	if err != nil {
+	} else if err != nil {
 		return 0, nil, err
 	}
 	if revision != 0 {
@@ -125,16 +124,6 @@ func (l *LogStructured) get(ctx context.Context, key, rangeEnd string, limit, re
 		return rev, nil, nil
 	}
 	return rev, events[0], nil
-}
-
-func (l *LogStructured) adjustRevision(ctx context.Context, rev *int64) {
-	if *rev != 0 {
-		return
-	}
-
-	if newRev, err := l.log.CurrentRevision(ctx); err == nil {
-		*rev = newRev
-	}
 }
 
 func (l *LogStructured) Create(ctx context.Context, key string, value []byte, lease int64) (rev int64, created bool, err error) {
@@ -151,17 +140,15 @@ func (l *LogStructured) Delete(ctx context.Context, key string, revision int64) 
 
 func (l *LogStructured) List(ctx context.Context, prefix, startKey string, limit, revision int64) (revRet int64, kvRet []*server.KeyValue, errRet error) {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.List", otelName))
+	span.SetAttributes(
+		attribute.String("prefix", prefix),
+		attribute.String("startKey", startKey),
+		attribute.Int64("limit", limit),
+		attribute.Int64("revision", revision),
+	)
 
 	defer func() {
 		logrus.Debugf("LIST %s, start=%s, limit=%d, rev=%d => rev=%d, kvs=%d, err=%v", prefix, startKey, limit, revision, revRet, len(kvRet), errRet)
-		span.SetAttributes(
-			attribute.String("prefix", prefix),
-			attribute.String("startKey", startKey),
-			attribute.Int64("limit", limit),
-			attribute.Int64("revision", revision),
-			attribute.Int64("adjusted-revision", revRet),
-			attribute.Int64("kv-count", int64(len(kvRet))),
-		)
 		span.RecordError(errRet)
 		span.End()
 	}()
@@ -170,23 +157,10 @@ func (l *LogStructured) List(ctx context.Context, prefix, startKey string, limit
 	if err != nil {
 		return 0, nil, err
 	}
-	if revision == 0 && len(events) == 0 {
-		// if no revision is requested and no events are returned, then
-		// get the current revision and relist.  Relist is required because
-		// between now and getting the current revision something could have
-		// been created.
-		currentRev, err := l.log.CurrentRevision(ctx)
-		if err != nil {
-			return 0, nil, err
-		}
-		return l.List(ctx, prefix, startKey, limit, currentRev)
-	} else if revision != 0 {
-		rev = revision
-	}
 
-	kvs := make([]*server.KeyValue, 0, len(events))
-	for _, event := range events {
-		kvs = append(kvs, event.KV)
+	kvs := make([]*server.KeyValue, len(events))
+	for i, event := range events {
+		kvs[i] = event.KV
 	}
 	return rev, kvs, nil
 }
@@ -199,27 +173,13 @@ func (l *LogStructured) Count(ctx context.Context, prefix, startKey string, revi
 			attribute.String("prefix", prefix),
 			attribute.String("startKey", startKey),
 			attribute.Int64("revision", revision),
-			attribute.Int64("adjusted-revision", revRet),
+			attribute.Int64("current-revision", revRet),
 			attribute.Int64("count", count),
 		)
 		span.RecordError(err)
 		span.End()
 	}()
-	rev, count, err := l.log.Count(ctx, prefix, startKey, revision)
-	if err != nil {
-		return 0, 0, err
-	}
-
-	if count == 0 {
-		// if count is zero, then so is revision, so now get the current revision and re-count at that revision
-		currentRev, err := l.log.CurrentRevision(ctx)
-		if err != nil {
-			return 0, 0, err
-		}
-		rev, rows, err := l.List(ctx, prefix, prefix, 1000, currentRev)
-		return rev, int64(len(rows)), err
-	}
-	return rev, count, nil
+	return l.log.Count(ctx, prefix, startKey, revision)
 }
 
 func (l *LogStructured) Update(ctx context.Context, key string, value []byte, revision, lease int64) (revRet int64, updateRet bool, errRet error) {
@@ -231,7 +191,7 @@ func (l *LogStructured) Update(ctx context.Context, key string, value []byte, re
 			attribute.Int64("revision", revision),
 			attribute.Int64("lease", lease),
 			attribute.Int64("value-size", int64(len(value))),
-			attribute.Int64("adjusted-revision", revRet),
+			attribute.Int64("current-revision", revRet),
 			attribute.Bool("updated", updateRet),
 		)
 		span.End()

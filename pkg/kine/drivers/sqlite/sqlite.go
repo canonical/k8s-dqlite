@@ -60,7 +60,7 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string, connecti
 		opts.dsn = "./db/state.db?_journal=WAL&_synchronous=FULL&_foreign_keys=1"
 	}
 
-	dialect, err := generic.Open(ctx, driverName, opts.dsn, connectionPoolConfig, "?", false)
+	dialect, err := generic.Open(ctx, driverName, opts.dsn, connectionPoolConfig)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -84,7 +84,6 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string, connecti
 		}
 		return err
 	}
-	dialect.GetSizeSQL = `SELECT (page_count - freelist_count) * page_size FROM pragma_page_count(), pragma_page_size(), pragma_freelist_count()`
 
 	dialect.CompactInterval = opts.compactInterval
 	dialect.PollInterval = opts.pollInterval
