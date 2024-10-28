@@ -58,7 +58,6 @@ func New(d Dialect) *SQLLog {
 }
 
 type Dialect interface {
-	ListCurrent(ctx context.Context, prefix, startKey string, limit int64, includeDeleted bool) (*sql.Rows, error)
 	List(ctx context.Context, prefix, startKey string, limit, revision int64, includeDeleted bool) (*sql.Rows, error)
 	CountCurrent(ctx context.Context, prefix, startKey string) (int64, int64, error)
 	Count(ctx context.Context, prefix, startKey string, revision int64) (int64, int64, error)
@@ -216,10 +215,8 @@ func (s *SQLLog) After(ctx context.Context, prefix string, revision, limit int64
 }
 
 func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revision int64, includeDeleted bool) (int64, []*server.Event, error) {
-	var (
-		rows *sql.Rows
-		err  error
-	)
+	var err error
+
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.List", otelName))
 	defer func() {
 		span.RecordError(err)
@@ -233,6 +230,16 @@ func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revis
 		attribute.Bool("includeDeleted", includeDeleted),
 	)
 
+	compactRevision, currentRevision, err := s.d.GetCompactRevision(ctx)
+	if err != nil {
+		return 0, nil, err
+	}
+	if revision == 0 || revision > currentRevision {
+		revision = currentRevision
+	} else if revision < compactRevision {
+		return currentRevision, nil, server.ErrCompacted
+	}
+
 	// It's assumed that when there is a start key that that key exists.
 	if strings.HasSuffix(prefix, "/") {
 		// In the situation of a list start the startKey will not exist so set to ""
@@ -244,11 +251,7 @@ func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revis
 		startKey = ""
 	}
 
-	if revision == 0 {
-		rows, err = s.d.ListCurrent(ctx, prefix, startKey, limit, includeDeleted)
-	} else {
-		rows, err = s.d.List(ctx, prefix, startKey, limit, revision, includeDeleted)
-	}
+	rows, err := s.d.List(ctx, prefix, startKey, limit, revision, includeDeleted)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -258,18 +261,13 @@ func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revis
 		return 0, nil, err
 	}
 
-	compact, rev, err := s.d.GetCompactRevision(ctx)
-	if err != nil {
-		return 0, nil, err
+	if revision > 0 && revision < compactRevision {
+		return currentRevision, result, server.ErrCompacted
 	}
 
-	if revision > 0 && revision < compact {
-		return rev, result, server.ErrCompacted
-	}
+	s.notifyWatcherPoll(currentRevision)
 
-	s.notifyWatcherPoll(rev)
-
-	return rev, result, err
+	return currentRevision, result, err
 }
 
 func RowsToEvents(rows *sql.Rows) ([]*server.Event, error) {
