@@ -190,6 +190,17 @@ func (s *SQLLog) After(ctx context.Context, prefix string, revision, limit int64
 		attribute.Int64("revision", revision),
 		attribute.Int64("limit", limit),
 	)
+
+	compactRevision, currentRevision, err := s.d.GetCompactRevision(ctx)
+	if err != nil {
+		return 0, nil, err
+	}
+	if revision == 0 || revision > currentRevision {
+		revision = currentRevision
+	} else if revision < compactRevision {
+		return currentRevision, nil, server.ErrCompacted
+	}
+
 	rows, err := s.d.AfterPrefix(ctx, prefix, revision, limit)
 	if err != nil {
 		return 0, nil, err
@@ -199,18 +210,7 @@ func (s *SQLLog) After(ctx context.Context, prefix string, revision, limit int64
 	if err != nil {
 		return 0, nil, err
 	}
-
-	compact, rev, err := s.d.GetCompactRevision(ctx)
-
-	if err != nil {
-		return 0, nil, err
-	}
-
-	if revision > 0 && revision < compact {
-		return rev, result, server.ErrCompacted
-	}
-
-	return rev, result, err
+	return currentRevision, result, err
 }
 
 func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revision int64, includeDeleted bool) (int64, []*server.Event, error) {
