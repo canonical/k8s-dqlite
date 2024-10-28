@@ -190,21 +190,7 @@ func (l *LogStructured) Count(ctx context.Context, prefix, startKey string, revi
 		span.RecordError(err)
 		span.End()
 	}()
-	rev, count, err := l.log.Count(ctx, prefix, startKey, revision)
-	if err != nil {
-		return 0, 0, err
-	}
-
-	if count == 0 {
-		// if count is zero, then so is revision, so now get the current revision and re-count at that revision
-		currentRev, err := l.log.CurrentRevision(ctx)
-		if err != nil {
-			return 0, 0, err
-		}
-		rev, rows, err := l.List(ctx, prefix, prefix, 1000, currentRev)
-		return rev, int64(len(rows)), err
-	}
-	return rev, count, nil
+	return l.log.Count(ctx, prefix, startKey, revision)
 }
 
 func (l *LogStructured) Update(ctx context.Context, key string, value []byte, revision, lease int64) (revRet int64, updateRet bool, errRet error) {
