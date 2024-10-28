@@ -70,6 +70,7 @@ func (l *LogStructured) Start(ctx context.Context) error {
 
 func (l *LogStructured) Wait() {
 	l.wg.Wait()
+	l.log.Wait()
 }
 
 func (l *LogStructured) Get(ctx context.Context, key, rangeEnd string, limit, revision int64) (revRet int64, kvRet *server.KeyValue, errRet error) {
