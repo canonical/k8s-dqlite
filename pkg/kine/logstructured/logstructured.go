@@ -151,17 +151,15 @@ func (l *LogStructured) Delete(ctx context.Context, key string, revision int64) 
 
 func (l *LogStructured) List(ctx context.Context, prefix, startKey string, limit, revision int64) (revRet int64, kvRet []*server.KeyValue, errRet error) {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.List", otelName))
+	span.SetAttributes(
+		attribute.String("prefix", prefix),
+		attribute.String("startKey", startKey),
+		attribute.Int64("limit", limit),
+		attribute.Int64("revision", revision),
+	)
 
 	defer func() {
 		logrus.Debugf("LIST %s, start=%s, limit=%d, rev=%d => rev=%d, kvs=%d, err=%v", prefix, startKey, limit, revision, revRet, len(kvRet), errRet)
-		span.SetAttributes(
-			attribute.String("prefix", prefix),
-			attribute.String("startKey", startKey),
-			attribute.Int64("limit", limit),
-			attribute.Int64("revision", revision),
-			attribute.Int64("adjusted-revision", revRet),
-			attribute.Int64("kv-count", int64(len(kvRet))),
-		)
 		span.RecordError(errRet)
 		span.End()
 	}()
@@ -170,23 +168,10 @@ func (l *LogStructured) List(ctx context.Context, prefix, startKey string, limit
 	if err != nil {
 		return 0, nil, err
 	}
-	if revision == 0 && len(events) == 0 {
-		// if no revision is requested and no events are returned, then
-		// get the current revision and relist.  Relist is required because
-		// between now and getting the current revision something could have
-		// been created.
-		currentRev, err := l.log.CurrentRevision(ctx)
-		if err != nil {
-			return 0, nil, err
-		}
-		return l.List(ctx, prefix, startKey, limit, currentRev)
-	} else if revision != 0 {
-		rev = revision
-	}
 
-	kvs := make([]*server.KeyValue, 0, len(events))
-	for _, event := range events {
-		kvs = append(kvs, event.KV)
+	kvs := make([]*server.KeyValue, len(events))
+	for i, event := range events {
+		kvs[i] = event.KV
 	}
 	return rev, kvs, nil
 }

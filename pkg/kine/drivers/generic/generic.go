@@ -133,7 +133,6 @@ type Generic struct {
 
 	LockWrites           bool
 	DB                   *prepared.DB
-	GetCurrentSQL        string
 	RevisionSQL          string
 	ListRevisionStartSQL string
 	CountCurrentSQL      string
@@ -244,7 +243,6 @@ func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig
 	return &Generic{
 		DB: prepared.New(db),
 
-		GetCurrentSQL:        q(fmt.Sprintf(listSQL, ""), paramCharacter, numbered),
 		ListRevisionStartSQL: q(fmt.Sprintf(listSQL, "AND mkv.id <= ?"), paramCharacter, numbered),
 
 		CountCurrentSQL: q(fmt.Sprintf(`
@@ -718,21 +716,6 @@ func (d *Generic) DeleteRevision(ctx context.Context, revision int64) error {
 
 	_, err = d.execute(ctx, "delete_rev_sql", d.DeleteRevSQL, revision)
 	return err
-}
-
-func (d *Generic) ListCurrent(ctx context.Context, prefix, startKey string, limit int64, includeDeleted bool) (*sql.Rows, error) {
-	sql := d.GetCurrentSQL
-	start, end := getPrefixRange(prefix)
-	// NOTE(neoaggelos): don't ignore startKey if set
-	if startKey != "" {
-		start = startKey + "\x01"
-	}
-
-	if limit > 0 {
-		sql = fmt.Sprintf("%s LIMIT ?", sql)
-		return d.query(ctx, "get_current_sql_limit", sql, start, end, includeDeleted, limit)
-	}
-	return d.query(ctx, "get_current_sql", sql, start, end, includeDeleted)
 }
 
 func (d *Generic) List(ctx context.Context, prefix, startKey string, limit, revision int64, includeDeleted bool) (*sql.Rows, error) {
