@@ -60,7 +60,7 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string, connecti
 		opts.dsn = "./db/state.db?_journal=WAL&_synchronous=FULL&_foreign_keys=1"
 	}
 
-	dialect, err := generic.Open(ctx, driverName, opts.dsn, connectionPoolConfig, "?", false)
+	dialect, err := generic.Open(ctx, driverName, opts.dsn, connectionPoolConfig)
 	if err != nil {
 		return nil, nil, err
 	}
