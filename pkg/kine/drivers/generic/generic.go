@@ -104,25 +104,6 @@ var (
 		ORDER BY kv.name ASC, kv.id ASC
 	`, columns)
 
-	revisionAfterSQL = fmt.Sprintf(`
-		SELECT *
-		FROM (
-			SELECT %s
-			FROM kine AS kv
-			JOIN (
-				SELECT MAX(mkv.id) AS id
-				FROM kine AS mkv
-				WHERE mkv.name >= ? AND mkv.name < ?
-					AND mkv.id <= ?
-				GROUP BY mkv.name
-			) AS maxkv
-				ON maxkv.id = kv.id
-			WHERE
-				? OR kv.deleted = 0
-		) AS lkv
-		ORDER BY lkv.name ASC, lkv.theid ASC
-	`, columns)
-
 	revisionIntervalSQL = `
 		SELECT (
 			SELECT MAX(prev_revision)
@@ -155,7 +136,6 @@ type Generic struct {
 	GetCurrentSQL        string
 	RevisionSQL          string
 	ListRevisionStartSQL string
-	GetRevisionAfterSQL  string
 	CountCurrentSQL      string
 	CountRevisionSQL     string
 	AfterSQLPrefix       string
@@ -266,7 +246,6 @@ func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig
 
 		GetCurrentSQL:        q(fmt.Sprintf(listSQL, ""), paramCharacter, numbered),
 		ListRevisionStartSQL: q(fmt.Sprintf(listSQL, "AND mkv.id <= ?"), paramCharacter, numbered),
-		GetRevisionAfterSQL:  q(revisionAfterSQL, paramCharacter, numbered),
 
 		CountCurrentSQL: q(fmt.Sprintf(`
 			SELECT (%s), COUNT(*)
@@ -758,21 +737,15 @@ func (d *Generic) ListCurrent(ctx context.Context, prefix, startKey string, limi
 
 func (d *Generic) List(ctx context.Context, prefix, startKey string, limit, revision int64, includeDeleted bool) (*sql.Rows, error) {
 	start, end := getPrefixRange(prefix)
-	if startKey == "" {
-		sql := d.ListRevisionStartSQL
-		if limit > 0 {
-			sql = fmt.Sprintf("%s LIMIT ?", sql)
-			return d.query(ctx, "list_revision_start_sql_limit", sql, start, end, revision, includeDeleted, limit)
-		}
-		return d.query(ctx, "list_revision_start_sql", sql, start, end, revision, includeDeleted)
+	if startKey != "" {
+		start = startKey + "\x01"
 	}
-
-	sql := d.GetRevisionAfterSQL
+	sql := d.ListRevisionStartSQL
 	if limit > 0 {
 		sql = fmt.Sprintf("%s LIMIT ?", sql)
-		return d.query(ctx, "get_revision_after_sql_limit", sql, startKey+"\x01", end, revision, includeDeleted, limit)
+		return d.query(ctx, "list_revision_start_sql_limit", sql, start, end, revision, includeDeleted, limit)
 	}
-	return d.query(ctx, "get_revision_after_sql", sql, startKey+"\x01", end, revision, includeDeleted)
+	return d.query(ctx, "list_revision_start_sql", sql, start, end, revision, includeDeleted)
 }
 
 func (d *Generic) CurrentRevision(ctx context.Context) (int64, error) {
