@@ -96,7 +96,7 @@ var (
 			FROM kine mkv
 			WHERE
 				mkv.name >= ? AND mkv.name < ?
-				%%s
+				AND mkv.id <= ?
 			GROUP BY mkv.name) maxkv
 	    	ON maxkv.id = kv.id
 		WHERE
@@ -135,7 +135,6 @@ type Generic struct {
 	DB                   *prepared.DB
 	RevisionSQL          string
 	ListRevisionStartSQL string
-	CountCurrentSQL      string
 	CountRevisionSQL     string
 	AfterSQLPrefix       string
 	AfterSQL             string
@@ -243,19 +242,13 @@ func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig
 	return &Generic{
 		DB: prepared.New(db),
 
-		ListRevisionStartSQL: q(fmt.Sprintf(listSQL, "AND mkv.id <= ?"), paramCharacter, numbered),
-
-		CountCurrentSQL: q(fmt.Sprintf(`
-			SELECT (%s), COUNT(*)
-			FROM (
-				%s
-			) c`, revSQL, fmt.Sprintf(listSQL, "")), paramCharacter, numbered),
+		ListRevisionStartSQL: q(listSQL, paramCharacter, numbered),
 
 		CountRevisionSQL: q(fmt.Sprintf(`
-			SELECT (%s), COUNT(c.theid)
+			SELECT COUNT(*)
 			FROM (
 				%s
-			) c`, revSQL, fmt.Sprintf(listSQL, "AND mkv.id <= ?")), paramCharacter, numbered),
+			)`, listSQL), paramCharacter, numbered),
 
 		AfterSQLPrefix: q(fmt.Sprintf(`
 			SELECT %s
@@ -437,62 +430,29 @@ func (d *Generic) execute(ctx context.Context, txName, query string, args ...int
 	return result, err
 }
 
-func (d *Generic) CountCurrent(ctx context.Context, prefix string, startKey string) (int64, int64, error) {
-	var (
-		rev sql.NullInt64
-		id  int64
-	)
-
-	start, end := getPrefixRange(prefix)
-	if startKey != "" {
-		start = startKey + "\x01"
-	}
-	rows, err := d.query(ctx, "count_current", d.CountCurrentSQL, start, end, false)
-	if err != nil {
-		return 0, 0, err
-	}
-	defer rows.Close()
-
-	if !rows.Next() {
-		if err := rows.Err(); err != nil {
-			return 0, 0, err
-		}
-		return 0, 0, sql.ErrNoRows
-	}
-
-	if err := rows.Scan(&rev, &id); err != nil {
-		return 0, 0, err
-	}
-	return rev.Int64, id, nil
-}
-
-func (d *Generic) Count(ctx context.Context, prefix, startKey string, revision int64) (int64, int64, error) {
-	var (
-		rev sql.NullInt64
-		id  int64
-	)
-
+func (d *Generic) Count(ctx context.Context, prefix, startKey string, revision int64) (int64, error) {
 	start, end := getPrefixRange(prefix)
 	if startKey != "" {
 		start = startKey + "\x01"
 	}
 	rows, err := d.query(ctx, "count_revision", d.CountRevisionSQL, start, end, revision, false)
 	if err != nil {
-		return 0, 0, err
+		return 0, err
 	}
 	defer rows.Close()
 
 	if !rows.Next() {
 		if err := rows.Err(); err != nil {
-			return 0, 0, err
+			return 0, err
 		}
-		return 0, 0, sql.ErrNoRows
+		return 0, sql.ErrNoRows
 	}
 
-	if err := rows.Scan(&rev, &id); err != nil {
-		return 0, 0, err
+	var id int64
+	if err := rows.Scan(&id); err != nil {
+		return 0, err
 	}
-	return rev.Int64, id, err
+	return id, err
 }
 
 func (d *Generic) Create(ctx context.Context, key string, value []byte, ttl int64) (rev int64, succeeded bool, err error) {
