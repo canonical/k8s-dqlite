@@ -192,10 +192,6 @@ func (s *SQLLog) DoCompact(ctx context.Context) (err error) {
 	return nil
 }
 
-func (s *SQLLog) CurrentRevision(ctx context.Context) (int64, error) {
-	return s.d.CurrentRevision(ctx)
-}
-
 func (s *SQLLog) After(ctx context.Context, prefix string, revision, limit int64) (int64, []*server.Event, error) {
 	var err error
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.After", otelName))
