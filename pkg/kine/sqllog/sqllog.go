@@ -233,6 +233,28 @@ func (s *SQLLog) After(ctx context.Context, prefix string, revision, limit int64
 	return currentRevision, result, err
 }
 
+func (s *SQLLog) Get(ctx context.Context, key, rangeEnd string, limit, revision int64) (revRet int64, kvRet *server.KeyValue, errRet error) {
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Get", otelName))
+	span.SetAttributes(
+		attribute.String("key", key),
+		attribute.String("rangeEnd", rangeEnd),
+		attribute.Int64("limit", limit),
+		attribute.Int64("revision", revision),
+	)
+	defer func() {
+		logrus.Debugf("GET %s, rev=%d => rev=%d, kv=%v, err=%v", key, revision, revRet, kvRet != nil, errRet)
+		span.SetAttributes(attribute.Int64("current-revision", revRet))
+		span.RecordError(errRet)
+		span.End()
+	}()
+
+	rev, kv, err := s.List(ctx, key, rangeEnd, limit, revision)
+	if len(kv) == 0 {
+		return rev, nil, err
+	}
+	return rev, kv[0], err
+}
+
 func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revision int64) (int64, []*server.KeyValue, error) {
 	var err error
 
