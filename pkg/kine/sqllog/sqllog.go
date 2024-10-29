@@ -80,8 +80,10 @@ func New(d Dialect) *LogStructured {
 }
 
 func (s *SQLLog) Start(ctx context.Context) error {
+	// FIXME: questo non andrebbe fatto
 	s.ctx = ctx
 	context.AfterFunc(ctx, func() {
+		s.wg.Wait()
 		if err := s.d.Close(); err != nil {
 			logrus.Errorf("cannot close database: %v", err)
 		}
@@ -95,6 +97,12 @@ func (s *SQLLog) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		s.ttl(ctx)
+	}()
 
 	return nil
 }
@@ -288,6 +296,52 @@ func RowsToEvents(rows *sql.Rows) ([]*server.Event, error) {
 	}
 
 	return result, nil
+}
+
+func (s *SQLLog) ttl(ctx context.Context) {
+	run := func(ctx context.Context, key string, revision int64, timeout time.Duration) {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(timeout):
+			s.Delete(ctx, key, revision)
+		}
+	}
+
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+
+		rev, events, err := s.List(ctx, "/", "", 1000, 0, false)
+		for len(events) > 0 {
+			if err != nil {
+				logrus.Errorf("failed to read old events for ttl: %v", err)
+				return
+			}
+
+			for _, event := range events {
+				if event.KV.Lease > 0 {
+					go run(ctx, event.KV.Key, event.KV.ModRevision, time.Duration(event.KV.Lease)*time.Second)
+				}
+			}
+
+			_, events, err = s.List(ctx, "/", events[len(events)-1].KV.Key, 1000, rev, false)
+		}
+
+		watchCh, err := s.Watch(ctx, "/", rev)
+		if err != nil {
+			logrus.Errorf("failed to watch events for ttl: %v", err)
+			return
+		}
+
+		for events := range watchCh {
+			for _, event := range events {
+				if event.KV.Lease > 0 {
+					go run(ctx, event.KV.Key, event.KV.ModRevision, time.Duration(event.KV.Lease)*time.Second)
+				}
+			}
+		}
+	}()
 }
 
 func (s *SQLLog) Watch(ctx context.Context, key string, startRevision int64) (<-chan []*server.Event, error) {

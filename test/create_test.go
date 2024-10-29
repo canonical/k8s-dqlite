@@ -70,10 +70,10 @@ func BenchmarkCreate(b *testing.B) {
 	}
 }
 
-func createKey(ctx context.Context, g Gomega, client *clientv3.Client, key string, value string) int64 {
+func createKey(ctx context.Context, g Gomega, client *clientv3.Client, key string, value string, opts ...clientv3.OpOption) int64 {
 	resp, err := client.Txn(ctx).
 		If(clientv3.Compare(clientv3.ModRevision(key), "=", 0)).
-		Then(clientv3.OpPut(key, value)).
+		Then(clientv3.OpPut(key, value, opts...)).
 		Commit()
 
 	g.Expect(err).To(BeNil())
