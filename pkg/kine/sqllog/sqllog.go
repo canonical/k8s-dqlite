@@ -70,12 +70,10 @@ type SQLLog struct {
 	wg          sync.WaitGroup
 }
 
-func New(d Dialect) *LogStructured {
-	return &LogStructured{
-		SQLLog: &SQLLog{
-			d:      d,
-			notify: make(chan int64, 1024),
-		},
+func New(d Dialect) *SQLLog {
+	return &SQLLog{
+		d:      d,
+		notify: make(chan int64, 1024),
 	}
 }
 
