@@ -6,7 +6,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/canonical/go-dqlite"
 	"github.com/canonical/go-dqlite/driver"
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/generic"
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/sqlite"
@@ -16,13 +15,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
-
-func init() {
-	// We assume SQLite will be used multi-threaded
-	if err := dqlite.ConfigMultiThread(); err != nil {
-		panic(errors.Wrap(err, "failed to set dqlite multithreaded mode"))
-	}
-}
 
 func New(ctx context.Context, datasourceName string, tlsInfo tls.Config, connectionPoolConfig *generic.ConnectionPoolConfig) (server.Backend, error) {
 	backend, _, err := NewVariant(ctx, datasourceName, connectionPoolConfig)

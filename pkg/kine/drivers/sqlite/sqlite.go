@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/canonical/go-dqlite"
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/generic"
 	"github.com/canonical/k8s-dqlite/pkg/kine/logstructured"
 	"github.com/canonical/k8s-dqlite/pkg/kine/logstructured/sqllog"
@@ -17,6 +18,21 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
+
+// #cgo LDFLAGS: -lsqlite3
+// #include "strong_checkpoint.h"
+import "C"
+
+func init() {
+	// We assume SQLite will be used multi-threaded
+	if err := dqlite.ConfigMultiThread(); err != nil {
+		panic(errors.Wrap(err, "failed to set dqlite multithreaded mode"))
+	}
+
+	if err := C.sqlite3_strong_checkpoint_register(); err != sqlite3.SQLITE_OK {
+		logrus.Errorf("could not setup checkpoint hook: %v", sqlite3.ErrNo(err))
+	}
+}
 
 type opts struct {
 	dsn        string
