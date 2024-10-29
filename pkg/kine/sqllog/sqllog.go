@@ -233,7 +233,7 @@ func (s *SQLLog) After(ctx context.Context, prefix string, revision, limit int64
 	return currentRevision, result, err
 }
 
-func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revision int64, includeDeleted bool) (int64, []*server.Event, error) {
+func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revision int64) (int64, []*server.KeyValue, error) {
 	var err error
 
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.List", otelName))
@@ -246,7 +246,6 @@ func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revis
 		attribute.String("startKey", startKey),
 		attribute.Int64("limit", limit),
 		attribute.Int64("revision", revision),
-		attribute.Bool("includeDeleted", includeDeleted),
 	)
 
 	compactRevision, currentRevision, err := s.d.GetCompactRevision(ctx)
@@ -270,17 +269,32 @@ func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revis
 		startKey = ""
 	}
 
-	rows, err := s.d.List(ctx, prefix, startKey, limit, revision, includeDeleted)
+	rows, err := s.d.List(ctx, prefix, startKey, limit, revision, false)
 	if err != nil {
 		return 0, nil, err
 	}
 
-	result, err := RowsToEvents(rows)
+	result, err := RowsToKeyValue(rows)
 	if err != nil {
 		return 0, nil, err
 	}
 
 	return currentRevision, result, err
+}
+
+func RowsToKeyValue(rows *sql.Rows) ([]*server.KeyValue, error) {
+	var result []*server.KeyValue
+	defer rows.Close()
+
+	for rows.Next() {
+		kv, err := scanKeyValue(rows)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, kv)
+	}
+
+	return result, nil
 }
 
 func RowsToEvents(rows *sql.Rows) ([]*server.Event, error) {
@@ -289,7 +303,7 @@ func RowsToEvents(rows *sql.Rows) ([]*server.Event, error) {
 
 	for rows.Next() {
 		event := &server.Event{}
-		if err := scan(rows, event); err != nil {
+		if err := scanEvent(rows, event); err != nil {
 			return nil, err
 		}
 		result = append(result, event)
@@ -312,20 +326,20 @@ func (s *SQLLog) ttl(ctx context.Context) {
 	go func() {
 		defer s.wg.Done()
 
-		rev, events, err := s.List(ctx, "/", "", 1000, 0, false)
-		for len(events) > 0 {
+		rev, kvs, err := s.List(ctx, "/", "", 1000, 0)
+		for len(kvs) > 0 {
 			if err != nil {
 				logrus.Errorf("failed to read old events for ttl: %v", err)
 				return
 			}
 
-			for _, event := range events {
-				if event.KV.Lease > 0 {
-					go run(ctx, event.KV.Key, event.KV.ModRevision, time.Duration(event.KV.Lease)*time.Second)
+			for _, kv := range kvs {
+				if kv.Lease > 0 {
+					go run(ctx, kv.Key, kv.ModRevision, time.Duration(kv.Lease)*time.Second)
 				}
 			}
 
-			_, events, err = s.List(ctx, "/", events[len(events)-1].KV.Key, 1000, rev, false)
+			_, kvs, err = s.List(ctx, "/", kvs[len(kvs)-1].Key, 1000, rev)
 		}
 
 		watchCh, err := s.Watch(ctx, "/", rev)
@@ -624,7 +638,36 @@ func (s *SQLLog) notifyWatcherPoll(revision int64) {
 	}
 }
 
-func scan(rows *sql.Rows, event *server.Event) error {
+func scanKeyValue(rows *sql.Rows) (*server.KeyValue, error) {
+	kv := &server.KeyValue{}
+	var create, delete bool
+	var prevRevision int64
+	var prevValue []byte
+
+	// FIXME eliminare roba inutile
+	err := rows.Scan(
+		&kv.ModRevision,
+		&kv.Key,
+		&create,
+		&delete,
+		&kv.CreateRevision,
+		&prevRevision,
+		&kv.Lease,
+		&kv.Value,
+		&prevValue,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if create {
+		kv.CreateRevision = kv.ModRevision
+	}
+
+	return kv, nil
+}
+
+func scanEvent(rows *sql.Rows, event *server.Event) error {
 	event.KV = &server.KeyValue{}
 	event.PrevKV = &server.KeyValue{}
 
