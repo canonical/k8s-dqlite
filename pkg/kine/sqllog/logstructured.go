@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/canonical/k8s-dqlite/pkg/kine/server"
@@ -35,8 +34,6 @@ func (l *LogStructured) Start(ctx context.Context) error {
 	if err := l.SQLLog.Start(ctx); err != nil {
 		return err
 	}
-	l.Create(ctx, "/registry/health", []byte(`{"health":"true"}`), 0)
-
 	l.wg.Add(1)
 	go func() {
 		defer l.wg.Done()
@@ -98,7 +95,7 @@ func (l *LogStructured) get(ctx context.Context, key, rangeEnd string, limit, re
 	return rev, events[0], nil
 }
 
-func (l *LogStructured) List(ctx context.Context, prefix, startKey string, limit, revision int64) (revRet int64, kvRet []*server.KeyValue, errRet error) {
+func (l *LogStructured) List(ctx context.Context, prefix, startKey string, limit, revision int64) (_ int64, _ []*server.KeyValue, err error) {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.List", otelName))
 	span.SetAttributes(
 		attribute.String("prefix", prefix),
@@ -108,8 +105,8 @@ func (l *LogStructured) List(ctx context.Context, prefix, startKey string, limit
 	)
 
 	defer func() {
-		logrus.Debugf("LIST %s, start=%s, limit=%d, rev=%d => rev=%d, kvs=%d, err=%v", prefix, startKey, limit, revision, revRet, len(kvRet), errRet)
-		span.RecordError(errRet)
+		// logrus.Debugf("LIST %s, start=%s, limit=%d, rev=%d => rev=%d, kvs=%d, err=%v", prefix, startKey, limit, revision, revRet, len(kvRet), errRet)
+		span.RecordError(err)
 		span.End()
 	}()
 
@@ -127,11 +124,13 @@ func (l *LogStructured) List(ctx context.Context, prefix, startKey string, limit
 
 func (l *LogStructured) ttlEvents(ctx context.Context) chan *server.Event {
 	result := make(chan *server.Event)
-	var shouldClose atomic.Bool
 
-	l.wg.Add(2)
+	l.wg.Add(1)
 	go func() {
-		defer l.wg.Done()
+		defer func() {
+			close(result)
+			l.wg.Done()
+		}()
 
 		rev, events, err := l.SQLLog.List(ctx, "/", "", 1000, 0, false)
 		for len(events) > 0 {
@@ -149,24 +148,18 @@ func (l *LogStructured) ttlEvents(ctx context.Context) chan *server.Event {
 			_, events, err = l.SQLLog.List(ctx, "/", events[len(events)-1].KV.Key, 1000, rev, false)
 		}
 
-		if !shouldClose.CompareAndSwap(false, true) {
-			close(result)
+		watchCh, err := l.SQLLog.Watch(ctx, "/", 0)
+		if err != nil {
+			logrus.Errorf("failed to watch events for ttl: %v", err)
+			return
 		}
-	}()
 
-	go func() {
-		defer l.wg.Done()
-
-		for events := range l.SQLLog.Watch(ctx, "/") {
+		for events := range watchCh {
 			for _, event := range events {
 				if event.KV.Lease > 0 {
 					result <- event
 				}
 			}
-		}
-
-		if !shouldClose.CompareAndSwap(false, true) {
-			close(result)
 		}
 	}()
 
@@ -188,68 +181,4 @@ func (l *LogStructured) ttl(ctx context.Context) {
 			mutex.Unlock()
 		}(event)
 	}
-}
-
-func (l *LogStructured) Watch(ctx context.Context, prefix string, revision int64) <-chan []*server.Event {
-	logrus.Debugf("WATCH %s, revision=%d", prefix, revision)
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Watch", otelName))
-	defer span.End()
-	span.SetAttributes(
-		attribute.String("prefix", prefix),
-		attribute.Int64("revision", revision),
-	)
-
-	// starting watching right away so we don't miss anything
-	ctx, cancel := context.WithCancel(ctx)
-	readChan := l.SQLLog.Watch(ctx, prefix)
-
-	// include the current revision in list
-	if revision > 0 {
-		revision -= 1
-	}
-
-	result := make(chan []*server.Event, 100)
-
-	rev, kvs, err := l.SQLLog.After(ctx, prefix, revision, 0)
-	if err != nil {
-		logrus.Errorf("failed to list %s for revision %d", prefix, revision)
-		msg := fmt.Sprintf("failed to list %s for revision %d", prefix, revision)
-		span.AddEvent(msg)
-		logrus.Errorf(msg)
-		cancel()
-	}
-
-	logrus.Debugf("WATCH LIST key=%s rev=%d => rev=%d kvs=%d", prefix, revision, rev, len(kvs))
-	span.SetAttributes(attribute.Int64("current-revision", rev), attribute.Int64("kvs-count", int64(len(kvs))))
-
-	l.wg.Add(1)
-	go func() {
-		defer l.wg.Done()
-
-		lastRevision := revision
-		if len(kvs) > 0 {
-			lastRevision = rev
-		}
-
-		if len(kvs) > 0 {
-			result <- kvs
-		}
-
-		// always ensure we fully read the channel
-		for i := range readChan {
-			result <- filterRevision(i, lastRevision)
-		}
-		close(result)
-		cancel()
-	}()
-
-	return result
-}
-
-func filterRevision(events []*server.Event, rev int64) []*server.Event {
-	for len(events) > 0 && events[0].KV.ModRevision <= rev {
-		events = events[1:]
-	}
-
-	return events
 }

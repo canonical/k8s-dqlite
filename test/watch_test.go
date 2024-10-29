@@ -30,8 +30,9 @@ func TestWatch(t *testing.T) {
 			kine := newKineServer(ctx, t, &kineOptions{backendType: backendType})
 
 			// start watching for events on key
-			const prefix = "test/"
-			watchCh := kine.client.Watch(ctx, prefix)
+			const watchedPrefix = "watched/"
+			const ingnoredPrefix = "ignored/"
+			watchCh := kine.client.Watch(ctx, watchedPrefix)
 
 			t.Run("ReceiveNothingUntilActivity", func(t *testing.T) {
 				g := NewWithT(t)
@@ -41,9 +42,10 @@ func TestWatch(t *testing.T) {
 			t.Run("Create", func(t *testing.T) {
 				g := NewWithT(t)
 
-				key := prefix + "createdKey"
 				value := "testValue"
+				key := watchedPrefix + "createdKey"
 				rev := createKey(ctx, g, kine.client, key, value)
+				createKey(ctx, g, kine.client, ingnoredPrefix+"createdKey", value)
 
 				g.Eventually(watchCh, pollTimeout).Should(ReceiveEvents(g,
 					CreateEvent(g, key, value, rev),
@@ -54,7 +56,7 @@ func TestWatch(t *testing.T) {
 			t.Run("Update", func(t *testing.T) {
 				g := NewWithT(t)
 
-				key := prefix + "updatedKey"
+				key := watchedPrefix + "updatedKey"
 				createValue := "testValue1"
 				createRev := createKey(ctx, g, kine.client, key, createValue)
 				g.Eventually(watchCh, pollTimeout).Should(ReceiveEvents(g,
@@ -73,7 +75,7 @@ func TestWatch(t *testing.T) {
 			t.Run("Delete", func(t *testing.T) {
 				g := NewWithT(t)
 
-				key := prefix + "deletedKey"
+				key := watchedPrefix + "deletedKey"
 				createValue := "testValue"
 				createRev := createKey(ctx, g, kine.client, key, createValue)
 				g.Eventually(watchCh, pollTimeout).Should(ReceiveEvents(g,
@@ -93,7 +95,7 @@ func TestWatch(t *testing.T) {
 				defer cancel()
 				g := NewWithT(t)
 
-				key := prefix + "revisionKey"
+				key := watchedPrefix + "revisionKey"
 				createValue := "testValue1"
 				createRev := createKey(ctx, g, kine.client, key, createValue)
 

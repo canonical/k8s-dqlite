@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	otelName         = "logstructured"
+	otelName         = "sqllog"
 	SupersededCount  = 100
 	compactBatchSize = 1000
 )
@@ -79,14 +79,24 @@ func New(d Dialect) *LogStructured {
 	}
 }
 
-func (s *SQLLog) Start(ctx context.Context) (err error) {
+func (s *SQLLog) Start(ctx context.Context) error {
 	s.ctx = ctx
 	context.AfterFunc(ctx, func() {
 		if err := s.d.Close(); err != nil {
 			logrus.Errorf("cannot close database: %v", err)
 		}
 	})
-	return s.broadcaster.Start(s.startWatch)
+	_, _, err := s.Create(ctx, "/registry/health", []byte(`{"health":"true"}`), 0)
+	if err != nil {
+		return err
+	}
+
+	err = s.broadcaster.Start(s.startWatch)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (s *SQLLog) Wait() {
@@ -137,6 +147,7 @@ func (s *SQLLog) compactStart(ctx context.Context) error {
 // from test functions that have access to the backend.
 func (s *SQLLog) DoCompact(ctx context.Context) (err error) {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.DoCompact", otelName))
+	compactCnt.Add(ctx, 1)
 	defer func() {
 		span.RecordError(err)
 		span.End()
@@ -279,41 +290,66 @@ func RowsToEvents(rows *sql.Rows) ([]*server.Event, error) {
 	return result, nil
 }
 
-func (s *SQLLog) Watch(ctx context.Context, prefix string) <-chan []*server.Event {
-	res := make(chan []*server.Event, 100)
+func (s *SQLLog) Watch(ctx context.Context, key string, startRevision int64) (<-chan []*server.Event, error) {
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Watch", otelName))
+	defer span.End()
+	span.SetAttributes(
+		attribute.String("key", key),
+		attribute.Int64("startRevision", startRevision),
+	)
+
 	values, err := s.broadcaster.Subscribe(ctx)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
-	checkPrefix := strings.HasSuffix(prefix, "/")
+	if startRevision > 0 {
+		startRevision = startRevision - 1
+	}
+
+	initialRevision, initialEvents, err := s.After(ctx, key, startRevision, 0)
+	if err != nil {
+		span.RecordError(err)
+		return nil, err
+	}
+
+	res := make(chan []*server.Event, 100)
+	if len(initialEvents) > 0 {
+		res <- initialEvents
+	}
 
 	s.wg.Add(1)
 	go func() {
-		defer s.wg.Done()
-		defer close(res)
+		defer func() {
+			close(res)
+			s.wg.Done()
+		}()
 
-		for i := range values {
-			events, ok := filterKey(i.([]*server.Event), checkPrefix, prefix)
-			if ok {
-				res <- events
+		for events := range values {
+			filtered := filterEvents(events.([]*server.Event), key, initialRevision)
+			if len(filtered) > 0 {
+				res <- filtered
 			}
 		}
 	}()
-
-	return res
+	return res, nil
 }
 
-func filterKey(events []*server.Event, checkPrefix bool, prefix string) ([]*server.Event, bool) {
+func filterEvents(events []*server.Event, key string, startRevision int64) []*server.Event {
 	filteredEventList := make([]*server.Event, 0, len(events))
+	checkPrefix := strings.HasSuffix(key, "/")
 
 	for _, event := range events {
-		if (checkPrefix && strings.HasPrefix(event.KV.Key, prefix)) || event.KV.Key == prefix {
-			filteredEventList = append(filteredEventList, event)
+		if event.KV.ModRevision <= startRevision {
+			continue
 		}
+		if !(checkPrefix && strings.HasPrefix(event.KV.Key, key)) && event.KV.Key != key {
+			continue
+		}
+		filteredEventList = append(filteredEventList, event)
 	}
 
-	return filteredEventList, len(filteredEventList) > 0
+	return filteredEventList
 }
 
 func (s *SQLLog) startWatch() (chan interface{}, error) {
