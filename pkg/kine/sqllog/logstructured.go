@@ -3,8 +3,6 @@ package sqllog
 import (
 	"context"
 	"fmt"
-	"sync"
-	"time"
 
 	"github.com/canonical/k8s-dqlite/pkg/kine/server"
 	"github.com/sirupsen/logrus"
@@ -28,18 +26,6 @@ type Log interface {
 
 type LogStructured struct {
 	*SQLLog
-}
-
-func (l *LogStructured) Start(ctx context.Context) error {
-	if err := l.SQLLog.Start(ctx); err != nil {
-		return err
-	}
-	l.wg.Add(1)
-	go func() {
-		defer l.wg.Done()
-		l.ttl(ctx)
-	}()
-	return nil
 }
 
 func (l *LogStructured) Get(ctx context.Context, key, rangeEnd string, limit, revision int64) (revRet int64, kvRet *server.KeyValue, errRet error) {
@@ -120,65 +106,4 @@ func (l *LogStructured) List(ctx context.Context, prefix, startKey string, limit
 		kvs[i] = event.KV
 	}
 	return rev, kvs, nil
-}
-
-func (l *LogStructured) ttlEvents(ctx context.Context) chan *server.Event {
-	result := make(chan *server.Event)
-
-	l.wg.Add(1)
-	go func() {
-		defer func() {
-			close(result)
-			l.wg.Done()
-		}()
-
-		rev, events, err := l.SQLLog.List(ctx, "/", "", 1000, 0, false)
-		for len(events) > 0 {
-			if err != nil {
-				logrus.Errorf("failed to read old events for ttl: %v", err)
-				return
-			}
-
-			for _, event := range events {
-				if event.KV.Lease > 0 {
-					result <- event
-				}
-			}
-
-			_, events, err = l.SQLLog.List(ctx, "/", events[len(events)-1].KV.Key, 1000, rev, false)
-		}
-
-		watchCh, err := l.SQLLog.Watch(ctx, "/", 0)
-		if err != nil {
-			logrus.Errorf("failed to watch events for ttl: %v", err)
-			return
-		}
-
-		for events := range watchCh {
-			for _, event := range events {
-				if event.KV.Lease > 0 {
-					result <- event
-				}
-			}
-		}
-	}()
-
-	return result
-}
-
-func (l *LogStructured) ttl(ctx context.Context) {
-	// very naive TTL support
-	mutex := &sync.Mutex{}
-	for event := range l.ttlEvents(ctx) {
-		go func(event *server.Event) {
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(time.Duration(event.KV.Lease) * time.Second):
-			}
-			mutex.Lock()
-			l.Delete(ctx, event.KV.Key, event.KV.ModRevision)
-			mutex.Unlock()
-		}(event)
-	}
 }
