@@ -43,14 +43,14 @@ func (l *LogStructured) Get(ctx context.Context, key, rangeEnd string, limit, re
 		span.End()
 	}()
 
-	rev, event, err := l.get(ctx, key, rangeEnd, limit, revision, false)
-	if event == nil {
+	rev, kv, err := l.get(ctx, key, rangeEnd, limit, revision)
+	if kv == nil {
 		return rev, nil, err
 	}
-	return rev, event.KV, err
+	return rev, kv, err
 }
 
-func (l *LogStructured) get(ctx context.Context, key, rangeEnd string, limit, revision int64, includeDeletes bool) (int64, *server.Event, error) {
+func (l *LogStructured) get(ctx context.Context, key, rangeEnd string, limit, revision int64) (int64, *server.KeyValue, error) {
 	var err error
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.get", otelName))
 	defer func() {
@@ -62,9 +62,8 @@ func (l *LogStructured) get(ctx context.Context, key, rangeEnd string, limit, re
 		attribute.String("rangeEnd", rangeEnd),
 		attribute.Int64("limit", limit),
 		attribute.Int64("revision", revision),
-		attribute.Bool("includeDeletes", includeDeletes),
 	)
-	rev, events, err := l.SQLLog.List(ctx, key, rangeEnd, limit, revision, includeDeletes)
+	rev, events, err := l.SQLLog.List(ctx, key, rangeEnd, limit, revision)
 	if err == server.ErrCompacted {
 		span.AddEvent("key already compacted")
 		// ignore compacted when getting by revision
@@ -79,31 +78,4 @@ func (l *LogStructured) get(ctx context.Context, key, rangeEnd string, limit, re
 		return rev, nil, nil
 	}
 	return rev, events[0], nil
-}
-
-func (l *LogStructured) List(ctx context.Context, prefix, startKey string, limit, revision int64) (_ int64, _ []*server.KeyValue, err error) {
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.List", otelName))
-	span.SetAttributes(
-		attribute.String("prefix", prefix),
-		attribute.String("startKey", startKey),
-		attribute.Int64("limit", limit),
-		attribute.Int64("revision", revision),
-	)
-
-	defer func() {
-		// logrus.Debugf("LIST %s, start=%s, limit=%d, rev=%d => rev=%d, kvs=%d, err=%v", prefix, startKey, limit, revision, revRet, len(kvRet), errRet)
-		span.RecordError(err)
-		span.End()
-	}()
-
-	rev, events, err := l.SQLLog.List(ctx, prefix, startKey, limit, revision, false)
-	if err != nil {
-		return 0, nil, err
-	}
-
-	kvs := make([]*server.KeyValue, len(events))
-	for i, event := range events {
-		kvs[i] = event.KV
-	}
-	return rev, kvs, nil
 }
