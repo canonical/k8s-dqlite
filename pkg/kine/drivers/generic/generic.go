@@ -79,8 +79,6 @@ func init() {
 }
 
 var (
-	columns = "kv.id as theid, kv.name, kv.created, kv.deleted, kv.create_revision, kv.prev_revision, kv.lease, kv.value, kv.old_value"
-
 	revSQL = `
 		SELECT MAX(rkv.id) AS id
 		FROM kine AS rkv`
@@ -128,20 +126,32 @@ var (
 	    	ON maxkv.id = kv.id
 		WHERE kv.deleted = 0`
 
-	afterSQLPrefix = fmt.Sprintf(`
-		SELECT %s
-		FROM kine AS kv
-		WHERE
-			kv.name >= ? AND kv.name < ?
-			AND kv.id > ?
-		ORDER BY kv.id ASC`, columns)
+	afterSQLPrefix = `
+		SELECT id, name, created, deleted, create_revision, prev_revision, lease, value, old_value
+		FROM kine
+		WHERE name >= ? AND name < ?
+			AND id > ?
+		ORDER BY id ASC`
 
-	afterSQL = fmt.Sprintf(`
-		SELECT %s
-			FROM kine AS kv
-			WHERE kv.id > ?
-			ORDER BY kv.id ASC
-		`, columns)
+	afterSQL = `
+		SELECT id, name, created, deleted, create_revision, prev_revision, lease, value, old_value
+		FROM kine
+		WHERE id > ?
+		ORDER BY id ASC`
+
+	ttlSQL = `
+		SELECT kv.id, 
+			name, 
+			lease
+		FROM kine AS kv
+		JOIN (
+			SELECT MAX(mkv.id) as id
+			FROM kine AS mkv
+			WHERE mkv.id <= ?
+			GROUP BY mkv.name
+		) AS maxkv
+	    	ON maxkv.id = kv.id
+		WHERE kv.deleted = 0 AND kv.lease != 0`
 
 	deleteRevSQL = `
 		DELETE FROM kine
@@ -671,6 +681,10 @@ func (d *Generic) List(ctx context.Context, prefix, startKey string, limit, revi
 		return d.query(ctx, "list_revision_start_sql_limit", sql, start, end, revision, limit)
 	}
 	return d.query(ctx, "list_revision_start_sql", sql, start, end, revision)
+}
+
+func (d *Generic) ListTTL(ctx context.Context, revision int64) (*sql.Rows, error) {
+	return d.query(ctx, "ttl_sql", ttlSQL, revision)
 }
 
 func (d *Generic) CurrentRevision(ctx context.Context) (int64, error) {

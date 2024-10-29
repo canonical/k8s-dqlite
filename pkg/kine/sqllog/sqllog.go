@@ -43,6 +43,7 @@ func init() {
 
 type Dialect interface {
 	List(ctx context.Context, prefix, startKey string, limit, revision int64) (*sql.Rows, error)
+	ListTTL(ctx context.Context, revision int64) (*sql.Rows, error)
 	Count(ctx context.Context, prefix, startKey string, revision int64) (int64, error)
 	CurrentRevision(ctx context.Context) (int64, error)
 	AfterPrefix(ctx context.Context, prefix string, rev, limit int64) (*sql.Rows, error)
@@ -313,23 +314,31 @@ func (s *SQLLog) ttl(ctx context.Context) {
 	go func() {
 		defer s.wg.Done()
 
-		rev, kvs, err := s.List(ctx, "/", "", 1000, 0)
-		for len(kvs) > 0 {
-			if err != nil {
+		startRevision, err := s.d.CurrentRevision(ctx)
+		if err != nil {
+			logrus.Errorf("failed to read old events for ttl: %v", err)
+			return
+		}
+
+		rows, err := s.d.ListTTL(ctx, startRevision)
+		if err != nil {
+			logrus.Errorf("failed to read old events for ttl: %v", err)
+			return
+		}
+
+		var (
+			key             string
+			revision, lease int64
+		)
+		for rows.Next() {
+			if err := rows.Scan(&revision, &key, &lease); err != nil {
 				logrus.Errorf("failed to read old events for ttl: %v", err)
 				return
 			}
-
-			for _, kv := range kvs {
-				if kv.Lease > 0 {
-					go run(ctx, kv.Key, kv.ModRevision, time.Duration(kv.Lease)*time.Second)
-				}
-			}
-
-			_, kvs, err = s.List(ctx, "/", kvs[len(kvs)-1].Key, 1000, rev)
+			go run(ctx, key, revision, time.Duration(lease)*time.Second)
 		}
 
-		watchCh, err := s.Watch(ctx, "/", rev)
+		watchCh, err := s.Watch(ctx, "/", startRevision)
 		if err != nil {
 			logrus.Errorf("failed to watch events for ttl: %v", err)
 			return
