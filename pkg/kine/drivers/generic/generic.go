@@ -85,8 +85,12 @@ var (
 		SELECT MAX(rkv.id) AS id
 		FROM kine AS rkv`
 
-	listSQL = fmt.Sprintf(`
-		SELECT %s
+	listSQL = `
+		SELECT kv.id, 
+			name, 
+			CASE WHEN kv.created THEN kv.id ELSE kv.create_revision END AS create_revision,
+			lease, 
+			value
 		FROM kine AS kv
 		JOIN (
 			SELECT MAX(mkv.id) as id
@@ -97,9 +101,8 @@ var (
 			GROUP BY mkv.name
 		) AS maxkv
 	    	ON maxkv.id = kv.id
-		WHERE (kv.deleted = 0 OR ?)
-		ORDER BY kv.name ASC, kv.id ASC
-	`, columns)
+		WHERE kv.deleted = 0
+		ORDER BY kv.name ASC, kv.id ASC`
 
 	revisionIntervalSQL = `
 		SELECT (
@@ -111,13 +114,19 @@ var (
 			FROM kine
 		) AS high`
 
-	listRevisionStartSQL = listSQL
-
-	countRevisionSQL = fmt.Sprintf(`
+	countRevisionSQL = `
 		SELECT COUNT(*)
-		FROM (
-			%s
-		)`, listSQL)
+		FROM kine AS kv
+		JOIN (
+			SELECT MAX(mkv.id) as id
+			FROM kine AS mkv
+			WHERE
+				mkv.name >= ? AND mkv.name < ?
+				AND mkv.id <= ?
+			GROUP BY mkv.name
+		) AS maxkv
+	    	ON maxkv.id = kv.id
+		WHERE kv.deleted = 0`
 
 	afterSQLPrefix = fmt.Sprintf(`
 		SELECT %s
@@ -408,7 +417,7 @@ func (d *Generic) Count(ctx context.Context, prefix, startKey string, revision i
 	if startKey != "" {
 		start = startKey + "\x01"
 	}
-	rows, err := d.query(ctx, "count_revision", countRevisionSQL, start, end, revision, false)
+	rows, err := d.query(ctx, "count_revision", countRevisionSQL, start, end, revision)
 	if err != nil {
 		return 0, err
 	}
@@ -651,17 +660,17 @@ func (d *Generic) DeleteRevision(ctx context.Context, revision int64) error {
 	return err
 }
 
-func (d *Generic) List(ctx context.Context, prefix, startKey string, limit, revision int64, includeDeleted bool) (*sql.Rows, error) {
+func (d *Generic) List(ctx context.Context, prefix, startKey string, limit, revision int64) (*sql.Rows, error) {
 	start, end := getPrefixRange(prefix)
 	if startKey != "" {
 		start = startKey + "\x01"
 	}
-	sql := listRevisionStartSQL
+	sql := listSQL
 	if limit > 0 {
 		sql = fmt.Sprintf("%s LIMIT ?", sql)
-		return d.query(ctx, "list_revision_start_sql_limit", sql, start, end, revision, includeDeleted, limit)
+		return d.query(ctx, "list_revision_start_sql_limit", sql, start, end, revision, limit)
 	}
-	return d.query(ctx, "list_revision_start_sql", sql, start, end, revision, includeDeleted)
+	return d.query(ctx, "list_revision_start_sql", sql, start, end, revision)
 }
 
 func (d *Generic) CurrentRevision(ctx context.Context) (int64, error) {

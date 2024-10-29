@@ -42,7 +42,7 @@ func init() {
 }
 
 type Dialect interface {
-	List(ctx context.Context, prefix, startKey string, limit, revision int64, includeDeleted bool) (*sql.Rows, error)
+	List(ctx context.Context, prefix, startKey string, limit, revision int64) (*sql.Rows, error)
 	Count(ctx context.Context, prefix, startKey string, revision int64) (int64, error)
 	CurrentRevision(ctx context.Context) (int64, error)
 	AfterPrefix(ctx context.Context, prefix string, rev, limit int64) (*sql.Rows, error)
@@ -286,7 +286,7 @@ func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revis
 		startKey = ""
 	}
 
-	rows, err := s.d.List(ctx, prefix, startKey, limit, revision, false)
+	rows, err := s.d.List(ctx, prefix, startKey, limit, revision)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -654,29 +654,16 @@ func ScanAll[T any](rows *sql.Rows, scanOne func(*sql.Rows) (T, error)) ([]T, er
 
 func scanKeyValue(rows *sql.Rows) (*server.KeyValue, error) {
 	kv := &server.KeyValue{}
-	var create, delete bool
-	var prevRevision int64
-	var prevValue []byte
-
 	err := rows.Scan(
 		&kv.ModRevision,
 		&kv.Key,
-		&create,
-		&delete,
 		&kv.CreateRevision,
-		&prevRevision,
 		&kv.Lease,
 		&kv.Value,
-		&prevValue,
 	)
 	if err != nil {
 		return nil, err
 	}
-
-	if create {
-		kv.CreateRevision = kv.ModRevision
-	}
-
 	return kv, nil
 }
 
