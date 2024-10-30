@@ -63,9 +63,12 @@ type Dialect interface {
 }
 
 type SQLLog struct {
+	mu      sync.Mutex
+	stop    func()
+	started bool
+
 	d           Dialect
 	broadcaster broadcaster.Broadcaster
-	ctx         context.Context
 	notify      chan int64
 	wg          sync.WaitGroup
 }
@@ -77,22 +80,23 @@ func New(d Dialect) *SQLLog {
 	}
 }
 
-func (s *SQLLog) Start(ctx context.Context) error {
-	// FIXME: questo non andrebbe fatto
-	s.ctx = ctx
-	context.AfterFunc(ctx, func() {
-		s.wg.Wait()
-		if err := s.d.Close(); err != nil {
-			logrus.Errorf("cannot close database: %v", err)
-		}
-	})
-	_, _, err := s.Create(ctx, "/registry/health", []byte(`{"health":"true"}`), 0)
+func (s *SQLLog) Start(startCtx context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.started {
+		return nil
+	}
+
+	_, _, err := s.Create(startCtx, "/registry/health", []byte(`{"health":"true"}`), 0)
 	if err != nil {
 		return err
 	}
 
-	err = s.broadcaster.Start(s.startWatch)
+	ctx, stop := context.WithCancel(context.Background())
+	err = s.broadcaster.Start(ctx, s.startWatch)
 	if err != nil {
+		stop()
 		return err
 	}
 
@@ -102,11 +106,29 @@ func (s *SQLLog) Start(ctx context.Context) error {
 		s.ttl(ctx)
 	}()
 
+	s.stop = stop
 	return nil
 }
 
-func (s *SQLLog) Wait() {
+func (s *SQLLog) Stop() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.started {
+		return nil
+	}
+
+	s.stop()
 	s.wg.Wait()
+	s.stop, s.started = nil, false
+	return nil
+}
+
+func (s *SQLLog) Close() error {
+	stopErr := s.Stop()
+	closeErr := s.d.Close()
+
+	return errors.Join(stopErr, closeErr)
 }
 
 func (s *SQLLog) compactStart(ctx context.Context) error {
@@ -184,7 +206,7 @@ func (s *SQLLog) DoCompact(ctx context.Context) (err error) {
 		if batchRevision > target {
 			batchRevision = target
 		}
-		if err := s.d.Compact(s.ctx, batchRevision); err != nil {
+		if err := s.d.Compact(ctx, batchRevision); err != nil {
 			return err
 		}
 		start = batchRevision
@@ -414,12 +436,12 @@ func filterEvents(events []*server.Event, key string, startRevision int64) []*se
 	return filteredEventList
 }
 
-func (s *SQLLog) startWatch() (chan interface{}, error) {
-	if err := s.compactStart(s.ctx); err != nil {
+func (s *SQLLog) startWatch(ctx context.Context) (chan interface{}, error) {
+	if err := s.compactStart(ctx); err != nil {
 		return nil, err
 	}
 
-	pollStart, _, err := s.d.GetCompactRevision(s.ctx)
+	pollStart, _, err := s.d.GetCompactRevision(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -436,10 +458,10 @@ func (s *SQLLog) startWatch() (chan interface{}, error) {
 
 		for {
 			select {
-			case <-s.ctx.Done():
+			case <-ctx.Done():
 				return
 			case <-t.C:
-				if err := s.DoCompact(s.ctx); err != nil {
+				if err := s.DoCompact(ctx); err != nil {
 					logrus.WithError(err).Trace("compaction failed")
 				}
 			}
@@ -448,13 +470,13 @@ func (s *SQLLog) startWatch() (chan interface{}, error) {
 
 	go func() {
 		defer s.wg.Done()
-		s.poll(c, pollStart)
+		s.poll(ctx, c, pollStart)
 	}()
 
 	return c, nil
 }
 
-func (s *SQLLog) poll(result chan interface{}, pollStart int64) {
+func (s *SQLLog) poll(ctx context.Context, result chan interface{}, pollStart int64) {
 	var (
 		last        = pollStart
 		skip        int64
@@ -469,7 +491,7 @@ func (s *SQLLog) poll(result chan interface{}, pollStart int64) {
 	for {
 		if waitForMore {
 			select {
-			case <-s.ctx.Done():
+			case <-ctx.Done():
 				return
 			case check := <-s.notify:
 				if check <= last {
@@ -479,7 +501,7 @@ func (s *SQLLog) poll(result chan interface{}, pollStart int64) {
 			}
 		}
 		waitForMore = true
-		watchCtx, cancel := context.WithTimeout(s.ctx, s.d.GetWatchQueryTimeout())
+		watchCtx, cancel := context.WithTimeout(ctx, s.d.GetWatchQueryTimeout())
 		defer cancel()
 
 		rows, err := s.d.After(watchCtx, last, 500)
@@ -525,7 +547,7 @@ func (s *SQLLog) poll(result chan interface{}, pollStart int64) {
 					s.notifyWatcherPoll(next)
 					break
 				} else {
-					if err := s.d.Fill(s.ctx, next); err == nil {
+					if err := s.d.Fill(ctx, next); err == nil {
 						logrus.Debugf("FILL, revision=%d, err=%v", next, err)
 						s.notifyWatcherPoll(next)
 					} else {

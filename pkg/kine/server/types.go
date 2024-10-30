@@ -13,7 +13,7 @@ var (
 
 type Backend interface {
 	Start(ctx context.Context) error
-	Wait()
+	Stop() error
 	Create(ctx context.Context, key string, value []byte, lease int64) (int64, bool, error)
 	Delete(ctx context.Context, key string, revision int64) (int64, bool, error)
 	List(ctx context.Context, prefix, startKey string, limit, revision int64) (int64, []*KeyValue, error)
@@ -22,6 +22,7 @@ type Backend interface {
 	Watch(ctx context.Context, key string, revision int64) (<-chan []*Event, error)
 	DbSize(ctx context.Context) (int64, error)
 	DoCompact(ctx context.Context) error
+	Close() error
 }
 
 type KeyValue struct {
