@@ -137,7 +137,7 @@ func (s *SQLLog) compactStart(ctx context.Context) error {
 		return err
 	}
 
-	events, err := RowsToEvents(rows)
+	events, err := ScanAll(rows, scanEvent)
 	if err != nil {
 		return err
 	}
@@ -242,7 +242,7 @@ func (s *SQLLog) After(ctx context.Context, prefix string, revision, limit int64
 		return 0, nil, err
 	}
 
-	result, err := RowsToEvents(rows)
+	result, err := ScanAll(rows, scanEvent)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -290,42 +290,12 @@ func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revis
 		return 0, nil, err
 	}
 
-	result, err := RowsToKeyValue(rows)
+	result, err := ScanAll(rows, scanKeyValue)
 	if err != nil {
 		return 0, nil, err
 	}
 
 	return currentRevision, result, err
-}
-
-func RowsToKeyValue(rows *sql.Rows) ([]*server.KeyValue, error) {
-	var result []*server.KeyValue
-	defer rows.Close()
-
-	for rows.Next() {
-		kv, err := scanKeyValue(rows)
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, kv)
-	}
-
-	return result, nil
-}
-
-func RowsToEvents(rows *sql.Rows) ([]*server.Event, error) {
-	var result []*server.Event
-	defer rows.Close()
-
-	for rows.Next() {
-		event := &server.Event{}
-		if err := scanEvent(rows, event); err != nil {
-			return nil, err
-		}
-		result = append(result, event)
-	}
-
-	return result, nil
 }
 
 func (s *SQLLog) ttl(ctx context.Context) {
@@ -512,7 +482,7 @@ func (s *SQLLog) poll(ctx context.Context, result chan []*server.Event, pollStar
 			continue
 		}
 
-		events, err := RowsToEvents(rows)
+		events, err := ScanAll(rows, scanEvent)
 		if err != nil {
 			logrus.Errorf("fail to convert rows changes: %v", err)
 			continue
@@ -654,6 +624,33 @@ func (s *SQLLog) notifyWatcherPoll(revision int64) {
 	}
 }
 
+func (s *SQLLog) DbSize(ctx context.Context) (int64, error) {
+	var err error
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.DbSize", otelName))
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+	size, err := s.d.GetSize(ctx)
+	span.SetAttributes(attribute.Int64("size", size))
+	return size, err
+}
+
+func ScanAll[T any](rows *sql.Rows, scanOne func(*sql.Rows) (T, error)) ([]T, error) {
+	var result []T
+	defer rows.Close()
+
+	for rows.Next() {
+		item, err := scanOne(rows)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, item)
+	}
+
+	return result, nil
+}
+
 func scanKeyValue(rows *sql.Rows) (*server.KeyValue, error) {
 	kv := &server.KeyValue{}
 	var create, delete bool
@@ -683,9 +680,11 @@ func scanKeyValue(rows *sql.Rows) (*server.KeyValue, error) {
 	return kv, nil
 }
 
-func scanEvent(rows *sql.Rows, event *server.Event) error {
-	event.KV = &server.KeyValue{}
-	event.PrevKV = &server.KeyValue{}
+func scanEvent(rows *sql.Rows) (*server.Event, error) {
+	event := &server.Event{
+		KV:     &server.KeyValue{},
+		PrevKV: &server.KeyValue{},
+	}
 
 	err := rows.Scan(
 		&event.KV.ModRevision,
@@ -699,7 +698,7 @@ func scanEvent(rows *sql.Rows, event *server.Event) error {
 		&event.PrevKV.Value,
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if event.Create {
@@ -711,17 +710,5 @@ func scanEvent(rows *sql.Rows, event *server.Event) error {
 		event.PrevKV.Lease = event.KV.Lease
 	}
 
-	return nil
-}
-
-func (s *SQLLog) DbSize(ctx context.Context) (int64, error) {
-	var err error
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.DbSize", otelName))
-	defer func() {
-		span.RecordError(err)
-		span.End()
-	}()
-	size, err := s.d.GetSize(ctx)
-	span.SetAttributes(attribute.Int64("size", size))
-	return size, err
+	return event, nil
 }
