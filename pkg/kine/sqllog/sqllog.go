@@ -68,7 +68,7 @@ type SQLLog struct {
 	started bool
 
 	d           Dialect
-	broadcaster broadcaster.Broadcaster
+	broadcaster broadcaster.Broadcaster[[]*server.Event]
 	notify      chan int64
 	wg          sync.WaitGroup
 }
@@ -410,7 +410,7 @@ func (s *SQLLog) Watch(ctx context.Context, key string, startRevision int64) (<-
 		}()
 
 		for events := range values {
-			filtered := filterEvents(events.([]*server.Event), key, initialRevision)
+			filtered := filterEvents(events, key, initialRevision)
 			if len(filtered) > 0 {
 				res <- filtered
 			}
@@ -436,7 +436,7 @@ func filterEvents(events []*server.Event, key string, startRevision int64) []*se
 	return filteredEventList
 }
 
-func (s *SQLLog) startWatch(ctx context.Context) (chan interface{}, error) {
+func (s *SQLLog) startWatch(ctx context.Context) (chan []*server.Event, error) {
 	if err := s.compactStart(ctx); err != nil {
 		return nil, err
 	}
@@ -446,7 +446,7 @@ func (s *SQLLog) startWatch(ctx context.Context) (chan interface{}, error) {
 		return nil, err
 	}
 
-	c := make(chan interface{})
+	c := make(chan []*server.Event)
 	// start compaction and polling at the same time to watch starts
 	// at the oldest revision, but compaction doesn't create gaps
 	s.wg.Add(2)
@@ -476,7 +476,7 @@ func (s *SQLLog) startWatch(ctx context.Context) (chan interface{}, error) {
 	return c, nil
 }
 
-func (s *SQLLog) poll(ctx context.Context, result chan interface{}, pollStart int64) {
+func (s *SQLLog) poll(ctx context.Context, result chan []*server.Event, pollStart int64) {
 	var (
 		last        = pollStart
 		skip        int64
