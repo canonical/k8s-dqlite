@@ -108,13 +108,13 @@ var (
 			HAVING deleted = 0
 			ORDER BY name
 		)
-		SELECT kv.id, 
-			name, 
+		SELECT kv.id,
+			name,
 			CASE
 				WHEN kv.created THEN kv.id
 				ELSE kv.create_revision
 			END AS create_revision,
-			lease, 
+			lease,
 			value
 		FROM maxkv CROSS JOIN kine kv
 			ON maxkv.id = kv.id`
@@ -132,23 +132,12 @@ var (
 	countRevisionSQL = `
 		SELECT COUNT(*)
 		FROM (
-<<<<<<< HEAD:pkg/k8s_dqlite/drivers/sqlite/driver.go
 			SELECT MAX(id)
 			FROM kine
-			WHERE
-				name >= CAST(? AS TEXT) AND name < CAST(? AS TEXT)
+			WHERE name >= CAST(? AS TEXT) AND name < CAST(? AS TEXT)
 				AND id <= ?
 			GROUP BY name
 			HAVING deleted = 0
-=======
-			SELECT MAX(id) AS id
-			FROM kine
-			WHERE name >= ? AND name < ?
-				AND id <= ?
-			GROUP BY name
-			HAVING deleted = 0
-			ORDER BY name
->>>>>>> 0c69291 (Fix count query):pkg/kine/drivers/generic/generic.go
 		)`
 
 	afterSQLPrefix = `
