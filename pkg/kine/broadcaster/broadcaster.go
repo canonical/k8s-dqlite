@@ -5,21 +5,21 @@ import (
 	"sync"
 )
 
-type ConnectFunc func(ctx context.Context) (chan interface{}, error)
+type ConnectFunc[T any] func(ctx context.Context) (chan T, error)
 
-type Broadcaster struct {
+type Broadcaster[T any] struct {
 	sync.Mutex
 	running bool
-	subs    map[chan interface{}]struct{}
+	subs    map[chan T]struct{}
 }
 
-func (b *Broadcaster) Subscribe(ctx context.Context) (<-chan interface{}, error) {
+func (b *Broadcaster[T]) Subscribe(ctx context.Context) (<-chan T, error) {
 	b.Lock()
 	defer b.Unlock()
 
-	sub := make(chan interface{}, 100)
+	sub := make(chan T, 100)
 	if b.subs == nil {
-		b.subs = map[chan interface{}]struct{}{}
+		b.subs = map[chan T]struct{}{}
 	}
 	b.subs[sub] = struct{}{}
 	context.AfterFunc(ctx, func() {
@@ -31,14 +31,14 @@ func (b *Broadcaster) Subscribe(ctx context.Context) (<-chan interface{}, error)
 	return sub, nil
 }
 
-func (b *Broadcaster) unsub(sub chan interface{}) {
+func (b *Broadcaster[T]) unsub(sub chan T) {
 	if _, ok := b.subs[sub]; ok {
 		close(sub)
 		delete(b.subs, sub)
 	}
 }
 
-func (b *Broadcaster) Start(ctx context.Context, connect ConnectFunc) error {
+func (b *Broadcaster[T]) Start(ctx context.Context, connect ConnectFunc[T]) error {
 	b.Lock()
 	defer b.Unlock()
 
@@ -52,7 +52,7 @@ func (b *Broadcaster) Start(ctx context.Context, connect ConnectFunc) error {
 	return nil
 }
 
-func (b *Broadcaster) stream(ch chan interface{}) {
+func (b *Broadcaster[T]) stream(ch chan T) {
 	for item := range ch {
 		b.publish(item)
 	}
@@ -65,7 +65,7 @@ func (b *Broadcaster) stream(ch chan interface{}) {
 	b.running = false
 }
 
-func (b *Broadcaster) publish(item interface{}) {
+func (b *Broadcaster[T]) publish(item T) {
 	b.Lock()
 	defer b.Unlock()
 
