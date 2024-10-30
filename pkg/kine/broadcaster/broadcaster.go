@@ -5,7 +5,7 @@ import (
 	"sync"
 )
 
-type ConnectFunc func() (chan interface{}, error)
+type ConnectFunc func(ctx context.Context) (chan interface{}, error)
 
 type Broadcaster struct {
 	sync.Mutex
@@ -38,11 +38,11 @@ func (b *Broadcaster) unsub(sub chan interface{}) {
 	}
 }
 
-func (b *Broadcaster) Start(connect ConnectFunc) error {
+func (b *Broadcaster) Start(ctx context.Context, connect ConnectFunc) error {
 	b.Lock()
 	defer b.Unlock()
 
-	c, err := connect()
+	c, err := connect(ctx)
 	if err != nil {
 		return err
 	}

@@ -351,6 +351,10 @@ func (s *Server) Start(ctx context.Context) error {
 
 // Shutdown cleans up any resources and attempts to hand-over and shutdown the dqlite application.
 func (s *Server) Shutdown(ctx context.Context) error {
+	if err := s.backend.Close(); err != nil {
+		return err
+	}
+
 	logrus.Debug("Handing over dqlite leadership")
 	if err := s.app.Handover(ctx); err != nil {
 		logrus.WithError(err).Errorf("Failed to handover dqlite")
@@ -359,8 +363,8 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	if err := s.app.Close(); err != nil {
 		return fmt.Errorf("failed to close dqlite app: %w", err)
 	}
+
 	close(s.mustStopCh)
-	s.backend.Wait()
 	return nil
 }
 

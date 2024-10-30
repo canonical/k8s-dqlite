@@ -88,7 +88,9 @@ func newKineServer(ctx context.Context, tb testing.TB, options *kineOptions) *ki
 		tb.Fatal(err)
 	}
 	tb.Cleanup(func() {
-		backend.Wait()
+		if err := backend.Close(); err != nil {
+			tb.Error("cannot close backend", err)
+		}
 	})
 
 	if options.setup != nil {
