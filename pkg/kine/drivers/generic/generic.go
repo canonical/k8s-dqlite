@@ -113,13 +113,13 @@ var (
 			HAVING deleted = 0
 			ORDER BY name
 		)
-		SELECT kv.id, 
-			name, 
+		SELECT kv.id,
+			name,
 			CASE
 				WHEN kv.created THEN kv.id
 				ELSE kv.create_revision
 			END AS create_revision,
-			lease, 
+			lease,
 			value
 		FROM maxkv CROSS JOIN kine kv
 			ON maxkv.id = kv.id`
@@ -143,7 +143,6 @@ var (
 				AND id <= ?
 			GROUP BY name
 			HAVING deleted = 0
-			ORDER BY name
 		)`
 
 	afterSQLPrefix = `
@@ -160,8 +159,8 @@ var (
 		ORDER BY id ASC`
 
 	ttlSQL = `
-		SELECT kv.id, 
-			name, 
+		SELECT kv.id,
+			name,
 			lease
 		FROM kine AS kv
 		JOIN (
@@ -184,11 +183,11 @@ var (
 
 	deleteSQL = `
 		INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
-		SELECT 
+		SELECT
 			name,
 			0 AS created,
 			1 AS deleted,
-			CASE 
+			CASE
 				WHEN kine.created THEN id
 				ELSE create_revision
 			END AS create_revision,
@@ -202,14 +201,14 @@ var (
 
 	createSQL = `
 		INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
-		SELECT 
+		SELECT
 			? AS name,
 			1 AS created,
 			0 AS deleted,
-			0 AS create_revision, 
-			COALESCE(id, 0) AS prev_revision, 
-			? AS lease, 
-			? AS value, 
+			0 AS create_revision,
+			COALESCE(id, 0) AS prev_revision,
+			? AS lease,
+			? AS value,
 			NULL AS old_value
 		FROM (
 			SELECT MAX(id) AS id, deleted
