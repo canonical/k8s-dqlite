@@ -95,7 +95,7 @@ func applySchemaV0_2(ctx context.Context, txn *sql.Tx) error {
 		return err
 	}
 
-	if _, err := txn.ExecContext(ctx, `CREATE UNIQUE INDEX kine_name_index ON kine(name, id, deleted)`); err != nil {
+	if _, err := txn.ExecContext(ctx, `CREATE UNIQUE INDEX kine_name_index ON kine(name ASC, id DESC, deleted)`); err != nil {
 		return err
 	}
 
