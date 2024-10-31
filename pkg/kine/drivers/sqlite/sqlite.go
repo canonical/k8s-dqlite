@@ -10,9 +10,8 @@ import (
 	"time"
 
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/generic"
-	"github.com/canonical/k8s-dqlite/pkg/kine/logstructured"
-	"github.com/canonical/k8s-dqlite/pkg/kine/logstructured/sqllog"
 	"github.com/canonical/k8s-dqlite/pkg/kine/server"
+	"github.com/canonical/k8s-dqlite/pkg/kine/sqllog"
 	"github.com/mattn/go-sqlite3"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -60,7 +59,7 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string, connecti
 		opts.dsn = "./db/state.db?_journal=WAL&_synchronous=FULL&_foreign_keys=1"
 	}
 
-	dialect, err := generic.Open(ctx, driverName, opts.dsn, connectionPoolConfig, "?", false)
+	dialect, err := generic.Open(ctx, driverName, opts.dsn, connectionPoolConfig)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -84,7 +83,6 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string, connecti
 		}
 		return err
 	}
-	dialect.GetSizeSQL = `SELECT (page_count - freelist_count) * page_size FROM pragma_page_count(), pragma_page_size(), pragma_freelist_count()`
 
 	dialect.CompactInterval = opts.compactInterval
 	dialect.PollInterval = opts.pollInterval
@@ -99,7 +97,7 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string, connecti
 		}
 	}
 
-	return logstructured.New(sqllog.New(dialect)), dialect, nil
+	return sqllog.New(dialect), dialect, nil
 }
 
 // setup performs table setup, which may include creation of the Kine table if

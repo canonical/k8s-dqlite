@@ -120,7 +120,7 @@ func BenchmarkUpdate(b *testing.B) {
 				run := func(start int) {
 					defer wg.Done()
 					benchKey := fmt.Sprintf("benchKey-%d", start)
-					for i, lastModRev := 0, int64(0); i < b.N; i += workers {
+					for i, lastModRev := start, int64(0); i < b.N; i += workers {
 						value := fmt.Sprintf("value-%d", i)
 						lastModRev = updateRev(ctx, g, kine.client, benchKey, lastModRev, value)
 					}

@@ -19,25 +19,23 @@ func (l *LimitedServer) get(ctx context.Context, r *etcdserverpb.RangeRequest) (
 
 	span.SetAttributes(
 		attribute.String("key", string(r.Key)),
-		attribute.String("rangeEnd", string(r.RangeEnd)),
 		attribute.Int64("limit", r.Limit),
 		attribute.Int64("revision", r.Revision),
 	)
-	if r.Limit != 0 && len(r.RangeEnd) != 0 {
-		err := fmt.Errorf("invalid combination of rangeEnd and limit, limit should be 0 got %d", r.Limit)
-		return nil, err
+
+	if len(r.RangeEnd) != 0 {
+		return nil, fmt.Errorf("unexpected rangeEnd: want empty, got %s", r.RangeEnd)
+	}
+	if r.Limit != 0 {
+		return nil, fmt.Errorf("unexpected limit: want 0, got %d", r.Limit)
 	}
 
-	rev, kv, err := l.backend.Get(ctx, string(r.Key), string(r.RangeEnd), r.Limit, r.Revision)
+	rev, kv, err := l.backend.List(ctx, string(r.Key), "", 1, r.Revision)
 	if err != nil {
 		return nil, err
 	}
-
-	resp := &RangeResponse{
+	return &RangeResponse{
 		Header: txnHeader(rev),
-	}
-	if kv != nil {
-		resp.Kvs = []*KeyValue{kv}
-	}
-	return resp, nil
+		Kvs:    kv,
+	}, nil
 }

@@ -76,11 +76,10 @@ func Listen(ctx context.Context, config Config) (ETCDConfig, error) {
 
 	go func() {
 		if err := grpcServer.Serve(listener); err != nil {
-			logrus.Errorf("Kine server shutdown: %v", err)
+			logrus.Errorf("unexpected server shutdown: %v", err)
 		}
-		listener.Close()
-		grpcServer.Stop()
 	}()
+	context.AfterFunc(ctx, grpcServer.Stop)
 
 	return ETCDConfig{
 		LeaderElect: leaderelect,
@@ -145,8 +144,8 @@ func ListenAndReturnBackend(ctx context.Context, config Config) (ETCDConfig, ser
 			logrus.Errorf("Kine server shutdown: %v", err)
 		}
 		listener.Close()
-		grpcServer.Stop()
 	}()
+	context.AfterFunc(ctx, grpcServer.Stop)
 
 	return ETCDConfig{
 		LeaderElect: leaderelect,
