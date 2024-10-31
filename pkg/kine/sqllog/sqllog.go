@@ -107,6 +107,7 @@ func (s *SQLLog) Start(startCtx context.Context) error {
 	}()
 
 	s.stop = stop
+	s.started = true
 	return nil
 }
 
