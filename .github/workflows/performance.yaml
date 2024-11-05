@@ -62,6 +62,7 @@ jobs:
           TEST_SNAP: ${{ github.workspace }}/head.snap
           TEST_SUBSTRATE: lxd
           TEST_LXD_IMAGE: ubuntu:22.04
+          TEST_LXD_PROFILE_NAME: k8s-performance
         run: |
           cd test/performance && tox -e performance
 
