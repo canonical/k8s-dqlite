@@ -23,6 +23,9 @@ SNAP = os.getenv("TEST_SNAP") or ""
 # SNAP_NAME is the name of the snap under test.
 SNAP_NAME = os.getenv("TEST_SNAP_NAME") or "k8s"
 
+# FLAVOR is the flavour to use for running the performance tests.
+FLAVOR = os.getenv("TEST_FLAVOR") or ""
+
 # SUBSTRATE is the substrate to use for running the performance tests.
 # Default 'lxd'.
 SUBSTRATE = os.getenv("TEST_SUBSTRATE") or "lxd"

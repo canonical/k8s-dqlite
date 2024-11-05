@@ -25,6 +25,10 @@ jobs:
       matrix:
         dqlite: ["v1.16.7", "v1.17.0-rc1"]
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
       - name: Checking out repo
         uses: actions/checkout@v4
       - name: Setup Python
@@ -64,7 +68,7 @@ jobs:
           TEST_LXD_IMAGE: ubuntu:22.04
           TEST_LXD_PROFILE_NAME: k8s-performance
         run: |
-          cd test/performance && tox -e performance
+          cd test/performance && sg lxd -c 'tox -e performance'
 
       - name: Swap out k8s-dqlite and dqlite version for base code ${{ matrix.dqlite }} snap
         run: |
@@ -82,8 +86,9 @@ jobs:
           TEST_SNAP: ${{ github.workspace }}/base-code.snap
           TEST_SUBSTRATE: lxd
           TEST_LXD_IMAGE: ubuntu:22.04
+          TEST_LXD_PROFILE_NAME: k8s-performance
         run: |
-          cd test/performance && tox -e performance
+          cd test/performance && sg lxd -c 'tox -e performance'
           git reset --hard $TARGET_SHA
 
       - name: Swap out k8s-dqlite and dqlite version for v1.1.11 ${{ matrix.dqlite }} snap
@@ -102,8 +107,9 @@ jobs:
           TEST_SNAP: ${{ github.workspace }}/v1-1-11.snap
           TEST_SUBSTRATE: lxd
           TEST_LXD_IMAGE: ubuntu:22.04
+          TEST_LXD_PROFILE_NAME: k8s-performance
         run: |
-          cd test/performance && tox -e performance
+          cd test/performance && sg lxd -c 'tox -e performance'
           git reset --hard $TARGET_SHA
 
       - name: Swap out k8s-dqlite and dqlite version for v1.2.0 ${{ matrix.dqlite }} snap
@@ -122,6 +128,7 @@ jobs:
           TEST_SNAP: ${{ github.workspace }}/v1-2-0.snap
           TEST_SUBSTRATE: lxd
           TEST_LXD_IMAGE: ubuntu:22.04
+          TEST_LXD_PROFILE_NAME: k8s-performance
         run: |
-          cd test/performance && tox -e performance
+          cd test/performance && sg lxd -c 'tox -e performance'
           git reset --hard $TARGET_SHA

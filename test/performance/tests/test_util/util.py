@@ -6,7 +6,6 @@ import re
 import shlex
 import subprocess
 import urllib.request
-from datetime import datetime
 from functools import partial
 from pathlib import Path
 from typing import Any, Callable, List, Mapping, Optional, Union
@@ -287,60 +286,6 @@ def get_join_token(
 def join_cluster(instance: harness.Instance, join_token: str):
     instance.exec(["k8s", "join-cluster", join_token])
 
-
-def get_default_cidr(instance: harness.Instance, instance_default_ip: str):
-    # ----
-    # 1:  lo    inet 127.0.0.1/8 scope host lo .....
-    # 28: eth0  inet 10.42.254.197/24 metric 100 brd 10.42.254.255 scope global dynamic eth0 ....
-    # ----
-    # Fetching the cidr for the default interface by matching with instance ip from the output
-    p = instance.exec(["ip", "-o", "-f", "inet", "addr", "show"], capture_output=True)
-    out = p.stdout.decode().split(" ")
-    return [i for i in out if instance_default_ip in i][0]
-
-
-def get_default_ip(instance: harness.Instance):
-    # ---
-    # default via 10.42.254.1 dev eth0 proto dhcp src 10.42.254.197 metric 100
-    # ---
-    # Fetching the default IP address from the output, e.g. 10.42.254.197
-    p = instance.exec(
-        ["ip", "-o", "-4", "route", "show", "to", "default"], capture_output=True
-    )
-    return p.stdout.decode().split(" ")[8]
-
-
-def get_global_unicast_ipv6(instance: harness.Instance, interface="eth0") -> str:
-    # ---
-    # 2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
-    #     link/ether 00:16:3e:0f:4d:1e brd ff:ff:ff:ff:ff:ff
-    #     inet
-    #     inet6 fe80::216:3eff:fe0f:4d1e/64 scope link
-    # ---
-    # Fetching the global unicast address for the specified interface, e.g. fe80::216:3eff:fe0f:4d1e
-    result = instance.exec(
-        ["ip", "-6", "addr", "show", "dev", interface, "scope", "global"],
-        capture_output=True,
-        text=True,
-    )
-    output = result.stdout
-    ipv6_regex = re.compile(r"inet6\s+([a-f0-9:]+)\/[0-9]*\s+scope global")
-    match = ipv6_regex.search(output)
-    if match:
-        return match.group(1)
-    return None
-
-
-# Checks if a datastring is a valid RFC3339 date.
-def is_valid_rfc3339(date_str):
-    try:
-        # Attempt to parse the string according to the RFC3339 format
-        datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%S%z")
-        return True
-    except ValueError:
-        return False
-
-
 def tracks_least_risk(track: str, arch: str) -> str:
     """Determine the snap channel with the least risk in the provided track.
 
@@ -377,57 +322,3 @@ def tracks_least_risk(track: str, arch: str) -> str:
     channel = f"{track}/{min(risks, key=lambda r: risk_level[r])}"
     LOG.info("Least risk channel from track %s is %s", track, channel)
     return channel
-
-
-def previous_track(snap_version: str) -> str:
-    """Determine the snap track preceding the provided version.
-
-    Args:
-        snap_version: the snap version to determine the previous track for
-
-    Returns:
-        the previous track
-    """
-    LOG.debug("Determining previous track for %s", snap_version)
-
-    def _maj_min(version: str):
-        if match := TRACK_RE.match(version):
-            maj, min, _ = match.groups()
-            return int(maj), int(min)
-        return None
-
-    if not snap_version:
-        assumed = "latest"
-        LOG.info(
-            "Cannot determine previous track for undefined snap -- assume %s",
-            snap_version,
-            assumed,
-        )
-        return assumed
-
-    if snap_version.startswith("/") or _as_int(snap_version) is not None:
-        assumed = "latest"
-        LOG.info(
-            "Cannot determine previous track for %s -- assume %s", snap_version, assumed
-        )
-        return assumed
-
-    if maj_min := _maj_min(snap_version):
-        maj, min = maj_min
-        if min == 0:
-            with urllib.request.urlopen(
-                f"https://dl.k8s.io/release/stable-{maj - 1}.txt"
-            ) as r:
-                stable = r.read().decode().strip()
-                maj_min = _maj_min(stable)
-        else:
-            maj_min = (maj, min - 1)
-    elif snap_version.startswith("latest") or "/" not in snap_version:
-        with urllib.request.urlopen("https://dl.k8s.io/release/stable.txt") as r:
-            stable = r.read().decode().strip()
-            maj_min = _maj_min(stable)
-
-    flavor_track = {"": "classic", "strict": ""}.get(config.FLAVOR, config.FLAVOR)
-    track = f"{maj_min[0]}.{maj_min[1]}" + (flavor_track and f"-{flavor_track}")
-    LOG.info("Previous track for %s is from track: %s", snap_version, track)
-    return track
