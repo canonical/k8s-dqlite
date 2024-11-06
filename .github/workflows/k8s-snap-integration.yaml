@@ -2,7 +2,7 @@ name: Integration Test K8s-snap
 
 on:
   push:
-    branches: ["main"]
+    branches: ["master"]
   pull_request:
 
 permissions:
@@ -59,7 +59,7 @@ jobs:
           TEST_LXD_IMAGE: ubuntu:22.04
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
         run: |
-          if [[ "${{ contains(github.event.pull_request.labels.*.name, 'tag-that-Louise-choose') || github.ref_name  == 'main' }}" == "true" ]] ; then
+          if [[ "${{ contains(github.event.pull_request.labels.*.name, 'tag-that-Louise-choose') || github.ref_name  == 'master' }}" == "true" ]] ; then
             export TEST_CNCF_E2E="true"
           fi
           git clone https://github.com/canonical/k8s-snap.git -b KU-269/sonobuoy-e2e #revert after merging https://github.com/canonical/k8s-snap/pull/715
@@ -76,13 +76,13 @@ jobs:
           name: inspection-reports
           path: ${{ github.workspace }}/inspection-reports.tar.gz
       - name: Extract CNCF conformance report
-        if: ${{ failure() && ( contains(github.event.pull_request.labels.*.name, 'tag-that-Louise-choose') || github.ref_name  == 'main' ) }}
+        if: ${{ failure() && ( contains(github.event.pull_request.labels.*.name, 'tag-that-Louise-choose') || github.ref_name  == 'master' ) }}
         working-directory: k8s-snap/tests/integration
         run: |
           tar -xf sonobuoy_e2e.tar.gz --one-top-level
       - name: Upload CNCF conformance report artifact
         uses: actions/upload-artifact@v4
-        if: ${{ failure() && ( contains(github.event.pull_request.labels.*.name, 'tag-that-Louise-choose') || github.ref_name  == 'main' ) }}
+        if: ${{ failure() && ( contains(github.event.pull_request.labels.*.name, 'tag-that-Louise-choose') || github.ref_name  == 'master' ) }}
         with:
           name: report_sonobuoy_e2e
           path: k8s-snap/tests/integration/sonobuoy_e2e
