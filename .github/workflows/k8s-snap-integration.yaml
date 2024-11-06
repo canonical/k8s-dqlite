@@ -70,6 +70,7 @@ jobs:
         run: |
           echo test
 
+
 #          git clone https://github.com/canonical/k8s-snap.git -b KU-1748/optional-cncf-conformance-tests
 #          # todo revert before merge git clone https://github.com/canonical/k8s-snap.git
 #          cd k8s-snap/tests/integration && sg lxd -c 'tox -e integration'
