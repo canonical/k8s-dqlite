@@ -60,7 +60,7 @@ jobs:
           TEST_LXD_IMAGE: ubuntu:22.04
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
         run: |
-          if [[ "${{ contains(github.event.pull_request.labels.*.name, 'dependencies') }} || "${{ github.ref_name }}" == "KU-1748/optional-cncf-conformance-tests1" ]]; then
+          if [[ "${{ contains(github.event.pull_request.labels.*.name, 'dependencies') }}" || "${{ github.ref_name }}" == "KU-1748/optional-cncf-conformance-tests1" ]]; then
             export TEST_CNCF_E2E="true"
           fi
           echo TEST_CNCF_E2E
