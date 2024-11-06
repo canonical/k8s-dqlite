@@ -34,7 +34,14 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.9"
+          python-version: "3.8"
+      - name: Create python virtual env
+        run: python -m venv venv
+      - name: Activate python env and install tox
+        run: |
+          source venv/bin/activate
+          pip install --upgrade pip
+          pip install tox
       - name: Install tox
         run: pip install tox
       - name: Install Go
@@ -68,6 +75,7 @@ jobs:
           TEST_LXD_IMAGE: ubuntu:22.04
           TEST_LXD_PROFILE_NAME: k8s-performance
         run: |
+          source venv/bin/activate
           cd test/performance && sg lxd -c 'tox -e performance'
 
       - name: Swap out k8s-dqlite and dqlite version for base code ${{ matrix.dqlite }} snap
@@ -88,6 +96,7 @@ jobs:
           TEST_LXD_IMAGE: ubuntu:22.04
           TEST_LXD_PROFILE_NAME: k8s-performance
         run: |
+          source venv/bin/activate
           cd test/performance && sg lxd -c 'tox -e performance'
           git reset --hard $TARGET_SHA
 
@@ -109,6 +118,7 @@ jobs:
           TEST_LXD_IMAGE: ubuntu:22.04
           TEST_LXD_PROFILE_NAME: k8s-performance
         run: |
+          source venv/bin/activate
           cd test/performance && sg lxd -c 'tox -e performance'
           git reset --hard $TARGET_SHA
 
@@ -130,5 +140,6 @@ jobs:
           TEST_LXD_IMAGE: ubuntu:22.04
           TEST_LXD_PROFILE_NAME: k8s-performance
         run: |
+          source venv/bin/activate
           cd test/performance && sg lxd -c 'tox -e performance'
           git reset --hard $TARGET_SHA
