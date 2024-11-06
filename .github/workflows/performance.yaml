@@ -70,10 +70,8 @@ jobs:
           TEST_SNAP: ${{ github.workspace }}/head.snap
           TEST_SUBSTRATE: lxd
           TEST_LXD_IMAGE: ubuntu:22.04
-          TEST_LXD_PROFILE_NAME: k8s-performance
         run: |
-          cd test/performance
-          sg lxd -c 'AGENT_TOOLSDIRECTORY=/home/ubuntu/actions-runner/_work/_tool tox -e performance'
+          cd test/performance && tox -e performance'
 
       - name: Swap out k8s-dqlite and dqlite version for base code ${{ matrix.dqlite }} snap
         run: |
@@ -91,10 +89,8 @@ jobs:
           TEST_SNAP: ${{ github.workspace }}/base-code.snap
           TEST_SUBSTRATE: lxd
           TEST_LXD_IMAGE: ubuntu:22.04
-          TEST_LXD_PROFILE_NAME: k8s-performance
         run: |
-          cd test/performance
-          sg lxd -c 'AGENT_TOOLSDIRECTORY=/home/ubuntu/actions-runner/_work/_tool && tox -e performance'
+          cd test/performance && tox -e performance'
           git reset --hard $TARGET_SHA
 
       - name: Swap out k8s-dqlite and dqlite version for v1.1.11 ${{ matrix.dqlite }} snap
@@ -113,10 +109,8 @@ jobs:
           TEST_SNAP: ${{ github.workspace }}/v1-1-11.snap
           TEST_SUBSTRATE: lxd
           TEST_LXD_IMAGE: ubuntu:22.04
-          TEST_LXD_PROFILE_NAME: k8s-performance
         run: |
-          cd test/performance
-          sg lxd -c 'AGENT_TOOLSDIRECTORY=/home/ubuntu/actions-runner/_work/_tool && tox -e performance'
+          cd test/performance && tox -e performance'
           git reset --hard $TARGET_SHA
 
       - name: Swap out k8s-dqlite and dqlite version for v1.2.0 ${{ matrix.dqlite }} snap
@@ -135,8 +129,6 @@ jobs:
           TEST_SNAP: ${{ github.workspace }}/v1-2-0.snap
           TEST_SUBSTRATE: lxd
           TEST_LXD_IMAGE: ubuntu:22.04
-          TEST_LXD_PROFILE_NAME: k8s-performance
         run: |
-          cd test/performance
-          sg lxd -c 'AGENT_TOOLSDIRECTORY=/home/ubuntu/actions-runner/_work/_tool && tox -e performance'
+          cd test/performance && tox -e performance'
           git reset --hard $TARGET_SHA
