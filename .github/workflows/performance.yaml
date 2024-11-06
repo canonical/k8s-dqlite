@@ -75,8 +75,8 @@ jobs:
           TEST_LXD_IMAGE: ubuntu:22.04
           TEST_LXD_PROFILE_NAME: k8s-performance
         run: |
-          source venv/bin/activate
-          cd test/performance && sg lxd -c 'tox -e performance'
+          cd test/performance
+          sg lxd -c 'source ../../venv/bin/activate && tox -e performance'
 
       - name: Swap out k8s-dqlite and dqlite version for base code ${{ matrix.dqlite }} snap
         run: |
@@ -96,8 +96,8 @@ jobs:
           TEST_LXD_IMAGE: ubuntu:22.04
           TEST_LXD_PROFILE_NAME: k8s-performance
         run: |
-          source venv/bin/activate
-          cd test/performance && sg lxd -c 'tox -e performance'
+          cd test/performance
+          sg lxd -c 'source ../../venv/bin/activate && tox -e performance'
           git reset --hard $TARGET_SHA
 
       - name: Swap out k8s-dqlite and dqlite version for v1.1.11 ${{ matrix.dqlite }} snap
@@ -118,8 +118,8 @@ jobs:
           TEST_LXD_IMAGE: ubuntu:22.04
           TEST_LXD_PROFILE_NAME: k8s-performance
         run: |
-          source venv/bin/activate
-          cd test/performance && sg lxd -c 'tox -e performance'
+          cd test/performance
+          sg lxd -c 'source ../../venv/bin/activate && tox -e performance'
           git reset --hard $TARGET_SHA
 
       - name: Swap out k8s-dqlite and dqlite version for v1.2.0 ${{ matrix.dqlite }} snap
@@ -140,6 +140,6 @@ jobs:
           TEST_LXD_IMAGE: ubuntu:22.04
           TEST_LXD_PROFILE_NAME: k8s-performance
         run: |
-          source venv/bin/activate
-          cd test/performance && sg lxd -c 'tox -e performance'
+          cd test/performance
+          sg lxd -c 'source ../../venv/bin/activate && tox -e performance'
           git reset --hard $TARGET_SHA
