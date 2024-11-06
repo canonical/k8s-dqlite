@@ -35,11 +35,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.8"
-      - name: Create python virtual env
-        run: python -m venv venv
-      - name: Activate python env and install tox
+      - name: Install tox
         run: |
-          source venv/bin/activate
           pip install --upgrade pip
           pip install tox
       - name: Install tox
@@ -76,7 +73,7 @@ jobs:
           TEST_LXD_PROFILE_NAME: k8s-performance
         run: |
           cd test/performance
-          sg lxd -c 'source ../../venv/bin/activate && tox -e performance'
+          sg lxd -c 'AGENT_TOOLSDIRECTORY=/home/ubuntu/actions-runner/_work/_tool tox -e performance'
 
       - name: Swap out k8s-dqlite and dqlite version for base code ${{ matrix.dqlite }} snap
         run: |
@@ -97,7 +94,7 @@ jobs:
           TEST_LXD_PROFILE_NAME: k8s-performance
         run: |
           cd test/performance
-          sg lxd -c 'source ../../venv/bin/activate && tox -e performance'
+          sg lxd -c 'AGENT_TOOLSDIRECTORY=/home/ubuntu/actions-runner/_work/_tool && tox -e performance'
           git reset --hard $TARGET_SHA
 
       - name: Swap out k8s-dqlite and dqlite version for v1.1.11 ${{ matrix.dqlite }} snap
@@ -119,7 +116,7 @@ jobs:
           TEST_LXD_PROFILE_NAME: k8s-performance
         run: |
           cd test/performance
-          sg lxd -c 'source ../../venv/bin/activate && tox -e performance'
+          sg lxd -c 'AGENT_TOOLSDIRECTORY=/home/ubuntu/actions-runner/_work/_tool && tox -e performance'
           git reset --hard $TARGET_SHA
 
       - name: Swap out k8s-dqlite and dqlite version for v1.2.0 ${{ matrix.dqlite }} snap
@@ -141,5 +138,5 @@ jobs:
           TEST_LXD_PROFILE_NAME: k8s-performance
         run: |
           cd test/performance
-          sg lxd -c 'source ../../venv/bin/activate && tox -e performance'
+          sg lxd -c 'AGENT_TOOLSDIRECTORY=/home/ubuntu/actions-runner/_work/_tool && tox -e performance'
           git reset --hard $TARGET_SHA
