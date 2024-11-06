@@ -1,0 +1,36 @@
+name: test build
+
+on:
+  push:
+    #todo revert before pr
+#    branches: ["KU-1748/optional-cncf-conformance-tests"]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: K8s-snap Integration Test
+    runs-on: ubuntu-20.04
+
+    steps:
+      - name: Running
+        env:
+          TEST_SNAP: ${{ github.workspace }}/k8s-updated.snap
+          TEST_SUBSTRATE: lxd
+          TEST_LXD_IMAGE: ubuntu:22.04
+          TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
+        run: |
+          if [[ "${{ contains(github.event.pull_request.labels.*.name, 'dependencies') || github.ref_name  == 'KU-1748/optional-cncf-conformance-tests' }}" == "true" ]] ; then
+            export TEST_CNCF_E2E="true"
+          fi
+          echo github.event.pull_request.body
+          echo "${{ github.event.pull_request.body }}"
+          echo github.event.pull_request
+          echo "${{ github.event.pull_request }}"
+
