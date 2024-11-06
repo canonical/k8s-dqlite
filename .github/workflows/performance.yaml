@@ -34,7 +34,9 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.8"
+          python-version: "3.8.18"
+      - name: Set library path #TODO: find proper fix
+        run: echo "LD_LIBRARY_PATH=/home/ubuntu/actions-runner/_work/_tool/Python/3.8.18/x64/lib" >> $GITHUB_ENV
       - name: Install tox
         run: pip install tox
       - name: Install Go
