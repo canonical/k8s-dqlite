@@ -60,13 +60,13 @@ jobs:
           TEST_LXD_IMAGE: ubuntu:22.04
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
         run: |
-          if [[ "${{ github.event.label.name }}" == "dependencies" || "${{ github.ref_name }}" == "KU-1748/optional-cncf-conformance-tests" ]]; then
+          if [[ "${{ github.event.label.name }}" == "dependencies" || "${{ github.ref_name }}" == "KU-1748/optional-cncf-conformance-tests1" ]]; then
             export TEST_CNCF_E2E="true"
           fi
           echo TEST_CNCF_E2E
           echo $TEST_CNCF_E2E
       - name: postrun
-        if: ${{ ( github.event.label.name == 'dependencies'|| github.ref_name  == 'KU-1748/optional-cncf-conformance-tests' ) }}
+        if: ${{ ( github.event.label.name == 'dependencies'|| github.ref_name  == 'KU-1748/optional-cncf-conformance-tests1' ) }}
         run: |
           echo test
 
