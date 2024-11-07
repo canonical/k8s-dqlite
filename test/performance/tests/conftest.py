@@ -54,14 +54,10 @@ def _generate_inspection_report(h: harness.Harness, instance_id: str):
 @pytest.fixture(scope="session")
 def h() -> harness.Harness:
     LOG.debug("Create harness for %s", config.SUBSTRATE)
-    if config.SUBSTRATE == "local":
-        h = harness.LocalHarness()
-    elif config.SUBSTRATE == "lxd":
+    # if config.SUBSTRATE == "local":
+    #     h = harness.LocalHarness()
+    if config.SUBSTRATE == "lxd":
         h = harness.LXDHarness()
-    elif config.SUBSTRATE == "multipass":
-        h = harness.MultipassHarness()
-    elif config.SUBSTRATE == "juju":
-        h = harness.JujuHarness()
     else:
         raise harness.HarnessError(
             "TEST_SUBSTRATE must be one of: local, lxd, multipass, juju"
@@ -191,32 +187,3 @@ def instances(
             _generate_inspection_report(h, instance.id)
 
         h.delete_instance(instance.id)
-
-
-@pytest.fixture(scope="session")
-def session_instance(
-    h: harness.Harness, tmp_path_factory: pytest.TempPathFactory, request
-) -> Generator[harness.Instance, None, None]:
-    """Constructs and bootstraps an instance that persists over a test session.
-
-    Bootstraps the instance with all k8sd features enabled to reduce testing time.
-    """
-    LOG.info("Setup node and enable all features")
-
-    tmp_path = tmp_path_factory.mktemp("data")
-    instance = h.new_instance()
-    snap = next(snap_versions(request))
-    util.setup_k8s_snap(instance, tmp_path, snap)
-
-    bootstrap_config_path = "/home/ubuntu/bootstrap-session.yaml"
-    instance.send_file(
-        (config.MANIFESTS_DIR / "bootstrap-session.yaml").as_posix(),
-        bootstrap_config_path,
-    )
-
-    instance.exec(["k8s", "bootstrap", "--file", bootstrap_config_path])
-    util.wait_until_k8s_ready(instance, [instance])
-    util.wait_for_network(instance)
-    util.wait_for_dns(instance)
-
-    yield instance

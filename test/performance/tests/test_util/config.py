@@ -6,8 +6,10 @@ from pathlib import Path
 DIR = Path(__file__).absolute().parent
 
 # The following defaults are used to define how long to wait for a condition to be met.
-DEFAULT_WAIT_RETRIES = int(os.getenv("TEST_DEFAULT_WAIT_RETRIES") or 30)
-DEFAULT_WAIT_DELAY_S = int(os.getenv("TEST_DEFAULT_WAIT_DELAY_S") or 5)
+DEFAULT_WAIT_RETRIES = int(os.getenv("TEST_DEFAULT_WAIT_RETRIES") or 50)
+DEFAULT_WAIT_DELAY_S = int(os.getenv("TEST_DEFAULT_WAIT_DELAY_S") or 10)
+
+MANIFESTS_DIR = DIR / ".." / ".." / "templates"
 
 # INSPECTION_REPORTS_DIR is the directory where inspection reports are stored.
 # If empty, no reports are generated.
