@@ -62,7 +62,9 @@ jobs:
           if [[ "${{ contains(github.event.pull_request.labels.*.name, 'tag-that-Louise-choose') || github.ref_name  == 'master' }}" == "true" ]] ; then
             export TEST_CNCF_E2E="true"
           fi
-          git clone https://github.com/canonical/k8s-snap.git -b KU-269/sonobuoy-e2e #revert after merging https://github.com/canonical/k8s-snap/pull/715
+          export TEST_CNCF_E2E="true" #todo remove after having label
+
+          git clone https://github.com/canonical/k8s-snap.git -b KU-1748/optional-cncf-conformance-tests #revert after merging https://github.com/canonical/k8s-snap/pull/715
           #git clone https://github.com/canonical/k8s-snap.git
           cd k8s-snap/tests/integration && sg lxd -c 'tox -e integration'
       - name: Prepare inspection reports
