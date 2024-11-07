@@ -72,7 +72,7 @@ jobs:
           TEST_LXD_IMAGE: ubuntu:22.04
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
         run: |
-          cd test/performance && tox -e performance
+          cd test/performance && sg lxd -c 'tox -e performance'
 
       - name: Swap out k8s-dqlite and dqlite version for base code ${{ matrix.dqlite }} snap
         run: |
@@ -92,7 +92,7 @@ jobs:
           TEST_LXD_IMAGE: ubuntu:22.04
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
         run: |
-          cd test/performance && tox -e performance
+          cd test/performance && sg lxd -c 'tox -e performance'
           git reset --hard $TARGET_SHA
 
       - name: Swap out k8s-dqlite and dqlite version for v1.1.11 ${{ matrix.dqlite }} snap
@@ -113,7 +113,7 @@ jobs:
           TEST_LXD_IMAGE: ubuntu:22.04
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
         run: |
-          cd test/performance && tox -e performance
+          cd test/performance && sg lxd -c 'tox -e performance'
           git reset --hard $TARGET_SHA
 
       - name: Swap out k8s-dqlite and dqlite version for v1.2.0 ${{ matrix.dqlite }} snap
@@ -134,7 +134,7 @@ jobs:
           TEST_LXD_IMAGE: ubuntu:22.04
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
         run: |
-          cd test/performance && tox -e performance
+          cd test/performance && sg lxd -c 'tox -e performance'
           git reset --hard $TARGET_SHA
       - name: Prepare inspection reports
         if: failure()
