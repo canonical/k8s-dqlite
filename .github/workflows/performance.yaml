@@ -20,7 +20,7 @@ env:
 jobs:
   build:
     name: K8s-snap Performance Test Dqlite ${{ matrix.dqlite }}
-    runs-on: [self-hosted, linux, X64, jammy, large]
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         dqlite: ["v1.16.7", "v1.17.0-rc1"]
