@@ -17,6 +17,9 @@ def test_load_test(instances: List[harness.Instance]):
 
     join_token = util.get_join_token(cluster_node, joining_node)
     join_token2 = util.get_join_token(cluster_node, joining_node2)
+
+    assert join_token != join_token2
+
     util.join_cluster(joining_node, join_token)
     util.join_cluster(joining_node2, join_token2)
 
@@ -26,4 +29,4 @@ def test_load_test(instances: List[harness.Instance]):
 
     assert "control-plane" in util.get_local_node_status(cluster_node)
     assert "control-plane" in util.get_local_node_status(joining_node)
-    assert "worker" in util.get_local_node_status(joining_node2)
+    assert "control-plane" in util.get_local_node_status(joining_node2)
