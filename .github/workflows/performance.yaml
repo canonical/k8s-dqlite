@@ -67,7 +67,6 @@ jobs:
       - name: Unpack Snap
         run: |
           sudo unsquashfs -d snap-unpack-dir k8s.snap
-
       - name: Swap out k8s-dqlite and dqlite version for ${{ github.head_ref }} ${{ matrix.dqlite }} snap
         run: |
           sed -i 's/^TAG_DQLITE=.*$/TAG_DQLITE=\"${{ matrix.dqlite }}"/' hack/env.sh;
@@ -80,6 +79,7 @@ jobs:
           TEST_SNAP: ${{ github.workspace }}/head.snap
           TEST_SUBSTRATE: lxd
           TEST_LXD_IMAGE: ubuntu:22.04
+          TEST_SKIP_CLEANUP: 1 #TODO rm
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
         run: |
           cd test/performance && sg lxd -c 'tox -e performance'
@@ -100,7 +100,6 @@ jobs:
           TEST_SNAP: ${{ github.workspace }}/base-code.snap
           TEST_SUBSTRATE: lxd
           TEST_LXD_IMAGE: ubuntu:22.04
-          TEST_SKIP_CLEANUP: 1 #TODO rm
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
         run: |
           cd test/performance && sg lxd -c 'tox -e performance'
