@@ -13,15 +13,15 @@ LOG = logging.getLogger(__name__)
 def test_load_test(instances: List[harness.Instance]):
     cluster_node = instances[0]
     joining_node = instances[1]
-    joining_node2 = instances[2]
+    joining_node_2 = instances[2]
 
     join_token = util.get_join_token(cluster_node, joining_node)
-    join_token2 = util.get_join_token(cluster_node, joining_node2)
+    join_token_2 = util.get_join_token(cluster_node, joining_node_2)
 
-    assert join_token != join_token2
+    assert join_token != join_token_2
 
     util.join_cluster(joining_node, join_token)
-    util.join_cluster(joining_node2, join_token2)
+    util.join_cluster(joining_node_2, join_token_2)
 
     util.wait_until_k8s_ready(cluster_node, instances)
     nodes = util.ready_nodes(cluster_node)
@@ -29,4 +29,4 @@ def test_load_test(instances: List[harness.Instance]):
 
     assert "control-plane" in util.get_local_node_status(cluster_node)
     assert "control-plane" in util.get_local_node_status(joining_node)
-    assert "control-plane" in util.get_local_node_status(joining_node2)
+    assert "control-plane" in util.get_local_node_status(joining_node_2)

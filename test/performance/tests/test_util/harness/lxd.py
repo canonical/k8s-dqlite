@@ -27,12 +27,17 @@ class LXDHarness(Harness):
         super(LXDHarness, self).__init__()
 
         self._next_id = 0
-
         self.profile = config.LXD_PROFILE_NAME
         self.image = config.LXD_IMAGE
         self.instances = set()
 
         self._configure_profile(self.profile, config.LXD_PROFILE)
+
+        self._configure_network(
+            "lxdbr0",
+            "ipv4.address=auto",
+            "ipv4.nat=true",
+        )
 
         LOG.debug(
             "Configured LXD substrate (profile %s, image %s)", self.profile, self.image
@@ -53,9 +58,9 @@ class LXDHarness(Harness):
             self.profile,
         ]
 
-        if network_type.lower() not in ["ipv4", "dualstack", "ipv6"]:
+        if network_type.lower() != "ipv4":
             raise HarnessError(
-                f"unknown network type {network_type}, need to be one of 'IPv4', 'IPv6', 'dualstack'"
+                f"unknown network type {network_type}, need to be one of 'IPv4'"
             )
 
         try:

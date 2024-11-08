@@ -147,3 +147,7 @@ jobs:
         with:
           name: ${{ env.artifact_name }}
           path: ${{ github.workspace }}/inspection-reports.tar.gz
+      - name: Tmate debugging session
+        if: ${{ failure() && github.event_name == 'pull_request' }}
+        uses: mxschmitt/action-tmate@v3
+        timeout-minutes: 120
