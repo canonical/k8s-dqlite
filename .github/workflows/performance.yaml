@@ -56,7 +56,7 @@ jobs:
           if command -v docker >/dev/null 2>&1; then
             echo "Docker is installed, purging it"
             sudo apt-get purge -y docker-engine docker docker.io docker-ce docker-ce-cli containerd runc
-
+          fi
       - name: Download latest k8s-snap
         run: |
           sudo snap download k8s --channel=latest/edge --basename k8s
