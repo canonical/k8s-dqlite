@@ -62,13 +62,13 @@ jobs:
           TEST_LXD_IMAGE: ubuntu:22.04
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
         run: |
-          echo TEST_CNCF_E2E
+          echo $TEST_CNCF_E2E
 
       - name: Extract CNCF conformance report
         if: ${{ env.TEST_CNCF_E2E }}
         working-directory: k8s-snap/tests/integration
         run: |
-          echo "yest=${TEST_CNCF_E2E}"
+          echo "yest=$TEST_CNCF_E2E"
           
           
 
