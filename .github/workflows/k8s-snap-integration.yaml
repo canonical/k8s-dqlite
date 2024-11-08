@@ -66,9 +66,9 @@ jobs:
 
       - name: Extract CNCF conformance report
         if: ${{ env.TEST_CNCF_E2E }}
-        working-directory: k8s-snap/tests/integration
+#        working-directory: k8s-snap/tests/integration
         run: |
-          echo "yest=$TEST_CNCF_E2E"
+          echo "yest=${TEST_CNCF_E2E}"
           
           
 
