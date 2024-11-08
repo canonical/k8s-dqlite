@@ -70,6 +70,7 @@ jobs:
           sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
           sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
           sudo mksquashfs snap-unpack-dir head.snap -noappend -comp lzo -no-fragments
+          sudo chown -R runner:runner head.snap
       - name: Upload head artifacts
         uses: actions/upload-artifact@v3
         with:
@@ -99,6 +100,7 @@ jobs:
           sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
           sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
           sudo mksquashfs snap-unpack-dir base-code.snap -noappend -comp lzo -no-fragments
+          sudo chown -R runner:runner base-code.snap
       - name: Upload base-code artifacts
         uses: actions/upload-artifact@v3
         with:
@@ -130,6 +132,7 @@ jobs:
           sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
           sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
           sudo mksquashfs snap-unpack-dir v1-1-11.snap -noappend -comp lzo -no-fragments
+          sudo chown -R runner:runner v1-1-11.snap
       - name: Upload v1-1-11 artifacts
         uses: actions/upload-artifact@v3
         with:
@@ -161,6 +164,7 @@ jobs:
           sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
           sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
           sudo mksquashfs snap-unpack-dir v1-2-0.snap -noappend -comp lzo -no-fragments
+          sudo chown -R runner:runner v1-2-0.snap
       - name: Upload v1-2-0 artifacts
         uses: actions/upload-artifact@v3
         with:
