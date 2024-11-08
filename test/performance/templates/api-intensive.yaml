@@ -1,0 +1,29 @@
+global:
+  writeToFile: true
+  metricsDirectory: collected-metrics
+
+jobs:
+  - name: api-intensive
+    jobIterations: 1000
+    qps: 10
+    burst: 10
+    namespacedIterations: true
+    namespace: api-intensive
+    podWait: false
+    cleanup: true
+    waitFor: []
+    waitWhenFinished: true
+    objects:
+      - objectTemplate: configmap.yaml
+        replicas: 1
+      - objectTemplate: secret.yaml
+        replicas: 1
+  - name: remove-configmaps-secrets
+    qps: 10
+    burst: 10
+    jobType: delete
+    objects:
+      - kind: ConfigMap
+        labelSelector: { kube-burner-job: api-intensive }
+      - kind: Secret
+        labelSelector: { kube-burner-job: api-intensive }
