@@ -34,6 +34,12 @@ def run(command: list, **kwargs) -> subprocess.CompletedProcess:
     return subprocess.run(command, **kwargs)
 
 
+def run_popen(command: list, **kwargs) -> subprocess.Popen:
+    """Log and run command."""
+    LOG.debug("Execute command %s (kwargs=%s)", shlex.join(command), kwargs)
+    return subprocess.Popen(command, **kwargs)
+
+
 def stubbornly(
     retries: Optional[int] = None,
     delay_s: Optional[Union[float, int]] = None,

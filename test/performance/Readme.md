@@ -27,17 +27,6 @@ In general, all end to end tests will require specifying the local path to the s
 
 End to end tests are typically run with: `cd test/performance && tox -e performance`
 
-### Running end to end tests on the local machine
-
-```bash
-export TEST_SNAP=$PWD/k8s.snap
-export TEST_SUBSTRATE=local
-
-cd test/performance && tox -e performance
-```
-
-> *NOTE*: When running locally, end to end tests that create more than one instance will fail.
-
 ### Running end to end tests on LXD containers
 
 First, make sure that you have initialized LXD:
