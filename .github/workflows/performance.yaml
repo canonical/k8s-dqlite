@@ -75,12 +75,16 @@ jobs:
         with:
           name: head
           path: ${{ github.workspace }}/head.snap
+      - name: Tests Download head from artifacts #TODO rm
+          uses: actions/download-artifact@v3
+          with:
+            name: head
+            path: ${{ github.workspace }}
       - name: Run Performance test ${{ github.head_ref }} ${{ matrix.dqlite }} snap
         env:
           TEST_SNAP: ${{ github.workspace }}/head.snap
           TEST_SUBSTRATE: lxd
           TEST_LXD_IMAGE: ubuntu:22.04
-          TEST_SKIP_CLEANUP: 1 #TODO rm
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
         run: |
           cd test/performance && sg lxd -c 'tox -e performance'
@@ -106,6 +110,7 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: base-code
+          path: ${{ github.workspace }}
       - name: Run Performance test for base code ${{ matrix.dqlite }} snap
         env:
           TEST_SNAP: ${{ github.workspace }}/base-code.snap
@@ -136,6 +141,7 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: v1-1-11
+          path: ${{ github.workspace }}
       - name: Run Performance test for v1.1.11 ${{ matrix.dqlite }} snap
         env:
           TEST_SNAP: ${{ github.workspace }}/v1-1-11.snap
@@ -166,6 +172,7 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: v1-2-0
+          path: ${{ github.workspace }}
       - name: Run Performance test for v1.2.0 ${{ matrix.dqlite }} snap
         env:
           TEST_SNAP: ${{ github.workspace }}/v1-2-0.snap
