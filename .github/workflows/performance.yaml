@@ -53,14 +53,10 @@ jobs:
           sg lxd -c 'lxc version'
       - name: Ensure lxd network traffic flows
         run: |
-          if iptables -nL DOCKER-USER >/dev/null 2>&1; then
-            iptables  -I DOCKER-USER -i lxdbr0 -j ACCEPT
-            ip6tables -I DOCKER-USER -i lxdbr0 -j ACCEPT
-            iptables  -I DOCKER-USER -o lxdbr0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
-            ip6tables -I DOCKER-USER -o lxdbr0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
-          else
-            echo "DOCKER-USER chain does not exist, skipping iptables rules"
-          fi
+          iptables  -I DOCKER-USER -i lxdbr0 -j ACCEPT
+          ip6tables -I DOCKER-USER -i lxdbr0 -j ACCEPT
+          iptables  -I DOCKER-USER -o lxdbr0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+          ip6tables -I DOCKER-USER -o lxdbr0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
       - name: Download latest k8s-snap
         run: |
           sudo snap download k8s --channel=latest/edge --basename k8s
