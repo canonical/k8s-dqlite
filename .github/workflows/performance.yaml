@@ -20,7 +20,7 @@ env:
 jobs:
   build:
     name: K8s-snap Performance Test Dqlite ${{ matrix.dqlite }}
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-20.04
     strategy:
       matrix:
         dqlite: ["v1.16.7", "v1.17.0-rc1"]
@@ -51,6 +51,12 @@ jobs:
           sudo lxd init --auto
           sudo usermod --append --groups lxd $USER
           sg lxd -c 'lxc version'
+      - name: Ensure lxd network traffic flows
+        run: |
+          if command -v docker >/dev/null 2>&1; then
+            echo "Docker is installed, purging it"
+            sudo apt-get purge -y docker-engine docker docker.io docker-ce docker-ce-cli containerd runc
+
       - name: Download latest k8s-snap
         run: |
           sudo snap download k8s --channel=latest/edge --basename k8s
@@ -64,14 +70,6 @@ jobs:
           sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
           sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
           sudo mksquashfs snap-unpack-dir head.snap -noappend -comp lzo -no-fragments
-      - name: Ensure lxd network traffic flows
-        run: |
-          if iptables -nL DOCKER-USER >/dev/null 2>&1; then
-            sudo iptables  -I DOCKER-USER -i lxdbr0 -j ACCEPT
-            sudo iptables  -I DOCKER-USER -o lxdbr0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
-          else
-              echo "DOCKER-USER chain does not exist, skipping iptables rules"
-          fi
       - name: Run Performance test ${{ github.head_ref }} ${{ matrix.dqlite }} snap
         env:
           TEST_SNAP: ${{ github.workspace }}/head.snap
