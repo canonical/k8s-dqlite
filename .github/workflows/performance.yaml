@@ -53,10 +53,10 @@ jobs:
           sg lxd -c 'lxc version'
       - name: Ensure lxd network traffic flows
         run: |
-          iptables  -I DOCKER-USER -i lxdbr0 -j ACCEPT
-          ip6tables -I DOCKER-USER -i lxdbr0 -j ACCEPT
-          iptables  -I DOCKER-USER -o lxdbr0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
-          ip6tables -I DOCKER-USER -o lxdbr0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+          sudo iptables  -I DOCKER-USER -i lxdbr0 -j ACCEPT
+          sudo ip6tables -I DOCKER-USER -i lxdbr0 -j ACCEPT
+          sudo iptables  -I DOCKER-USER -o lxdbr0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+          sudo ip6tables -I DOCKER-USER -o lxdbr0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
       - name: Download latest k8s-snap
         run: |
           sudo snap download k8s --channel=latest/edge --basename k8s
