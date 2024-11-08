@@ -16,7 +16,7 @@ jobs:
   build:
     env:
 #      TEST_CNCF_E2E: ${{ contains(github.event.pull_request.labels.*.name, 'cncf-conformance') || github.ref_name  == 'master' }}
-      TEST_CNCF_E2E: contains(github.event.pull_request.labels.*.name, 'documentation') || github.ref_name  == 'master'
+      TEST_CNCF_E2E: ${{ contains(github.event.pull_request.labels.*.name, 'documentation') || github.ref_name  == 'master' }}
     name: K8s-snap Integration Test
     runs-on: ubuntu-20.04
 
@@ -65,7 +65,7 @@ jobs:
           echo $TEST_CNCF_E2E
 
       - name: Extract CNCF conformance report
-        if: ${{ env.TEST_CNCF_E2E }}
+        if: ${{ env.TEST_CNCF_E2E == 'true'}}
 #        working-directory: k8s-snap/tests/integration
         run: |
           echo "yest=${TEST_CNCF_E2E}"
