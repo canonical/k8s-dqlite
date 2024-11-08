@@ -76,10 +76,10 @@ jobs:
           name: head
           path: ${{ github.workspace }}/head.snap
       - name: Tests Download head from artifacts #TODO rm
-          uses: actions/download-artifact@v3
-          with:
-            name: head
-            path: ${{ github.workspace }}
+        uses: actions/download-artifact@v3
+        with:
+          name: head
+          path: ${{ github.workspace }}
       - name: Run Performance test ${{ github.head_ref }} ${{ matrix.dqlite }} snap
         env:
           TEST_SNAP: ${{ github.workspace }}/head.snap
