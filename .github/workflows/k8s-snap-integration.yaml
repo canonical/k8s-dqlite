@@ -15,8 +15,7 @@ concurrency:
 jobs:
   build:
     env:
-#      TEST_CNCF_E2E: ${{ contains(github.event.pull_request.labels.*.name, 'cncf-conformance') || github.ref_name  == 'master' }}
-      TEST_CNCF_E2E: ${{ contains(github.event.pull_request.labels.*.name, 'documentation') || github.ref_name  == 'master' }}
+      TEST_CNCF_E2E: ${{ contains(github.event.pull_request.labels.*.name, 'cncf-conformance') || github.ref_name  == 'master' }}
     name: K8s-snap Integration Test
     runs-on: ubuntu-20.04
 
@@ -76,13 +75,13 @@ jobs:
           name: inspection-reports
           path: ${{ github.workspace }}/inspection-reports.tar.gz
       - name: Extract CNCF conformance report
-        if: ${{ failure() && (env.TEST_CNCF_E2E == 'true') }}
+        if: ${{ failure() && ( env.TEST_CNCF_E2E == 'true' ) }}
         working-directory: k8s-snap/tests/integration
         run: |
           tar -xf sonobuoy_e2e.tar.gz --one-top-level
       - name: Upload CNCF conformance report artifact
         uses: actions/upload-artifact@v4
-        if: ${{ failure() && (env.TEST_CNCF_E2E == 'true') }}
+        if: ${{ failure() && ( env.TEST_CNCF_E2E == 'true' ) }}
         with:
           name: report_sonobuoy_e2e
           path: k8s-snap/tests/integration/sonobuoy_e2e
