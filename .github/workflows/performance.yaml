@@ -21,9 +21,6 @@ jobs:
   build:
     name: K8s-snap Performance Test Dqlite ${{ matrix.dqlite }}
     runs-on: ubuntu-20.04
-    strategy:
-      matrix:
-        dqlite: ["v1.16.7", "v1.17.0-rc1"]
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@v2
@@ -51,7 +48,7 @@ jobs:
           sudo lxd init --auto
           sudo usermod --append --groups lxd $USER
           sg lxd -c 'lxc version'
-      - name: Ensure lxd network traffic flows
+      - name: Ensure lxd network traffic flows by removing docker if installed
         run: |
           if command -v docker >/dev/null 2>&1; then
             echo "Docker is installed, purging it"
@@ -63,14 +60,13 @@ jobs:
       - name: Unpack Snap
         run: |
           sudo unsquashfs -d snap-unpack-dir k8s.snap
-      - name: Swap out k8s-dqlite and dqlite version for ${{ github.head_ref }} ${{ matrix.dqlite }} snap
+      - name: Create snap with k8s-dqlite ${{ github.head_ref }}
         run: |
-          sed -i 's/^TAG_DQLITE=.*$/TAG_DQLITE=\"${{ matrix.dqlite }}"/' hack/env.sh;
           make static
           sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
           sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
           sudo mksquashfs snap-unpack-dir head.snap -noappend -comp lzo -no-fragments
-      - name: Run Performance test ${{ github.head_ref }} ${{ matrix.dqlite }} snap
+      - name: Run Performance test ${{ github.head_ref }} snap
         env:
           TEST_SNAP: ${{ github.workspace }}/head.snap
           TEST_SUBSTRATE: lxd
@@ -78,19 +74,18 @@ jobs:
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
         run: |
           cd test/performance && sg lxd -c 'tox -e performance'
-      - name: Swap out k8s-dqlite and dqlite version for base code ${{ matrix.dqlite }} snap
+      - name: Create snap with k8s-dqlite base code
         run: |
           set -o pipefail
           git fetch origin $BASE_BRANCH
           git reset --hard $BASE_SHA
-          sed -i 's/^TAG_DQLITE=.*$/TAG_DQLITE=\"${{ matrix.dqlite }}"/' hack/env.sh;
           make static
           sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
           sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
           sudo mksquashfs snap-unpack-dir base-code.snap -noappend -comp lzo -no-fragments
       - name: Switch back to target branch
         run: git reset --hard $TARGET_SHA
-      - name: Run Performance test for base code ${{ matrix.dqlite }} snap
+      - name: Run Performance test for base code snap
         env:
           TEST_SNAP: ${{ github.workspace }}/base-code.snap
           TEST_SUBSTRATE: lxd
@@ -98,19 +93,18 @@ jobs:
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
         run: |
           cd test/performance && sg lxd -c 'tox -e performance'
-      - name: Swap out k8s-dqlite and dqlite version for v1.1.11 ${{ matrix.dqlite }} snap
+      - name: Create snap with k8s-dqlite v1.1.11
         run: |
           set -o pipefail
           git fetch origin --tags
           git reset --hard v1.1.11
-          sed -i 's/^TAG_DQLITE=.*$/TAG_DQLITE=\"${{ matrix.dqlite }}"/' hack/env.sh;
           make static
           sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
           sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
           sudo mksquashfs snap-unpack-dir v1-1-11.snap -noappend -comp lzo -no-fragments
       - name: Switch back to target branch
         run: git reset --hard $TARGET_SHA
-      - name: Run Performance test for v1.1.11 ${{ matrix.dqlite }} snap
+      - name: Run Performance test for v1.1.11 snap
         env:
           TEST_SNAP: ${{ github.workspace }}/v1-1-11.snap
           TEST_SUBSTRATE: lxd
@@ -118,19 +112,18 @@ jobs:
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
         run: |
           cd test/performance && sg lxd -c 'tox -e performance'
-      - name: Swap out k8s-dqlite and dqlite version for v1.2.0 ${{ matrix.dqlite }} snap
+      - name: Create snap with k8s-dqlite v1.2.0
         run: |
           set -o pipefail
           git fetch origin --tags
           git reset --hard v1.2.0
-          sed -i 's/^TAG_DQLITE=.*$/TAG_DQLITE=\"${{ matrix.dqlite }}"/' hack/env.sh;
           make static
           sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
           sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
           sudo mksquashfs snap-unpack-dir v1-2-0.snap -noappend -comp lzo -no-fragments
       - name: Switch back to target branch
         run: git reset --hard $TARGET_SHA
-      - name: Run Performance test for v1.2.0 ${{ matrix.dqlite }} snap
+      - name: Run Performance test for v1.2.0 snap
         env:
           TEST_SNAP: ${{ github.workspace }}/v1-2-0.snap
           TEST_SUBSTRATE: lxd
