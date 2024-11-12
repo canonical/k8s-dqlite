@@ -1,0 +1,141 @@
+name: Performance Test K8s-snap
+
+on:
+  push:
+    branches: ["master"]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BASE_SHA: ${{ github.before || github.event.pull_request.base.sha }}
+  BASE_BRANCH: ${{ github.base_ref || github.ref }}
+  TARGET_SHA: ${{ github.sha }}
+
+jobs:
+  build:
+    name: K8s-snap Performance Test
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+      - name: Checking out repo
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install tox
+        run: |
+          pip install tox
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - name: Install lxd
+        run: |
+          sudo snap refresh lxd --channel 5.21/stable
+          sudo lxd init --auto
+          sudo usermod --append --groups lxd $USER
+          sg lxd -c 'lxc version'
+      - name: Ensure lxd network traffic flows by removing docker if installed
+        run: |
+          if command -v docker >/dev/null 2>&1; then
+            echo "Docker is installed, purging it"
+            sudo apt-get purge -y docker-engine docker docker.io docker-ce docker-ce-cli containerd runc
+          fi
+      - name: Download latest k8s-snap
+        run: |
+          sudo snap download k8s --channel=latest/edge --basename k8s
+      - name: Unpack Snap
+        run: |
+          sudo unsquashfs -d snap-unpack-dir k8s.snap
+      - name: Create snap with k8s-dqlite ${{ github.head_ref }}
+        run: |
+          make static
+          sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
+          sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
+          sudo mksquashfs snap-unpack-dir head.snap -noappend -comp lzo -no-fragments
+      - name: Run Performance test ${{ github.head_ref }} snap
+        env:
+          TEST_SNAP: ${{ github.workspace }}/head.snap
+          TEST_SUBSTRATE: lxd
+          TEST_LXD_IMAGE: ubuntu:22.04
+          TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
+        run: |
+          cd test/performance && sg lxd -c 'tox -e performance'
+      - name: Create snap with k8s-dqlite base code
+        run: |
+          set -o pipefail
+          git fetch origin $BASE_BRANCH
+          git reset --hard $BASE_SHA
+          make static
+          sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
+          sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
+          sudo mksquashfs snap-unpack-dir base-code.snap -noappend -comp lzo -no-fragments
+      - name: Switch back to target branch
+        run: git reset --hard $TARGET_SHA
+      - name: Run Performance test for base code snap
+        env:
+          TEST_SNAP: ${{ github.workspace }}/base-code.snap
+          TEST_SUBSTRATE: lxd
+          TEST_LXD_IMAGE: ubuntu:22.04
+          TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
+        run: |
+          cd test/performance && sg lxd -c 'tox -e performance'
+      - name: Create snap with k8s-dqlite v1.1.11
+        run: |
+          set -o pipefail
+          git fetch origin --tags
+          git reset --hard v1.1.11
+          make static
+          sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
+          sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
+          sudo mksquashfs snap-unpack-dir v1-1-11.snap -noappend -comp lzo -no-fragments
+      - name: Switch back to target branch
+        run: git reset --hard $TARGET_SHA
+      - name: Run Performance test for v1.1.11 snap
+        env:
+          TEST_SNAP: ${{ github.workspace }}/v1-1-11.snap
+          TEST_SUBSTRATE: lxd
+          TEST_LXD_IMAGE: ubuntu:22.04
+          TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
+        run: |
+          cd test/performance && sg lxd -c 'tox -e performance'
+      - name: Create snap with k8s-dqlite v1.2.0
+        run: |
+          set -o pipefail
+          git fetch origin --tags
+          git reset --hard v1.2.0
+          make static
+          sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
+          sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
+          sudo mksquashfs snap-unpack-dir v1-2-0.snap -noappend -comp lzo -no-fragments
+      - name: Switch back to target branch
+        run: git reset --hard $TARGET_SHA
+      - name: Run Performance test for v1.2.0 snap
+        env:
+          TEST_SNAP: ${{ github.workspace }}/v1-2-0.snap
+          TEST_SUBSTRATE: lxd
+          TEST_LXD_IMAGE: ubuntu:22.04
+          TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
+        run: |
+          cd test/performance && sg lxd -c 'tox -e performance'
+      - name: Prepare inspection reports
+        if: failure()
+        run: |
+          tar -czvf inspection-reports.tar.gz -C ${{ github.workspace }} inspection-reports
+          echo "artifact_name=inspection-reports-${{ matrix.os }}" | sed 's/:/-/g' >> $GITHUB_ENV
+      - name: Upload inspection report artifact
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.artifact_name }}
+          path: ${{ github.workspace }}/inspection-reports.tar.gz
