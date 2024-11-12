@@ -1,5 +1,6 @@
 #
-# Copyright 2024 Canonical, Ltd.#
+# Copyright 2024 Canonical, Ltd.
+#
 import logging
 import os
 import shlex
@@ -9,7 +10,7 @@ from typing import List
 
 from test_util import config
 from test_util.harness import Harness, HarnessError, Instance
-from test_util.util import run, stubbornly, run_popen
+from test_util.util import run, run_popen, stubbornly
 
 LOG = logging.getLogger(__name__)
 
@@ -161,8 +162,8 @@ class LXDHarness(Harness):
 
         LOG.debug("Execute command %s in instance %s", command, instance_id)
         # Check if the command contains any special shell characters that need special handling
-        special_characters = ['$', '>', '&', '!', '~', '||', '&&', '|']
-        if any(char in ' '.join(command) for char in special_characters):
+        special_characters = ["$", ">", "&", "!", "~", "||", "&&", "|"]
+        if any(char in " ".join(command) for char in special_characters):
             # If the command contains special characters, directly join it as a string without shlex
             command_str = " ".join(command)  # This avoids shlex.join
         else:
@@ -172,7 +173,7 @@ class LXDHarness(Harness):
             ["lxc", "shell", instance_id, "--", "bash", "-c", command_str],
             **kwargs,
         )
-    
+
     # Updated `exec` method using `Popen` for background commands.
     def exec_with_popen(self, instance_id: str, command: list, **kwargs):
         if instance_id not in self.instances:
@@ -180,8 +181,8 @@ class LXDHarness(Harness):
 
         LOG.debug("Execute command %s in instance %s", command, instance_id)
         # Check if the command contains any special shell characters that need special handling
-        special_characters = ['$', '>', '&', '!', '~', '||', '&&', '|']
-        if any(char in ' '.join(command) for char in special_characters):
+        special_characters = ["$", ">", "&", "!", "~", "||", "&&", "|"]
+        if any(char in " ".join(command) for char in special_characters):
             # If the command contains special characters, directly join it as a string without shlex
             command_str = " ".join(command)
         else:
