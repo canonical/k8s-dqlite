@@ -104,7 +104,7 @@ jobs:
           TEST_LXD_IMAGE: ubuntu:22.04
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
           TEST_METRICS_DIR: ${{ github.workspace }}/test/performance/results/head
-          TEST_NAME: head
+          TEST_RUN_NAME: head
         # TODO: Remove ls
         run: |
           cd test/performance
@@ -119,35 +119,11 @@ jobs:
           TEST_LXD_IMAGE: ubuntu:22.04
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
           TEST_METRICS_DIR: ${{ github.workspace }}/test/performance/results/base-code
-          TEST_NAME: base-code
+          TEST_RUN_NAME: base-code
         run: |
           cd test/performance 
           mkdir -p ./base-code
           sg lxd -c 'tox -e performance'
-      - name: Generate 3 node Graphs
-        #TODO remove for testing
-        run: |
-          cd test/performance
-          ls ./results/head
-          sudo Rscript -e parse-performance-metrics.R -p ./results/head -o ./results/head -f *three-node.log
-          ls ./results/head
-      - name: Publish head result
-        #TODO remove for testing
-        if: github.event_name == 'pull_request'
-        continue-on-error: true
-        uses: marocchino/sticky-pull-request-comment@v2
-        with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          header: Performance Results
-          message: |
-            ### Performance Results
-
-            ## Three Node Graphs
-            ![Three Node Graphs](./test/performance/results/head/cpu_usage_plot.png)
-            ![Three Node Graphs](./test/performance/results/head/mem_usage_plot.png)
-            ![Three Node Graphs](./test/performance/results/head/io_read_usage_plot.png)
-            ![Three Node Graphs](./test/performance/results/head/io_write_usage_plot.png)
-
       - name: Run Performance test for v1.1.11 snap
         env:
           TEST_SNAP: ${{ github.workspace }}/v1-1-11.snap
@@ -155,7 +131,7 @@ jobs:
           TEST_LXD_IMAGE: ubuntu:22.04
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
           TEST_METRICS_DIR: ${{ github.workspace }}/test/performance/results/v1-1-11
-          TEST_NAME: v1-1-11
+          TEST_RUN_NAME: v1-1-11
         run: |
           cd test/performance 
           mkdir -p ./v1-1-11
@@ -167,7 +143,7 @@ jobs:
           TEST_LXD_IMAGE: ubuntu:22.04
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
           TEST_METRICS_DIR: ${{ github.workspace }}/test/performance/results/v1-2-0
-          TEST_NAME: v1-2-0
+          TEST_RUN_NAME: v1-2-0
         run: |
           cd test/performance
           mkdir -p ./v1-2-0
@@ -191,28 +167,11 @@ jobs:
           ls ./results/single-node
           sudo Rscript -e parse-performance-metrics.R -p ./results/single-node -o ./results/single-node -f *single-node.log
           ls ./results/single-node
-      - name: Publish performance result
-        if: github.event_name == 'pull_request'
-        continue-on-error: true
-        uses: marocchino/sticky-pull-request-comment@v2
+      - name: Upload performance result
+        uses: actions/upload-artifact@v4
         with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          header: Performance Results
-          message: |
-            ### Performance Results
-
-            ## Single Node Graphs
-            ![Single Node Graphs](./test/performance/results/single-node/cpu_usage_plot.png)
-            ![Single Node Graphs](./test/performance/results/single-node/mem_usage_plot.png)
-            ![Single Node Graphs](./test/performance/results/single-node/io_read_usage_plot.png)
-            ![Single Node Graphs](./test/performance/results/single-node/io_write_usage_plot.png)
-
-            ## Three Node Graphs
-            ![Three Node Graphs](./test/performance/results/head/cpu_usage_plot.png)
-            ![Three Node Graphs](./test/performance/results/head/mem_usage_plot.png)
-            ![Three Node Graphs](./test/performance/results/head/io_read_usage_plot.png)
-            ![Three Node Graphs](./test/performance/results/head/io_write_usage_plot.png)
-
+          name: performance-results
+          path: ${{ github.workspace }}/test/performance/results
       - name: Prepare inspection reports
         if: failure()
         run: |
