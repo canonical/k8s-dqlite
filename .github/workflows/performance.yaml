@@ -108,10 +108,9 @@ jobs:
         # TODO: Remove ls
         run: |
           cd test/performance
-          mkdir -p ./head
+          mkdir -p ./results/head
           sg lxd -c 'tox -e performance'
           ls ./results/head
-
       - name: Run Performance test for base code snap
         env:
           TEST_SNAP: ${{ github.workspace }}/base-code.snap
@@ -122,7 +121,7 @@ jobs:
           TEST_RUN_NAME: base-code
         run: |
           cd test/performance 
-          mkdir -p ./base-code
+          mkdir -p ./results/base-code
           sg lxd -c 'tox -e performance'
       - name: Run Performance test for v1.1.11 snap
         env:
@@ -134,7 +133,7 @@ jobs:
           TEST_RUN_NAME: v1-1-11
         run: |
           cd test/performance 
-          mkdir -p ./v1-1-11
+          mkdir -p ./results/v1-1-11
           sg lxd -c 'tox -e performance'
       - name: Run Performance test for v1.2.0 snap
         env:
@@ -146,7 +145,7 @@ jobs:
           TEST_RUN_NAME: v1-2-0
         run: |
           cd test/performance
-          mkdir -p ./v1-2-0
+          mkdir -p ./results/v1-2-0
           sg lxd -c 'tox -e performance'
       - name: Generate 3 node Graphs
         run: |
