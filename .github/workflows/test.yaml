@@ -28,6 +28,16 @@ jobs:
       - name: Create a comment with the image
         uses: peter-evans/create-or-update-comment@v2
         with:
-          issue-number: ${{ github.event.issue.number }} # For issues
+          issue-number: ${{ github.event.pull_request.number }}
           body: |
             ![Generated Image](${{ env.artifact_url }})
+      - name: Publish performance result
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          header: Benchmarks
+          message: |
+            ### Image
+            ![Generated Image](${{ github.workspace }}/test/performance/cpu_usage_plot.png)
