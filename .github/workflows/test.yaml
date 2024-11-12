@@ -11,16 +11,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v2
 
-      - name: Generate an image
-        run: |
-          echo "Generating some-img.png"
-          python3 -c "from PIL import Image; img = Image.new('RGB', (100, 100), color = (73, 109, 137)); img.save('./some-img.png')"
-
       - name: Upload image as artifact
         uses: actions/upload-artifact@v3
         with:
           name: some-img
-          path: ./some-img.png
+          path: ${{ github.workspace }}/test/performance/cpu_usage_plot.png
 
       - name: Get artifact download URL
         id: artifact_url
