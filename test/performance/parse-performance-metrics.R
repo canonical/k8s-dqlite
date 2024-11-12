@@ -10,18 +10,15 @@ option_list = list(
   make_option(c("-o", "--out"), type = "character", default = ".", 
               help = "Output path for plots"),
   make_option(c("-p", "--path"), type = "character", default = ".", 
-              help = "Path to metrics files")
+              help = "Path to metrics files"),
+  
+  make_option(c("-f", "--filepattern"), type = "character", default = "*.log", 
+              help = "File pattern to match metrics files")
 )
 
 # Parse command-line options
 opt_parser = OptionParser(option_list = option_list)
 opt = parse_args(opt_parser)
-
-# Check required arguments
-if (is.null(opt$path)) {
-  print_help(opt_parser)
-  stop("Both --path arguments must be provided.", call. = FALSE)
-}
 
 metrics_files <- list.files(opt$path, pattern = "*.log", full.names = TRUE)
 

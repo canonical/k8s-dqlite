@@ -36,7 +36,7 @@ def test_three_node_load(instances: List[harness.Instance]):
     process_dict = collect_metrics(instances)
     run_kube_burner(cluster_node)
     stop_metrics(instances, process_dict)
-    pull_metrics(instances)
+    pull_metrics(instances, "three-node")
 
 
 def test_single_node_load(session_instance: harness.Instance):
@@ -45,7 +45,7 @@ def test_single_node_load(session_instance: harness.Instance):
     process_dict = collect_metrics([session_instance])
     run_kube_burner(session_instance)
     stop_metrics([session_instance], process_dict)
-    pull_metrics([session_instance])
+    pull_metrics([session_instance], "single-node")
 
 
 def stop_metrics(instances: List[harness.Instance], process_dict: dict):
@@ -80,11 +80,12 @@ def collect_metrics(instances: List[harness.Instance]):
     return process_dict
 
 
-def pull_metrics(instances: List[harness.Instance]):
+def pull_metrics(instances: List[harness.Instance], test_name: str):
     """Pulls metrics file from each instance to the local machine."""
-    for instance in instances:
+    for i, instance in enumerate(instances, start=1):
+        out_path = (config.METRICS_DIR / f"{config.RUN_NAME}-{i}-{test_name}.log").as_posix()
         instance.pull_file(
-            f"/root/{instance.id}_metrics.log", f"./{instance.id}_metrics.log"
+            f"/root/{instance.id}_metrics.log", out_path
         )
 
 
