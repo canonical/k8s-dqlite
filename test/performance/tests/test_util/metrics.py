@@ -5,6 +5,8 @@ from typing import List
 
 from test_util import config, harness, util
 
+LOG = logging.getLogger(__name__)
+
 
 def stop_metrics(instances: List[harness.Instance], process_dict: dict):
     """Stops collecting metrics in the background from each instance."""
@@ -41,11 +43,12 @@ def collect_metrics(instances: List[harness.Instance]):
     return process_dict
 
 
-def pull_metrics(instances: List[harness.Instance]):
+def pull_metrics(instances: List[harness.Instance], test_name: str):
     """Pulls metrics file from each instance to the local machine."""
-    for instance in instances:
+    for i, instance in enumerate(instances, start=1):
+        out_path = (config.METRICS_DIR / f"{config.RUN_NAME}-{i}-{test_name}.log").as_posix()
         instance.pull_file(
-            f"/root/{instance.id}_metrics.log", f"./{instance.id}_metrics.log"
+            f"/root/{instance.id}_metrics.log", out_path
         )
 
 

@@ -47,3 +47,34 @@ export TEST_SKIP_CLEANUP=1                       # (optionally) do not destroy m
 
 cd test/performance && tox -e performance
 ```
+
+## Parsing performance test metrics
+
+The performance metrics parsing and creation of graphs is done in R.
+
+The script allows you to pass three options in order to generate the graphs:
+
+- `-p` or `--path` - the path to the directory where the performance test results are stored. By default, this is the `./results` directory
+- `-o` or `--output` - the path to the directory where the graphs will be stored. By default, this is the `./results` directory
+- `-f` or `--filepattern` - the pattern of the files that will be parsed, by default these are old files ending in `.log`
+
+The script will generate the following graphs for all files matching the pattern in the specified directory:
+
+- `cpu` - the CPU usage of the system
+- `memory` - the memory usage of the system
+- `io_reads` - the number of read operations on the disk
+- `io_writes` - the number of write operations on the disk
+
+One time setup for installing R and the required packages:
+
+```bash
+sudo apt install r-base
+sudo Rscript -e 'install.packages(c("ggplot2", "dplyr", "optparse"), repos="https://cloud.r-project.org")'
+```
+
+The script can be run with the following command:
+
+```bash
+cd test/performance
+Rscript parse_performance_metrics.R
+```

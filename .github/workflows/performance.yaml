@@ -6,6 +6,7 @@ on:
   pull_request:
 
 permissions:
+  pull-requests: write
   contents: read
 
 concurrency:
@@ -39,6 +40,10 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: "1.22"
+      - name: Set-up R
+        run: |
+          sudo apt install r-base
+          sudo Rscript -e 'install.packages(c("ggplot2", "dplyr", "optparse"), repos="https://cloud.r-project.org")'
       - name: Install lxd
         run: |
           sudo snap refresh lxd --channel 5.21/stable
@@ -57,21 +62,13 @@ jobs:
       - name: Unpack Snap
         run: |
           sudo unsquashfs -d snap-unpack-dir k8s.snap
-      - name: Create snap with k8s-dqlite ${{ github.head_ref }}
+      - name: Create snap with k8s-dqlite ${{ github.head_ref }} code
         run: |
           make static
           sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
           sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
           sudo mksquashfs snap-unpack-dir head.snap -noappend -comp lzo -no-fragments
-      - name: Run Performance test ${{ github.head_ref }} snap
-        env:
-          TEST_SNAP: ${{ github.workspace }}/head.snap
-          TEST_SUBSTRATE: lxd
-          TEST_LXD_IMAGE: ubuntu:22.04
-          TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
-        run: |
-          cd test/performance && sg lxd -c 'tox -e performance'
-      - name: Create snap with k8s-dqlite base code
+      - name: Create snap with k8s-dqlite base-code
         run: |
           set -o pipefail
           git fetch origin $BASE_BRANCH
@@ -80,16 +77,6 @@ jobs:
           sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
           sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
           sudo mksquashfs snap-unpack-dir base-code.snap -noappend -comp lzo -no-fragments
-      - name: Switch back to target branch
-        run: git reset --hard $TARGET_SHA
-      - name: Run Performance test for base code snap
-        env:
-          TEST_SNAP: ${{ github.workspace }}/base-code.snap
-          TEST_SUBSTRATE: lxd
-          TEST_LXD_IMAGE: ubuntu:22.04
-          TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
-        run: |
-          cd test/performance && sg lxd -c 'tox -e performance'
       - name: Create snap with k8s-dqlite v1.1.11
         run: |
           set -o pipefail
@@ -99,16 +86,6 @@ jobs:
           sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
           sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
           sudo mksquashfs snap-unpack-dir v1-1-11.snap -noappend -comp lzo -no-fragments
-      - name: Switch back to target branch
-        run: git reset --hard $TARGET_SHA
-      - name: Run Performance test for v1.1.11 snap
-        env:
-          TEST_SNAP: ${{ github.workspace }}/v1-1-11.snap
-          TEST_SUBSTRATE: lxd
-          TEST_LXD_IMAGE: ubuntu:22.04
-          TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
-        run: |
-          cd test/performance && sg lxd -c 'tox -e performance'
       - name: Create snap with k8s-dqlite v1.2.0
         run: |
           set -o pipefail
@@ -120,14 +97,122 @@ jobs:
           sudo mksquashfs snap-unpack-dir v1-2-0.snap -noappend -comp lzo -no-fragments
       - name: Switch back to target branch
         run: git reset --hard $TARGET_SHA
+      - name: Run Performance test ${{ github.head_ref }} snap
+        env:
+          TEST_SNAP: ${{ github.workspace }}/head.snap
+          TEST_SUBSTRATE: lxd
+          TEST_LXD_IMAGE: ubuntu:22.04
+          TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
+          TEST_METRICS_DIR: ${{ github.workspace }}/test/performance/results/head
+          TEST_NAME: head
+        # TODO: Remove ls
+        run: |
+          cd test/performance
+          mkdir -p ./head
+          sg lxd -c 'tox -e performance'
+          ls ./results/head
+
+      - name: Run Performance test for base code snap
+        env:
+          TEST_SNAP: ${{ github.workspace }}/base-code.snap
+          TEST_SUBSTRATE: lxd
+          TEST_LXD_IMAGE: ubuntu:22.04
+          TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
+          TEST_METRICS_DIR: ${{ github.workspace }}/test/performance/results/base-code
+          TEST_NAME: base-code
+        run: |
+          cd test/performance 
+          mkdir -p ./base-code
+          sg lxd -c 'tox -e performance'
+      - name: Generate 3 node Graphs
+        #TODO remove for testing
+        run: |
+          cd test/performance
+          ls ./results/head
+          sudo Rscript -e parse-performance-metrics.R -p ./results/head -o ./results/head -f *three-node.log
+          ls ./results/head
+      - name: Publish head result
+        #TODO remove for testing
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          header: Performance Results
+          message: |
+            ### Performance Results
+
+            ## Three Node Graphs
+            ![Three Node Graphs](./test/performance/results/head/cpu_usage_plot.png)
+            ![Three Node Graphs](./test/performance/results/head/mem_usage_plot.png)
+            ![Three Node Graphs](./test/performance/results/head/io_read_usage_plot.png)
+            ![Three Node Graphs](./test/performance/results/head/io_write_usage_plot.png)
+
+      - name: Run Performance test for v1.1.11 snap
+        env:
+          TEST_SNAP: ${{ github.workspace }}/v1-1-11.snap
+          TEST_SUBSTRATE: lxd
+          TEST_LXD_IMAGE: ubuntu:22.04
+          TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
+          TEST_METRICS_DIR: ${{ github.workspace }}/test/performance/results/v1-1-11
+          TEST_NAME: v1-1-11
+        run: |
+          cd test/performance 
+          mkdir -p ./v1-1-11
+          sg lxd -c 'tox -e performance'
       - name: Run Performance test for v1.2.0 snap
         env:
           TEST_SNAP: ${{ github.workspace }}/v1-2-0.snap
           TEST_SUBSTRATE: lxd
           TEST_LXD_IMAGE: ubuntu:22.04
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
+          TEST_METRICS_DIR: ${{ github.workspace }}/test/performance/results/v1-2-0
+          TEST_NAME: v1-2-0
         run: |
-          cd test/performance && sg lxd -c 'tox -e performance'
+          cd test/performance
+          mkdir -p ./v1-2-0
+          sg lxd -c 'tox -e performance'
+      - name: Generate 3 node Graphs
+        run: |
+          cd test/performance
+          sudo Rscript -e parse-performance-metrics.R -p ./results/head -o ./results/head -f *three-node.log
+          sudo Rscript -e parse-performance-metrics.R -p ./results/base-code -o ./results/base-code -f *three-node.log
+          sudo Rscript -e parse-performance-metrics.R -p ./results/v1-1-11 -o ./results/v1-1-11 -f *three-node.log
+          sudo Rscript -e parse-performance-metrics.R -p ./results/v1-2-0 -o ./results/v1-2-0 -f *three-node.log
+      - name: Generate single node Graphs
+        #TODO rm ls
+        run: |
+          cd test/performance
+          mkdir -p ./results/single-node
+          cp ./results/head/*single-node.log ./results/single-node
+          cp ./results/base-code/*single-node.log ./results/single-node
+          cp ./results/v1-1-11/*single-node.log ./results/single-node
+          cp ./results/v1-2-0/*single-node.log ./results/single-node
+          ls ./results/single-node
+          sudo Rscript -e parse-performance-metrics.R -p ./results/single-node -o ./results/single-node -f *single-node.log
+          ls ./results/single-node
+      - name: Publish performance result
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          header: Performance Results
+          message: |
+            ### Performance Results
+
+            ## Single Node Graphs
+            ![Single Node Graphs](./test/performance/results/single-node/cpu_usage_plot.png)
+            ![Single Node Graphs](./test/performance/results/single-node/mem_usage_plot.png)
+            ![Single Node Graphs](./test/performance/results/single-node/io_read_usage_plot.png)
+            ![Single Node Graphs](./test/performance/results/single-node/io_write_usage_plot.png)
+
+            ## Three Node Graphs
+            ![Three Node Graphs](./test/performance/results/head/cpu_usage_plot.png)
+            ![Three Node Graphs](./test/performance/results/head/mem_usage_plot.png)
+            ![Three Node Graphs](./test/performance/results/head/io_read_usage_plot.png)
+            ![Three Node Graphs](./test/performance/results/head/io_write_usage_plot.png)
+
       - name: Prepare inspection reports
         if: failure()
         run: |

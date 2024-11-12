@@ -12,6 +12,10 @@ DEFAULT_WAIT_DELAY_S = int(os.getenv("TEST_DEFAULT_WAIT_DELAY_S") or 10)
 
 MANIFESTS_DIR = DIR / ".." / ".." / "templates"
 
+METRICS_DIR = os.getenv("TEST_METRICS_DIR") or DIR / ".." / ".." / "results"
+
+RUN_NAME = os.getenv("TEST_RUN_NAME") or "k8s"
+
 # INSPECTION_REPORTS_DIR is the directory where inspection reports are stored.
 # If empty, no reports are generated.
 INSPECTION_REPORTS_DIR = os.getenv("TEST_INSPECTION_REPORTS_DIR")
