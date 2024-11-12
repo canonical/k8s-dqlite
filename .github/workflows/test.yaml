@@ -41,3 +41,9 @@ jobs:
           message: |
             ### Image
             ![Generated Image](${{ github.workspace }}/test/performance/cpu_usage_plot.png)
+      - name: Upload img
+        uses: edunad/actions-image@v2.0.0
+        with:
+          path: ${{ github.workspace }}/test/performance/cpu_usage_plot.png
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          title: "Image 🙀"
