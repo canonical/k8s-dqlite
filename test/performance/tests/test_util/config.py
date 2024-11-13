@@ -26,6 +26,9 @@ SNAP = os.getenv("TEST_SNAP") or ""
 # SNAP_NAME is the name of the snap under test.
 SNAP_NAME = os.getenv("TEST_SNAP_NAME") or "k8s"
 
+# KUBE_BURNER_URL is the version of kube-burner to use.
+KUBE_BURNER_URL = os.getenv("TEST_KUBE_BURNER_VERSION") or "https://github.com/kube-burner/kube-burner/releases/download/v1.2/kube-burner-1.2-Linux-x86_64.tar.gz"
+
 # FLAVOR is the flavour to use for running the performance tests.
 FLAVOR = os.getenv("TEST_FLAVOR") or ""
 

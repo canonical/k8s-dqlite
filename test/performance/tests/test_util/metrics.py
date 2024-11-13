@@ -51,13 +51,14 @@ def configure_kube_burner(instance: harness.Instance):
         not instance.exec(["test", "-f", "/root/kube-burner"], check=False).returncode
         == 0
     ):
-        url = "https://github.com/kube-burner/kube-burner/releases/download/v1.2/kube-burner-1.2-Linux-x86_64.tar.gz"
+        url = config.KUBE_BURNER_URL
         instance.exec(["wget", url])
         instance.exec(
             ["tar", "-zxvf", "kube-burner-1.2-Linux-x86_64.tar.gz", "kube-burner"]
         )
         instance.exec(["rm", "kube-burner-1.2-Linux-x86_64.tar.gz"])
         instance.exec(["chmod", "+x", "/root/kube-burner"])
+
     instance.exec(["mkdir", "-p", "/root/templates"])
     instance.send_file(
         (config.MANIFESTS_DIR / "api-intensive.yaml").as_posix(),
