@@ -105,12 +105,10 @@ jobs:
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
           TEST_METRICS_DIR: ${{ github.workspace }}/test/performance/results/head
           TEST_RUN_NAME: head
-        # TODO: Remove ls
         run: |
           cd test/performance
           mkdir -p ./results/head
           sg lxd -c 'tox -e performance'
-          ls ./results/head
       - name: Run Performance test for base code snap
         env:
           TEST_SNAP: ${{ github.workspace }}/base-code.snap
@@ -150,12 +148,11 @@ jobs:
       - name: Generate 3 node Graphs
         run: |
           cd test/performance
-          sudo Rscript -e parse-performance-metrics.R -p ./results/head -o ./results/head -f *three-node.log
-          sudo Rscript -e parse-performance-metrics.R -p ./results/base-code -o ./results/base-code -f *three-node.log
-          sudo Rscript -e parse-performance-metrics.R -p ./results/v1-1-11 -o ./results/v1-1-11 -f *three-node.log
-          sudo Rscript -e parse-performance-metrics.R -p ./results/v1-2-0 -o ./results/v1-2-0 -f *three-node.log
+          sudo Rscript parse-performance-metrics.R -p ./results/head -o ./results/head -f *three-node.log
+          sudo Rscript parse-performance-metrics.R -p ./results/base-code -o ./results/base-code -f *three-node.log
+          sudo Rscript parse-performance-metrics.R -p ./results/v1-1-11 -o ./results/v1-1-11 -f *three-node.log
+          sudo Rscript parse-performance-metrics.R -p ./results/v1-2-0 -o ./results/v1-2-0 -f *three-node.log
       - name: Generate single node Graphs
-        #TODO rm ls
         run: |
           cd test/performance
           mkdir -p ./results/single-node
@@ -163,9 +160,7 @@ jobs:
           cp ./results/base-code/*single-node.log ./results/single-node
           cp ./results/v1-1-11/*single-node.log ./results/single-node
           cp ./results/v1-2-0/*single-node.log ./results/single-node
-          ls ./results/single-node
-          sudo Rscript -e parse-performance-metrics.R -p ./results/single-node -o ./results/single-node -f *single-node.log
-          ls ./results/single-node
+          sudo Rscript parse-performance-metrics.R -p ./results/single-node -o ./results/single-node -f *single-node.log
       - name: Upload performance result
         uses: actions/upload-artifact@v4
         with:

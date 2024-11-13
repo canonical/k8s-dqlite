@@ -20,7 +20,9 @@ option_list = list(
 opt_parser = OptionParser(option_list = option_list)
 opt = parse_args(opt_parser)
 
-metrics_files <- list.files(opt$path, pattern = "*.log", full.names = TRUE)
+metrics_files <- list.files(opt$path, pattern = opt$filepattern, full.names = TRUE)
+
+print(paste("Found", length(metrics_files), "metrics files"))
 
 # Prepare file paths
 metrics_data <- list()
@@ -63,6 +65,7 @@ create_plot <- function(data_list, y_column, title, y_label, file_suffix) {
   ggsave(filename = file.path(opt$out, paste0(file_suffix, ".png")), plot = plot, width = 8, height = 6)
 }
 
+print("Creating plots")
 # Generate and save all required plots
 create_plot(metrics_data, "X.CPU", "CPU Usage Over Time", "% CPU", "cpu_usage_plot")
 create_plot(metrics_data, "X.MEM", "Memory Usage Over Time", "% MEM", "mem_usage_plot")
