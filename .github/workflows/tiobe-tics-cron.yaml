@@ -1,0 +1,89 @@
+name: Tiobe TICS nightly report
+
+on:
+  schedule:
+     # Runs every midnight
+    - cron: '0 0 * * *'
+  pull_request:
+    paths:
+      - .github/workflows/tiobe-tics-cron.yaml
+
+
+permissions:
+  contents: read
+
+jobs:
+  TICS:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checking out repo
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: |
+          # pylint and flake8 are required by TICSQServer.
+          pip install pylint flake8
+          pip install -r test/performance/requirements-test.txt
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: go mod download
+        run: go mod download
+
+      - name: Run Tests with Coverage
+        run: |
+          set -eux -o pipefail
+
+          # TICS requires us to have the test results in cobertura xml format under the
+          # directory used below
+          sudo make go.coverage
+          go install github.com/boumenot/gocover-cobertura@latest
+          mkdir -p .coverage
+          gocover-cobertura < coverage.txt > .coverage/coverage.xml
+
+      - name: Build Project
+        run: |
+          set -eux -o  pipefail
+
+          # We load the dqlite libs here instead of doing through make because TICS
+          # will try to build parts of the project itself
+          sudo add-apt-repository -y ppa:dqlite/dev
+          sudo apt install libdqlite1.17-dev
+
+          # We need to have our project built
+          sudo make clean
+          sudo make -j static
+
+      - name: Install and Run TICS
+        run: |
+          export TICSAUTHTOKEN=${{ secrets.TICSAUTHTOKEN }}
+
+          # NOTE(aznashwan): TiCS install script doesn't define defaults; cannot '-u'
+          set -ex -o pipefail
+
+          # Install the TICS and staticcheck
+          go install honnef.co/go/tools/cmd/staticcheck@v0.5.1
+          . <(curl --silent --show-error 'https://canonical.tiobe.com/tiobeweb/TICS/api/public/v1/fapi/installtics/Script?cfg=default&platform=linux&url=https://canonical.tiobe.com/tiobeweb/TICS/')
+
+          # Performance tests are importing a local test_util module. Needed for pylint.
+          export PYTHONPATH="$(pwd)/test/performance/tests/"
+
+          # TICSQServer will try to build the project. We need a few environment variables
+          # for it to succeed. Based on make static / "hack/static-dqlite.sh".
+          export INSTALL_DIR="$(pwd)/hack/.deps/static"
+          export PATH="${PATH}:${INSTALL_DIR}/musl/bin"
+          export CC=musl-gcc
+          export CGO_CFLAGS="-I${INSTALL_DIR}/include"
+          export CGO_LDFLAGS="-L${INSTALL_DIR}/lib -luv -ldqlite -llz4 -lsqlite3 -Wl,-z,stack-size=1048576"
+
+          TICSQServer -project ${{ github.event.repository.name }} -tmpdir /tmp/tics -branchdir "$GITHUB_WORKSPACE"
