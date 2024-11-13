@@ -25,12 +25,7 @@ func isUpdate(txn *etcdserverpb.TxnRequest) (int64, string, []byte, int64, bool)
 	return 0, "", nil, 0, false
 }
 
-func (l *LimitedServer) update(ctx context.Context, rev int64, key string, value []byte, lease int64) (*etcdserverpb.TxnResponse, error) {
-	var (
-		kv        *KeyValue
-		succeeded bool
-		err       error
-	)
+func (l *LimitedServer) update(ctx context.Context, rev int64, key string, value []byte, lease int64) (_ *etcdserverpb.TxnResponse, err error) {
 	updateCnt.Add(ctx, 1)
 
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.update", otelName))
@@ -44,6 +39,7 @@ func (l *LimitedServer) update(ctx context.Context, rev int64, key string, value
 		attribute.Int64("revision", rev),
 	)
 
+	var succeeded bool
 	if rev == 0 {
 		rev, succeeded, err = l.backend.Create(ctx, key, value, lease)
 	} else {
@@ -70,20 +66,18 @@ func (l *LimitedServer) update(ctx context.Context, rev int64, key string, value
 			},
 		}
 	} else {
-		rev, kv, err = l.backend.Get(ctx, key, "", 1, rev)
+		rev, kv, err := l.backend.List(ctx, key, "", 1, rev)
 		if err != nil {
 			return nil, err
 		}
-		resp.Responses = []*etcdserverpb.ResponseOp{
-			{
-				Response: &etcdserverpb.ResponseOp_ResponseRange{
-					ResponseRange: &etcdserverpb.RangeResponse{
-						Header: txnHeader(rev),
-						Kvs:    toKVs(kv),
-					},
+		resp.Responses = []*etcdserverpb.ResponseOp{{
+			Response: &etcdserverpb.ResponseOp_ResponseRange{
+				ResponseRange: &etcdserverpb.RangeResponse{
+					Header: txnHeader(rev),
+					Kvs:    toKVs(kv...),
 				},
 			},
-		}
+		}}
 	}
 
 	return resp, nil

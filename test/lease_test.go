@@ -18,6 +18,10 @@ const (
 
 // TestLease is unit testing for the lease operation.
 func TestLease(t *testing.T) {
+	const leaseKey = "/leaseTestKey"
+	const leaseValue = "testValue"
+	const ttlSeconds = 1
+
 	for _, backendType := range []string{endpoint.SQLiteBackend, endpoint.DQLiteBackend} {
 		t.Run(backendType, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
@@ -25,57 +29,32 @@ func TestLease(t *testing.T) {
 
 			kine := newKineServer(ctx, t, &kineOptions{backendType: backendType})
 
-			t.Run("LeaseGrant", func(t *testing.T) {
-				g := NewWithT(t)
-				ttl := int64(300)
-				resp, err := kine.client.Lease.Grant(ctx, ttl)
+			g := NewWithT(t)
+			lease := grantLease(ctx, g, kine.client, ttlSeconds)
 
+			createKey(ctx, g, kine.client, leaseKey, leaseValue, clientv3.WithLease(lease))
+
+			resp, err := kine.client.Get(ctx, leaseKey, clientv3.WithRange(""))
+			g.Expect(err).To(BeNil())
+			g.Expect(resp.Kvs).To(HaveLen(1))
+			g.Expect(resp.Kvs[0].Key).To(Equal([]byte(leaseKey)))
+			g.Expect(resp.Kvs[0].Value).To(Equal([]byte(leaseValue)))
+			g.Expect(resp.Kvs[0].Lease).To(Equal(int64(lease)))
+
+			g.Eventually(func() []*mvccpb.KeyValue {
+				resp, err := kine.client.Get(ctx, leaseKey, clientv3.WithRange(""))
 				g.Expect(err).To(BeNil())
-				g.Expect(resp.ID).To(Equal(clientv3.LeaseID(ttl)))
-				g.Expect(resp.TTL).To(Equal(ttl))
-			})
-
-			t.Run("UseLease", func(t *testing.T) {
-				ttl := int64(1)
-				t.Run("CreateWithLease", func(t *testing.T) {
-					g := NewWithT(t)
-
-					{
-						resp, err := kine.client.Lease.Grant(ctx, ttl)
-						g.Expect(err).To(BeNil())
-						g.Expect(resp.ID).To(Equal(clientv3.LeaseID(ttl)))
-						g.Expect(resp.TTL).To(Equal(ttl))
-					}
-
-					{
-						resp, err := kine.client.Txn(ctx).
-							If(clientv3.Compare(clientv3.ModRevision("/leaseTestKey"), "=", 0)).
-							Then(clientv3.OpPut("/leaseTestKey", "testValue", clientv3.WithLease(clientv3.LeaseID(ttl)))).
-							Commit()
-						g.Expect(err).To(BeNil())
-						g.Expect(resp.Succeeded).To(BeTrue())
-					}
-
-					{
-						resp, err := kine.client.Get(ctx, "/leaseTestKey", clientv3.WithRange(""))
-						g.Expect(err).To(BeNil())
-						g.Expect(resp.Kvs).To(HaveLen(1))
-						g.Expect(resp.Kvs[0].Key).To(Equal([]byte("/leaseTestKey")))
-						g.Expect(resp.Kvs[0].Value).To(Equal([]byte("testValue")))
-						g.Expect(resp.Kvs[0].Lease).To(Equal(ttl))
-					}
-				})
-
-				t.Run("KeyShouldExpire", func(t *testing.T) {
-					g := NewWithT(t)
-					// timeout ttl*2 seconds, poll 100ms
-					g.Eventually(func() []*mvccpb.KeyValue {
-						resp, err := kine.client.Get(ctx, "/leaseTestKey", clientv3.WithRange(""))
-						g.Expect(err).To(BeNil())
-						return resp.Kvs
-					}, time.Duration(ttl*2)*time.Second, testExpirePollPeriod, ctx).Should(BeEmpty())
-				})
-			})
+				return resp.Kvs
+			}, time.Duration(ttlSeconds*2)*time.Second, testExpirePollPeriod, ctx).Should(BeEmpty())
 		})
 	}
+}
+
+func grantLease(ctx context.Context, g Gomega, client *clientv3.Client, ttl int64) clientv3.LeaseID {
+	resp, err := client.Lease.Grant(ctx, ttl)
+
+	g.Expect(err).To(BeNil())
+	g.Expect(resp.TTL).To(Equal(ttl))
+
+	return resp.ID
 }

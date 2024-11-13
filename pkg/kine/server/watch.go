@@ -71,7 +71,12 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 			return
 		}
 
-		for events := range w.backend.Watch(ctx, key, r.StartRevision) {
+		watchCh, err := w.backend.Watch(ctx, key, r.StartRevision)
+		if err != nil {
+			w.Cancel(id, err)
+			return
+		}
+		for events := range watchCh {
 			if len(events) == 0 {
 				continue
 			}

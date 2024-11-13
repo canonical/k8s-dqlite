@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/canonical/k8s-dqlite/pkg/kine/endpoint"
-	"github.com/canonical/k8s-dqlite/pkg/kine/logstructured/sqllog"
+	"github.com/canonical/k8s-dqlite/pkg/kine/sqllog"
 	. "github.com/onsi/gomega"
 )
 
