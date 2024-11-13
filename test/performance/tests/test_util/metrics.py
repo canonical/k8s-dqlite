@@ -2,7 +2,9 @@
 # Copyright 2024 Canonical, Ltd.
 #
 from typing import List
-from test_util import config, harness
+
+from test_util import config, harness, util
+
 
 def stop_metrics(instances: List[harness.Instance], process_dict: dict):
     """Stops collecting metrics in the background from each instance."""
@@ -20,7 +22,9 @@ def collect_metrics(instances: List[harness.Instance]):
         pid = instance.exec(
             ["pgrep", "k8s-dqlite"], text=True, capture_output=True
         ).stdout.strip()
-        instance.exec(["apt-get", "install", "-y", "sysstat"])
+        util.stubbornly(retries=5, delay_s=3).on(instance).exec(
+            ["apt-get", "install", "-y", "sysstat"]
+        )
         subprocess = instance.exec(
             [
                 "pidstat",

@@ -3,11 +3,9 @@
 #
 import logging
 from typing import List
+
 import pytest
-
-
-from test_util import harness, util, metrics
-
+from test_util import harness, metrics, util
 
 LOG = logging.getLogger(__name__)
 

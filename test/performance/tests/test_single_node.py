@@ -2,8 +2,8 @@
 # Copyright 2024 Canonical, Ltd.
 #
 import logging
-from test_util import harness, metrics
 
+from test_util import harness, metrics
 
 LOG = logging.getLogger(__name__)
 
