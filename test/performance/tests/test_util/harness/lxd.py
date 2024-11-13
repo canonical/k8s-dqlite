@@ -156,39 +156,22 @@ class LXDHarness(Harness):
         except subprocess.CalledProcessError as e:
             raise HarnessError("lxc file push command failed") from e
 
-    def exec(self, instance_id: str, command: list, **kwargs):
+    def exec(self, instance_id: str, command: list, background: bool = False, **kwargs):
         if instance_id not in self.instances:
             raise HarnessError(f"unknown instance {instance_id}")
 
         LOG.debug("Execute command %s in instance %s", command, instance_id)
-        # Check if the command contains any special shell characters that need special handling
-        special_characters = ["$", ">", "&", "!", "~", "||", "&&", "|"]
-        if any(char in " ".join(command) for char in special_characters):
-            # If the command contains special characters, directly join it as a string without shlex
-            command_str = " ".join(command)  # This avoids shlex.join
-        else:
-            # Otherwise, use shlex.join to join the command normally
-            command_str = shlex.join(command)
-        return run(
-            ["lxc", "shell", instance_id, "--", "bash", "-c", command_str],
-            **kwargs,
-        )
 
-    # Updated `exec` method using `Popen` for background commands.
-    def exec_with_popen(self, instance_id: str, command: list, **kwargs):
-        if instance_id not in self.instances:
-            raise HarnessError(f"unknown instance {instance_id}")
-
-        LOG.debug("Execute command %s in instance %s", command, instance_id)
-        # Check if the command contains any special shell characters that need special handling
-        special_characters = ["$", ">", "&", "!", "~", "||", "&&", "|"]
-        if any(char in " ".join(command) for char in special_characters):
-            # If the command contains special characters, directly join it as a string without shlex
+        if ">" in " ".join(command):
             command_str = " ".join(command)
         else:
-            # Otherwise, use shlex.join to join the command normally
             command_str = shlex.join(command)
-        return run_popen(
+        if background:
+            return run_popen(
+                ["lxc", "shell", instance_id, "--", "bash", "-c", command_str],
+                **kwargs,
+            )
+        return run(
             ["lxc", "shell", instance_id, "--", "bash", "-c", command_str],
             **kwargs,
         )

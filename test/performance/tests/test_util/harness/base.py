@@ -24,7 +24,6 @@ class Instance:
         self.send_file = partial(h.send_file, id)
         self.pull_file = partial(h.pull_file, id)
         self.exec = partial(h.exec, id)
-        self.exec_with_popen = partial(h.exec_with_popen, id)
         self.delete_instance = partial(h.delete_instance, id)
 
     @property
@@ -86,21 +85,8 @@ class Harness:
         raise NotImplementedError
 
     def exec(
-        self, instance_id: str, command: list, **kwargs
+        self, instance_id: str, command: list, background: bool = False, **kwargs
     ) -> subprocess.CompletedProcess:
-        """Run a command as root on the instance.
-
-        :param instance_id: The instance_id, as returned by new_instance()
-        :param command: Command for subprocess.run()
-        :param kwargs: Keyword args compatible with subprocess.run()
-
-        If the operation fails, a subprocesss.CalledProcessError is raised.
-        """
-        raise NotImplementedError
-
-    def exec_with_popen(
-        self, instance_id: str, command: list, **kwargs
-    ) -> subprocess.Popen:
         """Run a command as root on the instance.
 
         :param instance_id: The instance_id, as returned by new_instance()

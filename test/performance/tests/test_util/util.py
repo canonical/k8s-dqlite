@@ -373,6 +373,5 @@ def find_suitable_cidr(parent_cidr: str, excluded_ips: List[str]):
 
         if contains_excluded:
             continue
-
         return str(lb_net)
     raise RuntimeError("Could not find a suitable CIDR for LoadBalancer services")

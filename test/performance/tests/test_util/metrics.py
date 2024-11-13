@@ -1,52 +1,8 @@
 #
 # Copyright 2024 Canonical, Ltd.
 #
-import logging
 from typing import List
-
-import pytest
-from test_util import config, harness, util
-
-LOG = logging.getLogger(__name__)
-
-
-@pytest.mark.node_count(3)
-def test_three_node_load(instances: List[harness.Instance]):
-    cluster_node = instances[0]
-    joining_node = instances[1]
-    joining_node_2 = instances[2]
-
-    join_token = util.get_join_token(cluster_node, joining_node)
-    join_token_2 = util.get_join_token(cluster_node, joining_node_2)
-
-    assert join_token != join_token_2
-
-    util.join_cluster(joining_node, join_token)
-    util.join_cluster(joining_node_2, join_token_2)
-
-    util.wait_until_k8s_ready(cluster_node, instances)
-    nodes = util.ready_nodes(cluster_node)
-    assert len(nodes) == 3, "nodes should have joined cluster"
-
-    assert "control-plane" in util.get_local_node_status(cluster_node)
-    assert "control-plane" in util.get_local_node_status(joining_node)
-    assert "control-plane" in util.get_local_node_status(joining_node_2)
-
-    configure_kube_burner(cluster_node)
-    process_dict = collect_metrics(instances)
-    run_kube_burner(cluster_node)
-    stop_metrics(instances, process_dict)
-    pull_metrics(instances)
-
-
-def test_single_node_load(session_instance: harness.Instance):
-    """Test the performance of a single node cluster with all features enabled."""
-    configure_kube_burner(session_instance)
-    process_dict = collect_metrics([session_instance])
-    run_kube_burner(session_instance)
-    stop_metrics([session_instance], process_dict)
-    pull_metrics([session_instance])
-
+from test_util import config, harness
 
 def stop_metrics(instances: List[harness.Instance], process_dict: dict):
     """Stops collecting metrics in the background from each instance."""
@@ -65,7 +21,7 @@ def collect_metrics(instances: List[harness.Instance]):
             ["pgrep", "k8s-dqlite"], text=True, capture_output=True
         ).stdout.strip()
         instance.exec(["apt-get", "install", "-y", "sysstat"])
-        subprocess = instance.exec_with_popen(
+        subprocess = instance.exec(
             [
                 "pidstat",
                 "-druh",
@@ -74,7 +30,8 @@ def collect_metrics(instances: List[harness.Instance]):
                 "1",
                 ">",
                 f"/root/{instance.id}_metrics.log",
-            ]
+            ],
+            background=True,
         )
         process_dict[instance.id] = subprocess
     return process_dict
