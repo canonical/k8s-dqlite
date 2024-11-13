@@ -1,0 +1,79 @@
+name: Tiobe TiCS nightly report
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 10 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  TiCS:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          # Latest branches
+          - { branch: master}
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Checking out repo
+        uses: actions/checkout@v4
+        with:
+          ref: ${{matrix.branch}}
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: go mod download
+        run: go mod download
+
+      - name: Run Tests with Coverage
+        run: |
+          set -eux -o pipefail
+
+          # TiCS requires us to have the test results in cobertura xml format under the
+          # directory use below
+          sudo make go.coverage
+          go install github.com/boumenot/gocover-cobertura@latest
+          gocover-cobertura < coverage.txt > coverage.xml
+          mkdir .coverage
+          mv ./coverage.xml ./.coverage/
+
+          cat ./.coverage/coverage.xml
+
+      - name: Build Project
+        run: |
+          set -eux -o  pipefail
+
+          # We load the dqlite libs here instead of doing through make because TICS
+          # will try to build parts of the project itself
+          sudo add-apt-repository -y ppa:dqlite/dev
+          sudo apt install dqlite-tools libdqlite-dev -y
+
+          # We need to have our project built
+          sudo make clean
+          sudo make -j static
+
+      - name: Install and Run TiCS
+        run: |
+          # NOTE(aznashwan): TiCS install script doesn't define defaults; cannot '-u'
+          set -ex -o pipefail
+
+          export TICSAUTHTOKEN=${{ secrets.TICSAUTHTOKEN }}
+
+          # Install the TICS and staticcheck
+          go install honnef.co/go/tools/cmd/staticcheck@v0.5.1
+          . <(curl --silent --show-error 'https://canonical.tiobe.com/tiobeweb/TICS/api/public/v1/fapi/installtics/Script?cfg=default&platform=linux&url=https://canonical.tiobe.com/tiobeweb/TICS/')
+
+          TICSQServer -project k8s-dqlite -tmpdir /tmp/tics -branchdir $HOME/work/k8s-dqlite/k8s-dqlite/
