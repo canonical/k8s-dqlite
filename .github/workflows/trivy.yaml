@@ -38,13 +38,13 @@ jobs:
     permissions:
       security-events: write
     steps:
+      - name: Checking out repo
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.branch }}
       - name: current branch
         run: |
           git rev-parse --abbrev-ref HEAD
-#      - name: Checking out repo
-#        uses: actions/checkout@v4
-#        with:
-#          ref: ${{ matrix.branch }}
 #      - name: Run Trivy vulnerability scanner in repo mode
 #        uses: aquasecurity/trivy-action@0.28.0
 #        with:
