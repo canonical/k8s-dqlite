@@ -1,13 +1,10 @@
 #
 # Copyright 2024 Canonical, Ltd.
 #
-import logging
 from typing import List
 
 import pytest
 from test_util import harness, metrics, util
-
-LOG = logging.getLogger(__name__)
 
 
 @pytest.mark.node_count(3)
@@ -36,4 +33,4 @@ def test_three_node_load(instances: List[harness.Instance]):
     process_dict = metrics.collect_metrics(instances)
     metrics.run_kube_burner(cluster_node)
     metrics.stop_metrics(instances, process_dict)
-    metrics.pull_metrics(instances)
+    metrics.pull_metrics(instances, "three-node")

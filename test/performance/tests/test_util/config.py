@@ -12,6 +12,10 @@ DEFAULT_WAIT_DELAY_S = int(os.getenv("TEST_DEFAULT_WAIT_DELAY_S") or 10)
 
 MANIFESTS_DIR = DIR / ".." / ".." / "templates"
 
+METRICS_DIR = os.getenv("TEST_METRICS_DIR") or DIR / ".." / ".." / "results"
+
+RUN_NAME = os.getenv("TEST_RUN_NAME") or "k8s"
+
 # INSPECTION_REPORTS_DIR is the directory where inspection reports are stored.
 # If empty, no reports are generated.
 INSPECTION_REPORTS_DIR = os.getenv("TEST_INSPECTION_REPORTS_DIR")
@@ -41,12 +45,6 @@ SUBSTRATE = os.getenv("TEST_SUBSTRATE") or "lxd"
 
 # LXD_IMAGE is the image to use for LXD containers.
 LXD_IMAGE = os.getenv("TEST_LXD_IMAGE") or "ubuntu:22.04"
-
-# LXD_PROFILE is the profile to use for LXD containers.
-LXD_PROFILE = (
-    os.getenv("TEST_LXD_PROFILE")
-    or (DIR / ".." / ".." / "lxd-profile.yaml").read_text()
-)
 
 # LXD_PROFILE_NAME is the profile name to use for LXD containers.
 LXD_PROFILE_NAME = os.getenv("TEST_LXD_PROFILE_NAME") or "k8s-performance"
