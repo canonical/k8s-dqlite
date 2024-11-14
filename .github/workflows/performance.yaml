@@ -3,7 +3,7 @@ name: Performance Test K8s-snap
 on:
   push:
     branches: ["master"]
-  pull_request:
+#  pull_request:
 
 permissions:
   contents: read
