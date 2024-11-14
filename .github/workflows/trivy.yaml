@@ -2,15 +2,21 @@ name: Trivy
 
 on:
   pull_request:
-  schedule:
-    - cron: '0 10 * * *'
-
+#  schedule:
+#    - cron: '0 10 * * *'
+#  push:
+#    branches:
+#      - main
+#      - 'v[0-9]+.[0-9]+'
+#      - '[0-9]+.[0-9]+'
+#    tags:
+#      - 'v[0-9]+.[0-9]+'
 jobs:
   scan:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        branch: [master]
+        branch: [master, 'v[0-9]+.[0-9]+', '[0-9]+.[0-9]+']
     permissions:
       security-events: write
     steps:
@@ -26,6 +32,8 @@ jobs:
           format: "sarif"
           output: "output.sarif"
           severity: "MEDIUM,HIGH,CRITICAL"
+        env:
+          TRIVY_DB-REPOSITORY: "public.ecr.aws/aquasecurity/trivy-db"
       - name: Get commit sha
         run: |
           SHA="$(git rev-parse HEAD)"
