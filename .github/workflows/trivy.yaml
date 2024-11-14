@@ -27,13 +27,13 @@ jobs:
           echo "name=BRANCHES::$(echo $BRANCHES)" >> $GITHUB_OUTPUT
       - name: list branches to test
         run: |
-          echo ${{ env.BRANCHES }}
+          echo ${{ fromJson(env.BRANCHES) }}
   scan:
     runs-on: ubuntu-latest
     strategy:
       matrix:
+        branch: ${{ needs.prepare.outputs.BRANCHES }}
 #        branch: [master]
-        branch: ${{ fromJson(needs.prepare.outputs.BRANCHES) }}
     permissions:
       security-events: write
     steps:
