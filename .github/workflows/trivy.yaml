@@ -30,7 +30,7 @@ jobs:
           echo "name=branches::$(echo $BRANCHES)" >> $GITHUB_OUTPUT
       - name: list branches to test
         run: |
-          echo ${{ fromJson(env.BRANCHES) }}
+          echo $GITHUB_OUTPUT
   scan:
     runs-on: ubuntu-latest
     strategy:
