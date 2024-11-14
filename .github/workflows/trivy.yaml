@@ -24,6 +24,7 @@ jobs:
           BRANCHES=$(git branch -r | grep  -E '(v[0-9]+.[0-9]+)|(release-[0-9]+.[0-9]+)|([0-9]+.[0-9]+$)' | sed -e 's#^  origin/##'  |  jq -R -s -c 'split("\n")[:-1]')
           echo "$BRANCHES"
           echo "BRANCHES=$(echo $BRANCHES)" >> $GITHUB_ENV
+          echo "name=BRANCHES::$(echo $BRANCHES)" >> $GITHUB_OUTPUT
       - name: list branches to test
         run: |
           echo ${{ env.BRANCHES }}
@@ -32,31 +33,34 @@ jobs:
     strategy:
       matrix:
 #        branch: [master]
-        branch:  ${{ fromJson(env.BRANCHES) }}
+        branch: ${{ fromJson(needs.prepare.outputs.BRANCHES) }}
     permissions:
       security-events: write
     steps:
-      - name: Checking out repo
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ matrix.branch }}
-      - name: Run Trivy vulnerability scanner in repo mode
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          scan-type: "fs"
-          ignore-unfixed: true
-          format: "sarif"
-          output: "output.sarif"
-          severity: "MEDIUM,HIGH,CRITICAL"
-        env:
-          TRIVY_DB-REPOSITORY: "public.ecr.aws/aquasecurity/trivy-db"
-      - name: Get commit sha
+      - name: current branch
         run: |
-          SHA="$(git rev-parse HEAD)"
-          echo "head_sha=$SHA" >> "$GITHUB_ENV"
-      - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: "output.sarif"
-          sha: ${{ env.head_sha }}
-          ref: refs/heads/${{ matrix.branch }}
+          git rev-parse --abbrev-ref HEAD
+#      - name: Checking out repo
+#        uses: actions/checkout@v4
+#        with:
+#          ref: ${{ matrix.branch }}
+#      - name: Run Trivy vulnerability scanner in repo mode
+#        uses: aquasecurity/trivy-action@0.28.0
+#        with:
+#          scan-type: "fs"
+#          ignore-unfixed: true
+#          format: "sarif"
+#          output: "output.sarif"
+#          severity: "MEDIUM,HIGH,CRITICAL"
+#        env:
+#          TRIVY_DB-REPOSITORY: "public.ecr.aws/aquasecurity/trivy-db"
+#      - name: Get commit sha
+#        run: |
+#          SHA="$(git rev-parse HEAD)"
+#          echo "head_sha=$SHA" >> "$GITHUB_ENV"
+#      - name: Upload Trivy scan results to GitHub Security tab
+#        uses: github/codeql-action/upload-sarif@v3
+#        with:
+#          sarif_file: "output.sarif"
+#          sha: ${{ env.head_sha }}
+#          ref: refs/heads/${{ matrix.branch }}
