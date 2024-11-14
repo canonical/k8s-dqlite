@@ -38,7 +38,7 @@ jobs:
       matrix:
 #        branch: ["1.28"]
 #        branch: ["1.28","release-1.30","release-1.31","v1.1"]
-        branch: ${{ needs.prepare.outputs.branches }}
+        branch: ${{ fromJson(needs.prepare.outputs.branches) }}
 #        branch: [master]
     permissions:
       security-events: write
