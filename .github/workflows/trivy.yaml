@@ -49,7 +49,7 @@ jobs:
           output: "output.sarif"
           severity: "MEDIUM,HIGH,CRITICAL"
         env:
-          TRIVY_DB-REPOSITORY: "public.ecr.aws/aquasecurity/trivy-db"
+          TRIVY_DB_REPOSITORY: "public.ecr.aws/aquasecurity/trivy-db"
       - name: Get commit sha
         run: |
           SHA="$(git rev-parse HEAD)"
