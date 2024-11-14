@@ -1,5 +1,6 @@
 #
-# Copyright 2024 Canonical, Ltd.#
+# Copyright 2024 Canonical, Ltd.
+#
 import logging
 import os
 import shlex
@@ -9,7 +10,7 @@ from typing import List
 
 from test_util import config
 from test_util.harness import Harness, HarnessError, Instance
-from test_util.util import run, stubbornly
+from test_util.util import run, run_popen, stubbornly
 
 LOG = logging.getLogger(__name__)
 
@@ -155,13 +156,23 @@ class LXDHarness(Harness):
         except subprocess.CalledProcessError as e:
             raise HarnessError("lxc file push command failed") from e
 
-    def exec(self, instance_id: str, command: list, **kwargs):
+    def exec(self, instance_id: str, command: list, background: bool = False, **kwargs):
         if instance_id not in self.instances:
             raise HarnessError(f"unknown instance {instance_id}")
 
         LOG.debug("Execute command %s in instance %s", command, instance_id)
+
+        if ">" in " ".join(command):
+            command_str = " ".join(command)
+        else:
+            command_str = shlex.join(command)
+        if background:
+            return run_popen(
+                ["lxc", "shell", instance_id, "--", "bash", "-c", command_str],
+                **kwargs,
+            )
         return run(
-            ["lxc", "shell", instance_id, "--", "bash", "-c", shlex.join(command)],
+            ["lxc", "shell", instance_id, "--", "bash", "-c", command_str],
             **kwargs,
         )
 

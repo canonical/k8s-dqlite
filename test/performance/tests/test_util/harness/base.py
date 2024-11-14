@@ -1,5 +1,6 @@
 #
-# Copyright 2024 Canonical, Ltd.#
+# Copyright 2024 Canonical, Ltd.
+#
 import subprocess
 from functools import cached_property, partial
 
@@ -84,7 +85,7 @@ class Harness:
         raise NotImplementedError
 
     def exec(
-        self, instance_id: str, command: list, **kwargs
+        self, instance_id: str, command: list, background: bool = False, **kwargs
     ) -> subprocess.CompletedProcess:
         """Run a command as root on the instance.
 

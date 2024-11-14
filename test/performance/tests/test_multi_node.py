@@ -1,16 +1,17 @@
 #
-# Copyright 2024 Canonical, Ltd.#
+# Copyright 2024 Canonical, Ltd.
+#
 import logging
 from typing import List
 
 import pytest
-from test_util import harness, util
+from test_util import harness, metrics, util
 
 LOG = logging.getLogger(__name__)
 
 
 @pytest.mark.node_count(3)
-def test_load_test(instances: List[harness.Instance]):
+def test_three_node_load(instances: List[harness.Instance]):
     cluster_node = instances[0]
     joining_node = instances[1]
     joining_node_2 = instances[2]
@@ -30,3 +31,9 @@ def test_load_test(instances: List[harness.Instance]):
     assert "control-plane" in util.get_local_node_status(cluster_node)
     assert "control-plane" in util.get_local_node_status(joining_node)
     assert "control-plane" in util.get_local_node_status(joining_node_2)
+
+    metrics.configure_kube_burner(cluster_node)
+    process_dict = metrics.collect_metrics(instances)
+    metrics.run_kube_burner(cluster_node)
+    metrics.stop_metrics(instances, process_dict)
+    metrics.pull_metrics(instances)
