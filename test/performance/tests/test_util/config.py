@@ -46,11 +46,5 @@ SUBSTRATE = os.getenv("TEST_SUBSTRATE") or "lxd"
 # LXD_IMAGE is the image to use for LXD containers.
 LXD_IMAGE = os.getenv("TEST_LXD_IMAGE") or "ubuntu:22.04"
 
-# LXD_PROFILE is the profile to use for LXD containers.
-LXD_PROFILE = (
-    os.getenv("TEST_LXD_PROFILE")
-    or (DIR / ".." / ".." / "lxd-profile.yaml").read_text()
-)
-
 # LXD_PROFILE_NAME is the profile name to use for LXD containers.
 LXD_PROFILE_NAME = os.getenv("TEST_LXD_PROFILE_NAME") or "k8s-performance"

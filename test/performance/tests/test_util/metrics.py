@@ -1,6 +1,7 @@
 #
 # Copyright 2024 Canonical, Ltd.
 #
+import os
 from typing import List
 
 from test_util import config, harness, util
@@ -46,7 +47,8 @@ def pull_metrics(instances: List[harness.Instance], test_name: str):
     for i, instance in enumerate(instances, start=1):
         out_file = f"{config.METRICS_DIR}/{config.RUN_NAME}-{i}-{test_name}.log"
         instance.pull_file(
-            f"/root/{instance.id}_metrics.log", out_file,
+            f"/root/{instance.id}_metrics.log",
+            out_file,
         )
 
 
@@ -58,10 +60,9 @@ def configure_kube_burner(instance: harness.Instance):
     ):
         url = config.KUBE_BURNER_URL
         instance.exec(["wget", url])
-        instance.exec(
-            ["tar", "-zxvf", "kube-burner-1.2-Linux-x86_64.tar.gz", "kube-burner"]
-        )
-        instance.exec(["rm", "kube-burner-1.2-Linux-x86_64.tar.gz"])
+        tarball_name = os.path.basename(url)
+        instance.exec(["tar", "-zxvf", tarball_name, "kube-burner"])
+        instance.exec(["rm", tarball_name])
         instance.exec(["chmod", "+x", "/root/kube-burner"])
 
     instance.exec(["mkdir", "-p", "/root/templates"])

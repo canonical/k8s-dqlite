@@ -32,7 +32,7 @@ class LXDHarness(Harness):
         self.image = config.LXD_IMAGE
         self.instances = set()
 
-        self._configure_profile(self.profile, config.LXD_PROFILE)
+        self._configure_profile(self.profile)
 
         self._configure_network(
             "lxdbr0",
@@ -74,7 +74,7 @@ class LXDHarness(Harness):
         self.exec(instance_id, ["snap", "wait", "system", "seed.loaded"])
         return Instance(self, instance_id)
 
-    def _configure_profile(self, profile_name: str, profile_config: str):
+    def _configure_profile(self, profile_name: str):
         LOG.debug("Checking for LXD profile %s", profile_name)
         try:
             run(["lxc", "profile", "show", profile_name])
@@ -90,9 +90,17 @@ class LXDHarness(Harness):
 
         try:
             LOG.debug("Configuring LXD profile %s", profile_name)
+            profile = run(
+                [
+                    "curl",
+                    "s",
+                    "https://raw.githubusercontent.com/canonical/k8s-snap/refs/heads/main/tests/integration/lxd-profile.yaml",
+                ],
+                capture_output=True,
+            ).stdout
             run(
                 ["lxc", "profile", "edit", profile_name],
-                input=profile_config.encode(),
+                input=profile,
             )
         except subprocess.CalledProcessError as e:
             raise HarnessError(f"Failed to configure LXD profile {profile_name}") from e
