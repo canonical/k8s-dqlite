@@ -21,27 +21,17 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: create branches to test
+      - name: Create branches to test
         id: branches
         run: |
           BRANCHES=$(git branch -r | grep  -E '(v[0-9]+.[0-9]+)|(release-[0-9]+.[0-9]+)|([0-9]+.[0-9]+$)' | sed -e 's#^  origin/##'  |  jq -R -s -c 'split("\n")[:-1]' | jq '. += ["master"]')
-          #BRANCHES=$(git branch -r | grep  -E '(v[0-9]+.[0-9]+)|(release-[0-9]+.[0-9]+)|([0-9]+.[0-9]+$)' | sed -e 's#^  origin/##'  | tr '\n' ', ')
-          echo "$BRANCHES"
-          echo "branches=$(echo $BRANCHES)" >> $GITHUB_ENV
           echo "branches=$(echo $BRANCHES)" >> $GITHUB_OUTPUT
-      - name: list branches to test
-        run: |
-          echo $GITHUB_OUTPUT
   scan:
     runs-on: ubuntu-latest
     needs: prepare
     strategy:
       matrix:
-#        branch:  ${{ format('[{0} {1}]', needs.prepare.outputs.branches, 'master') }}
-#        branch: ["1.28"]
-#        branch: ["1.28","release-1.30","release-1.31","v1.1"]
         branch: ${{ fromJson(needs.prepare.outputs.branches) }}
-#        branch: [master]
     permissions:
       security-events: write
     steps:
@@ -50,27 +40,23 @@ jobs:
         with:
           ref: ${{ matrix.branch }}
           fetch-depth: 0
-      - name: current branch
+      - name: Run Trivy vulnerability scanner in repo mode
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: "fs"
+          ignore-unfixed: true
+          format: "sarif"
+          output: "output.sarif"
+          severity: "MEDIUM,HIGH,CRITICAL"
+        env:
+          TRIVY_DB-REPOSITORY: "public.ecr.aws/aquasecurity/trivy-db"
+      - name: Get commit sha
         run: |
-          git rev-parse --abbrev-ref HEAD
-          echo "${{ needs.prepare.outputs.branches }}"
-#      - name: Run Trivy vulnerability scanner in repo mode
-#        uses: aquasecurity/trivy-action@0.28.0
-#        with:
-#          scan-type: "fs"
-#          ignore-unfixed: true
-#          format: "sarif"
-#          output: "output.sarif"
-#          severity: "MEDIUM,HIGH,CRITICAL"
-#        env:
-#          TRIVY_DB-REPOSITORY: "public.ecr.aws/aquasecurity/trivy-db"
-#      - name: Get commit sha
-#        run: |
-#          SHA="$(git rev-parse HEAD)"
-#          echo "head_sha=$SHA" >> "$GITHUB_ENV"
-#      - name: Upload Trivy scan results to GitHub Security tab
-#        uses: github/codeql-action/upload-sarif@v3
-#        with:
-#          sarif_file: "output.sarif"
-#          sha: ${{ env.head_sha }}
-#          ref: refs/heads/${{ matrix.branch }}
+          SHA="$(git rev-parse HEAD)"
+          echo "head_sha=$SHA" >> "$GITHUB_ENV"
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: "output.sarif"
+          sha: ${{ env.head_sha }}
+          ref: refs/heads/${{ matrix.branch }}
