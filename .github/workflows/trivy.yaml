@@ -37,10 +37,10 @@ jobs:
     needs: prepare
     strategy:
       matrix:
+        branch:  ${{ format('[{0}, {1}]',fromJson(needs.prepare.outputs.branches), 'master') }}
 #        branch: ["1.28"]
-#        branch: ["1.28","release-1.30","release-1.31","v1.1"]
+    #        branch: ["1.28","release-1.30","release-1.31","v1.1"]
 #        branch: ${{ fromJson(needs.prepare.outputs.branches) }}
-        branch: [ ${{ format('{0}, {1}',fromJson(needs.prepare.outputs.branches)), 'master' }}]
 #        branch: [master]
     permissions:
       security-events: write
