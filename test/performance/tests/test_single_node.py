@@ -1,11 +1,7 @@
 #
 # Copyright 2024 Canonical, Ltd.
 #
-import logging
-
 from test_util import harness, metrics
-
-LOG = logging.getLogger(__name__)
 
 
 def test_single_node_load(session_instance: harness.Instance):

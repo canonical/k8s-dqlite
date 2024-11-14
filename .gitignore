@@ -18,4 +18,4 @@ bin/
 k8s-dqlite
 hack/.build/
 hack/.deps/
-test/performance/results/
+test/performance/results/*

@@ -1,13 +1,10 @@
 #
 # Copyright 2024 Canonical, Ltd.
 #
-import logging
 from typing import List
 
 import pytest
 from test_util import harness, metrics, util
-
-LOG = logging.getLogger(__name__)
 
 
 @pytest.mark.node_count(3)

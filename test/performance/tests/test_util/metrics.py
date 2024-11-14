@@ -5,8 +5,6 @@ from typing import List
 
 from test_util import config, harness, util
 
-LOG = logging.getLogger(__name__)
-
 
 def stop_metrics(instances: List[harness.Instance], process_dict: dict):
     """Stops collecting metrics in the background from each instance."""
