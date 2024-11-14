@@ -32,7 +32,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        branch: ["1.28","release-1.30","release-1.31","v1.1"]
+        branch: ["1.28"]
+#        branch: ["1.28","release-1.30","release-1.31","v1.1"]
 #        branch: ${{ needs.prepare.outputs.BRANCHES }}
 #        branch: [master]
     permissions:
@@ -42,9 +43,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ matrix.branch }}
+          fetch-depth: 0
       - name: current branch
         run: |
           git rev-parse --abbrev-ref HEAD
+          echo "${{ needs.prepare.outputs.BRANCHES }}"
 #      - name: Run Trivy vulnerability scanner in repo mode
 #        uses: aquasecurity/trivy-action@0.28.0
 #        with:
