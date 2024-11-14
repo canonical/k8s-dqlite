@@ -33,6 +33,7 @@ jobs:
           echo $GITHUB_OUTPUT
   scan:
     runs-on: ubuntu-latest
+    needs: prepare
     strategy:
       matrix:
         branch: ["1.28"]
