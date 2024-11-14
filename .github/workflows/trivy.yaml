@@ -24,7 +24,8 @@ jobs:
       - name: create branches to test
         id: branches
         run: |
-          BRANCHES=$(git branch -r | grep  -E '(v[0-9]+.[0-9]+)|(release-[0-9]+.[0-9]+)|([0-9]+.[0-9]+$)' | sed -e 's#^  origin/##'  |  jq -R -s -c 'split("\n")[:-1]')
+          #BRANCHES=$(git branch -r | grep  -E '(v[0-9]+.[0-9]+)|(release-[0-9]+.[0-9]+)|([0-9]+.[0-9]+$)' | sed -e 's#^  origin/##'  |  jq -R -s -c 'split("\n")[:-1]')
+          BRANCHES=$(git branch -r | grep  -E '(v[0-9]+.[0-9]+)|(release-[0-9]+.[0-9]+)|([0-9]+.[0-9]+$)' | sed -e 's#^  origin/##'  | tr '\n' ',')
           echo "$BRANCHES"
           echo "branches=$(echo $BRANCHES)" >> $GITHUB_ENV
           echo "branches=$(echo $BRANCHES)" >> $GITHUB_OUTPUT
@@ -38,7 +39,8 @@ jobs:
       matrix:
 #        branch: ["1.28"]
 #        branch: ["1.28","release-1.30","release-1.31","v1.1"]
-        branch: ${{ fromJson(needs.prepare.outputs.branches) }}
+#        branch: ${{ fromJson(needs.prepare.outputs.branches) }}
+        branch: [${{ needs.prepare.outputs.branches }}, master]
 #        branch: [master]
     permissions:
       security-events: write
