@@ -23,7 +23,7 @@ jobs:
         run: |
           BRANCHES=$(git branch -r | grep  -E '(v[0-9]+.[0-9]+)|(release-[0-9]+.[0-9]+)|([0-9]+.[0-9]+$)' | sed -e 's#^  origin/##'  |  jq -R -s -c 'split("\n")[:-1]')
           echo "test"
-          run: echo "name=BRANCHES::$(echo $BRANCHES)" >> $GITHUB_OUTPUT
+          echo "name=BRANCHES::$(echo $BRANCHES)" >> $GITHUB_OUTPUT
       - name: list branches to test
         run: |
           echo ${{ env.BRANCHES }}
