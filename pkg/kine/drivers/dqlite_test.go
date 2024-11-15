@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/canonical/go-dqlite/app"
+	"github.com/canonical/go-dqlite/v2/app"
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/dqlite"
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/generic"
 	"github.com/canonical/k8s-dqlite/pkg/kine/server"

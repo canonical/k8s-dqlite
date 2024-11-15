@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/canonical/go-dqlite/app"
+	"github.com/canonical/go-dqlite/v2/app"
 	"github.com/canonical/k8s-dqlite/pkg/kine/endpoint"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
