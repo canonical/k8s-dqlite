@@ -1,21 +1,21 @@
 module github.com/canonical/k8s-dqlite
 
-go 1.21
+go 1.22
 
 require (
 	github.com/Rican7/retry v0.3.1
-	github.com/canonical/go-dqlite v1.22.0
+	github.com/canonical/go-dqlite/v2 v2.0.0
 	github.com/mattn/go-sqlite3 v1.14.22
 	github.com/onsi/gomega v1.27.10
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.19.0
 	github.com/sirupsen/logrus v1.9.3
-	github.com/spf13/cobra v1.8.0
+	github.com/spf13/cobra v1.8.1
 	go.etcd.io/etcd/api/v3 v3.5.12
 	go.etcd.io/etcd/client/pkg/v3 v3.5.12
 	go.etcd.io/etcd/client/v3 v3.5.12
 	go.etcd.io/etcd/server/v3 v3.5.12
-	golang.org/x/sync v0.6.0
+	golang.org/x/sync v0.8.0
 	golang.org/x/sys v0.18.0
 	google.golang.org/grpc v1.62.1
 	gopkg.in/yaml.v2 v2.4.0
