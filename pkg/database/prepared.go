@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -71,7 +70,6 @@ func (db *preparedDb) prepare(ctx context.Context, query string) (stmt *sql.Stmt
 		span.RecordError(err)
 		span.End()
 	}()
-	span.SetAttributes(attribute.String("query", query))
 
 	db.mu.RLock()
 	stmt = db.store[query]
