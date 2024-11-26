@@ -45,7 +45,7 @@ def collect_metrics(instances: List[harness.Instance]):
 def pull_metrics(instances: List[harness.Instance], test_name: str):
     """Pulls metrics file from each instance to the local machine."""
     for i, instance in enumerate(instances, start=1):
-        out_file = f"{config.METRICS_DIR}/{config.RUN_NAME}-{i}-{test_name}.log"
+        out_file = f"{config.METRICS_DIR}/{config.RUN_NAME}-{i}-of{len(instances)}-{test_name}.log"
         instance.pull_file(
             f"/root/{instance.id}_metrics.log",
             out_file,
