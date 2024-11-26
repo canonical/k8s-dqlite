@@ -658,7 +658,6 @@ func scanKeyValue(rows *sql.Rows) (*server.KeyValue, error) {
 	var prevRevision int64
 	var prevValue []byte
 
-	// FIXME eliminare roba inutile
 	err := rows.Scan(
 		&kv.ModRevision,
 		&kv.Key,
