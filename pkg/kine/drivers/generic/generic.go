@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/canonical/k8s-dqlite/pkg/kine/prepared"
+	"github.com/canonical/k8s-dqlite/pkg/database"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -223,7 +223,7 @@ type Generic struct {
 	sync.Mutex
 
 	LockWrites   bool
-	DB           *prepared.DB
+	DB           database.Interface
 	Retry        ErrRetry
 	TranslateErr TranslateErr
 	ErrCode      ErrCode
@@ -302,7 +302,7 @@ func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig
 	configureConnectionPooling(connPoolConfig, db)
 
 	return &Generic{
-		DB: prepared.New(db),
+		DB: database.NewBatched(database.NewPrepared(database.Wrap(db))),
 	}, err
 }
 
@@ -369,12 +369,6 @@ func (d *Generic) execute(ctx context.Context, txName, query string, args ...int
 	span.SetAttributes(
 		attribute.String("tx_name", txName),
 	)
-
-	if d.LockWrites {
-		d.Lock()
-		defer d.Unlock()
-		span.AddEvent("acquired write lock")
-	}
 
 	start := time.Now()
 	retryCount := 0
