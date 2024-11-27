@@ -79,14 +79,16 @@ func init() {
 }
 
 var (
-	columns = "kv.id as theid, kv.name, kv.created, kv.deleted, kv.create_revision, kv.prev_revision, kv.lease, kv.value, kv.old_value"
-
 	revSQL = `
 		SELECT MAX(rkv.id) AS id
 		FROM kine AS rkv`
 
-	listSQL = fmt.Sprintf(`
-		SELECT %s
+	listSQL = `
+		SELECT kv.id, 
+			name, 
+			CASE WHEN kv.created THEN kv.id ELSE kv.create_revision END AS create_revision,
+			lease, 
+			value
 		FROM kine AS kv
 		JOIN (
 			SELECT MAX(mkv.id) as id
@@ -97,9 +99,8 @@ var (
 			GROUP BY mkv.name
 		) AS maxkv
 	    	ON maxkv.id = kv.id
-		WHERE (kv.deleted = 0 OR ?)
-		ORDER BY kv.name ASC, kv.id ASC
-	`, columns)
+		WHERE kv.deleted = 0
+		ORDER BY kv.name ASC, kv.id ASC`
 
 	revisionIntervalSQL = `
 		SELECT (
@@ -111,28 +112,46 @@ var (
 			FROM kine
 		) AS high`
 
-	listRevisionStartSQL = listSQL
-
-	countRevisionSQL = fmt.Sprintf(`
+	countRevisionSQL = `
 		SELECT COUNT(*)
-		FROM (
-			%s
-		)`, listSQL)
-
-	afterSQLPrefix = fmt.Sprintf(`
-		SELECT %s
 		FROM kine AS kv
-		WHERE
-			kv.name >= ? AND kv.name < ?
-			AND kv.id > ?
-		ORDER BY kv.id ASC`, columns)
+		JOIN (
+			SELECT MAX(mkv.id) as id
+			FROM kine AS mkv
+			WHERE
+				mkv.name >= ? AND mkv.name < ?
+				AND mkv.id <= ?
+			GROUP BY mkv.name
+		) AS maxkv
+	    	ON maxkv.id = kv.id
+		WHERE kv.deleted = 0`
 
-	afterSQL = fmt.Sprintf(`
-		SELECT %s
-			FROM kine AS kv
-			WHERE kv.id > ?
-			ORDER BY kv.id ASC
-		`, columns)
+	afterSQLPrefix = `
+		SELECT id, name, created, deleted, create_revision, prev_revision, lease, value, old_value
+		FROM kine
+		WHERE name >= ? AND name < ?
+			AND id > ?
+		ORDER BY id ASC`
+
+	afterSQL = `
+		SELECT id, name, created, deleted, create_revision, prev_revision, lease, value, old_value
+		FROM kine
+		WHERE id > ?
+		ORDER BY id ASC`
+
+	ttlSQL = `
+		SELECT kv.id, 
+			name, 
+			lease
+		FROM kine AS kv
+		JOIN (
+			SELECT MAX(mkv.id) as id
+			FROM kine AS mkv
+			WHERE mkv.id <= ?
+			GROUP BY mkv.name
+		) AS maxkv
+	    	ON maxkv.id = kv.id
+		WHERE kv.deleted = 0 AND kv.lease != 0`
 
 	deleteRevSQL = `
 		DELETE FROM kine
@@ -408,7 +427,7 @@ func (d *Generic) Count(ctx context.Context, prefix, startKey string, revision i
 	if startKey != "" {
 		start = startKey + "\x01"
 	}
-	rows, err := d.query(ctx, "count_revision", countRevisionSQL, start, end, revision, false)
+	rows, err := d.query(ctx, "count_revision", countRevisionSQL, start, end, revision)
 	if err != nil {
 		return 0, err
 	}
@@ -651,17 +670,21 @@ func (d *Generic) DeleteRevision(ctx context.Context, revision int64) error {
 	return err
 }
 
-func (d *Generic) List(ctx context.Context, prefix, startKey string, limit, revision int64, includeDeleted bool) (*sql.Rows, error) {
+func (d *Generic) List(ctx context.Context, prefix, startKey string, limit, revision int64) (*sql.Rows, error) {
 	start, end := getPrefixRange(prefix)
 	if startKey != "" {
 		start = startKey + "\x01"
 	}
-	sql := listRevisionStartSQL
+	sql := listSQL
 	if limit > 0 {
 		sql = fmt.Sprintf("%s LIMIT ?", sql)
-		return d.query(ctx, "list_revision_start_sql_limit", sql, start, end, revision, includeDeleted, limit)
+		return d.query(ctx, "list_revision_start_sql_limit", sql, start, end, revision, limit)
 	}
-	return d.query(ctx, "list_revision_start_sql", sql, start, end, revision, includeDeleted)
+	return d.query(ctx, "list_revision_start_sql", sql, start, end, revision)
+}
+
+func (d *Generic) ListTTL(ctx context.Context, revision int64) (*sql.Rows, error) {
+	return d.query(ctx, "ttl_sql", ttlSQL, revision)
 }
 
 func (d *Generic) CurrentRevision(ctx context.Context) (int64, error) {
