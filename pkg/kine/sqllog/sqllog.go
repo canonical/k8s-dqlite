@@ -19,9 +19,9 @@ import (
 )
 
 const (
+	otelName         = "sqllog"
 	SupersededCount  = 100
 	compactBatchSize = 1000
-	otelName         = "sqllog"
 )
 
 var (
@@ -39,22 +39,6 @@ func init() {
 	if err != nil {
 		logrus.WithError(err).Warning("Otel failed to create create counter")
 	}
-}
-
-type SQLLog struct {
-	d           Dialect
-	broadcaster broadcaster.Broadcaster
-	ctx         context.Context
-	notify      chan int64
-	wg          sync.WaitGroup
-}
-
-func New(d Dialect) *SQLLog {
-	l := &SQLLog{
-		d:      d,
-		notify: make(chan int64, 1024),
-	}
-	return l
 }
 
 type Dialect interface {
@@ -78,18 +62,74 @@ type Dialect interface {
 	Close() error
 }
 
-func (s *SQLLog) Start(ctx context.Context) (err error) {
-	s.ctx = ctx
-	context.AfterFunc(ctx, func() {
-		if err := s.d.Close(); err != nil {
-			logrus.Errorf("cannot close database: %v", err)
-		}
-	})
-	return s.broadcaster.Start(s.startWatch)
+type SQLLog struct {
+	mu      sync.Mutex
+	stop    func()
+	started bool
+
+	d           Dialect
+	broadcaster broadcaster.Broadcaster[[]*server.Event]
+	notify      chan int64
+	wg          sync.WaitGroup
 }
 
-func (s *SQLLog) Wait() {
+func New(d Dialect) *SQLLog {
+	return &SQLLog{
+		d:      d,
+		notify: make(chan int64, 1024),
+	}
+}
+
+func (s *SQLLog) Start(startCtx context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.started {
+		return nil
+	}
+
+	_, _, err := s.Create(startCtx, "/registry/health", []byte(`{"health":"true"}`), 0)
+	if err != nil {
+		return err
+	}
+
+	ctx, stop := context.WithCancel(context.Background())
+	err = s.broadcaster.Start(ctx, s.startWatch)
+	if err != nil {
+		stop()
+		return err
+	}
+
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		s.ttl(ctx)
+	}()
+
+	s.stop = stop
+	s.started = true
+	return nil
+}
+
+func (s *SQLLog) Stop() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.started {
+		return nil
+	}
+
+	s.stop()
 	s.wg.Wait()
+	s.stop, s.started = nil, false
+	return nil
+}
+
+func (s *SQLLog) Close() error {
+	stopErr := s.Stop()
+	closeErr := s.d.Close()
+
+	return errors.Join(stopErr, closeErr)
 }
 
 func (s *SQLLog) compactStart(ctx context.Context) error {
@@ -98,7 +138,7 @@ func (s *SQLLog) compactStart(ctx context.Context) error {
 		return err
 	}
 
-	events, err := RowsToEvents(rows)
+	events, err := ScanAll(rows, scanEvent)
 	if err != nil {
 		return err
 	}
@@ -136,6 +176,7 @@ func (s *SQLLog) compactStart(ctx context.Context) error {
 // from test functions that have access to the backend.
 func (s *SQLLog) DoCompact(ctx context.Context) (err error) {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.DoCompact", otelName))
+	compactCnt.Add(ctx, 1)
 	defer func() {
 		span.RecordError(err)
 		span.End()
@@ -166,16 +207,12 @@ func (s *SQLLog) DoCompact(ctx context.Context) (err error) {
 		if batchRevision > target {
 			batchRevision = target
 		}
-		if err := s.d.Compact(s.ctx, batchRevision); err != nil {
+		if err := s.d.Compact(ctx, batchRevision); err != nil {
 			return err
 		}
 		start = batchRevision
 	}
 	return nil
-}
-
-func (s *SQLLog) CurrentRevision(ctx context.Context) (int64, error) {
-	return s.d.CurrentRevision(ctx)
 }
 
 func (s *SQLLog) After(ctx context.Context, prefix string, revision, limit int64) (int64, []*server.Event, error) {
@@ -206,14 +243,14 @@ func (s *SQLLog) After(ctx context.Context, prefix string, revision, limit int64
 		return 0, nil, err
 	}
 
-	result, err := RowsToEvents(rows)
+	result, err := ScanAll(rows, scanEvent)
 	if err != nil {
 		return 0, nil, err
 	}
 	return currentRevision, result, err
 }
 
-func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revision int64, includeDeleted bool) (int64, []*server.Event, error) {
+func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revision int64) (int64, []*server.KeyValue, error) {
 	var err error
 
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.List", otelName))
@@ -226,7 +263,6 @@ func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revis
 		attribute.String("startKey", startKey),
 		attribute.Int64("limit", limit),
 		attribute.Int64("revision", revision),
-		attribute.Bool("includeDeleted", includeDeleted),
 	)
 
 	compactRevision, currentRevision, err := s.d.GetCompactRevision(ctx)
@@ -250,12 +286,12 @@ func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revis
 		startKey = ""
 	}
 
-	rows, err := s.d.List(ctx, prefix, startKey, limit, revision, includeDeleted)
+	rows, err := s.d.List(ctx, prefix, startKey, limit, revision, false)
 	if err != nil {
 		return 0, nil, err
 	}
 
-	result, err := RowsToEvents(rows)
+	result, err := ScanAll(rows, scanKeyValue)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -263,70 +299,125 @@ func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revis
 	return currentRevision, result, err
 }
 
-func RowsToEvents(rows *sql.Rows) ([]*server.Event, error) {
-	var result []*server.Event
-	defer rows.Close()
-
-	for rows.Next() {
-		event := &server.Event{}
-		if err := scan(rows, event); err != nil {
-			return nil, err
+func (s *SQLLog) ttl(ctx context.Context) {
+	run := func(ctx context.Context, key string, revision int64, timeout time.Duration) {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(timeout):
+			s.Delete(ctx, key, revision)
 		}
-		result = append(result, event)
 	}
-
-	return result, nil
-}
-
-func (s *SQLLog) Watch(ctx context.Context, prefix string) <-chan []*server.Event {
-	res := make(chan []*server.Event, 100)
-	values, err := s.broadcaster.Subscribe(ctx)
-	if err != nil {
-		return nil
-	}
-
-	checkPrefix := strings.HasSuffix(prefix, "/")
 
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
-		defer close(res)
 
-		for i := range values {
-			events, ok := filter(i, checkPrefix, prefix)
-			if ok {
-				res <- events
+		rev, kvs, err := s.List(ctx, "/", "", 1000, 0)
+		for len(kvs) > 0 {
+			if err != nil {
+				logrus.Errorf("failed to read old events for ttl: %v", err)
+				return
+			}
+
+			for _, kv := range kvs {
+				if kv.Lease > 0 {
+					go run(ctx, kv.Key, kv.ModRevision, time.Duration(kv.Lease)*time.Second)
+				}
+			}
+
+			_, kvs, err = s.List(ctx, "/", kvs[len(kvs)-1].Key, 1000, rev)
+		}
+
+		watchCh, err := s.Watch(ctx, "/", rev)
+		if err != nil {
+			logrus.Errorf("failed to watch events for ttl: %v", err)
+			return
+		}
+
+		for events := range watchCh {
+			for _, event := range events {
+				if event.KV.Lease > 0 {
+					go run(ctx, event.KV.Key, event.KV.ModRevision, time.Duration(event.KV.Lease)*time.Second)
+				}
 			}
 		}
 	}()
-
-	return res
 }
 
-func filter(events interface{}, checkPrefix bool, prefix string) ([]*server.Event, bool) {
-	eventList := events.([]*server.Event)
-	filteredEventList := make([]*server.Event, 0, len(eventList))
+func (s *SQLLog) Watch(ctx context.Context, key string, startRevision int64) (<-chan []*server.Event, error) {
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Watch", otelName))
+	defer span.End()
+	span.SetAttributes(
+		attribute.String("key", key),
+		attribute.Int64("startRevision", startRevision),
+	)
 
-	for _, event := range eventList {
-		if (checkPrefix && strings.HasPrefix(event.KV.Key, prefix)) || event.KV.Key == prefix {
-			filteredEventList = append(filteredEventList, event)
-		}
-	}
-
-	return filteredEventList, len(filteredEventList) > 0
-}
-
-func (s *SQLLog) startWatch() (chan interface{}, error) {
-	if err := s.compactStart(s.ctx); err != nil {
-		return nil, err
-	}
-
-	pollStart, _, err := s.d.GetCompactRevision(s.ctx)
+	values, err := s.broadcaster.Subscribe(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	c := make(chan interface{})
+	if startRevision > 0 {
+		startRevision = startRevision - 1
+	}
+
+	initialRevision, initialEvents, err := s.After(ctx, key, startRevision, 0)
+	if err != nil {
+		span.RecordError(err)
+		return nil, err
+	}
+
+	res := make(chan []*server.Event, 100)
+	if len(initialEvents) > 0 {
+		res <- initialEvents
+	}
+
+	s.wg.Add(1)
+	go func() {
+		defer func() {
+			close(res)
+			s.wg.Done()
+		}()
+
+		for events := range values {
+			filtered := filterEvents(events, key, initialRevision)
+			if len(filtered) > 0 {
+				res <- filtered
+			}
+		}
+	}()
+	return res, nil
+}
+
+func filterEvents(events []*server.Event, key string, startRevision int64) []*server.Event {
+	filteredEventList := make([]*server.Event, 0, len(events))
+	checkPrefix := strings.HasSuffix(key, "/")
+
+	for _, event := range events {
+		if event.KV.ModRevision <= startRevision {
+			continue
+		}
+		if !(checkPrefix && strings.HasPrefix(event.KV.Key, key)) && event.KV.Key != key {
+			continue
+		}
+		filteredEventList = append(filteredEventList, event)
+	}
+
+	return filteredEventList
+}
+
+func (s *SQLLog) startWatch(ctx context.Context) (chan []*server.Event, error) {
+	if err := s.compactStart(ctx); err != nil {
+		return nil, err
+	}
+
+	pollStart, _, err := s.d.GetCompactRevision(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	c := make(chan []*server.Event)
 	// start compaction and polling at the same time to watch starts
 	// at the oldest revision, but compaction doesn't create gaps
 	s.wg.Add(2)
@@ -338,10 +429,10 @@ func (s *SQLLog) startWatch() (chan interface{}, error) {
 
 		for {
 			select {
-			case <-s.ctx.Done():
+			case <-ctx.Done():
 				return
 			case <-t.C:
-				if err := s.DoCompact(s.ctx); err != nil {
+				if err := s.DoCompact(ctx); err != nil {
 					logrus.WithError(err).Trace("compaction failed")
 				}
 			}
@@ -350,13 +441,13 @@ func (s *SQLLog) startWatch() (chan interface{}, error) {
 
 	go func() {
 		defer s.wg.Done()
-		s.poll(c, pollStart)
+		s.poll(ctx, c, pollStart)
 	}()
 
 	return c, nil
 }
 
-func (s *SQLLog) poll(result chan interface{}, pollStart int64) {
+func (s *SQLLog) poll(ctx context.Context, result chan []*server.Event, pollStart int64) {
 	var (
 		last        = pollStart
 		skip        int64
@@ -371,7 +462,7 @@ func (s *SQLLog) poll(result chan interface{}, pollStart int64) {
 	for {
 		if waitForMore {
 			select {
-			case <-s.ctx.Done():
+			case <-ctx.Done():
 				return
 			case check := <-s.notify:
 				if check <= last {
@@ -381,7 +472,7 @@ func (s *SQLLog) poll(result chan interface{}, pollStart int64) {
 			}
 		}
 		waitForMore = true
-		watchCtx, cancel := context.WithTimeout(s.ctx, s.d.GetWatchQueryTimeout())
+		watchCtx, cancel := context.WithTimeout(ctx, s.d.GetWatchQueryTimeout())
 		defer cancel()
 
 		rows, err := s.d.After(watchCtx, last, 500)
@@ -392,7 +483,7 @@ func (s *SQLLog) poll(result chan interface{}, pollStart int64) {
 			continue
 		}
 
-		events, err := RowsToEvents(rows)
+		events, err := ScanAll(rows, scanEvent)
 		if err != nil {
 			logrus.Errorf("fail to convert rows changes: %v", err)
 			continue
@@ -427,7 +518,7 @@ func (s *SQLLog) poll(result chan interface{}, pollStart int64) {
 					s.notifyWatcherPoll(next)
 					break
 				} else {
-					if err := s.d.Fill(s.ctx, next); err == nil {
+					if err := s.d.Fill(ctx, next); err == nil {
 						logrus.Debugf("FILL, revision=%d, err=%v", next, err)
 						s.notifyWatcherPoll(next)
 					} else {
@@ -534,9 +625,66 @@ func (s *SQLLog) notifyWatcherPoll(revision int64) {
 	}
 }
 
-func scan(rows *sql.Rows, event *server.Event) error {
-	event.KV = &server.KeyValue{}
-	event.PrevKV = &server.KeyValue{}
+func (s *SQLLog) DbSize(ctx context.Context) (int64, error) {
+	var err error
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.DbSize", otelName))
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+	size, err := s.d.GetSize(ctx)
+	span.SetAttributes(attribute.Int64("size", size))
+	return size, err
+}
+
+func ScanAll[T any](rows *sql.Rows, scanOne func(*sql.Rows) (T, error)) ([]T, error) {
+	var result []T
+	defer rows.Close()
+
+	for rows.Next() {
+		item, err := scanOne(rows)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, item)
+	}
+
+	return result, nil
+}
+
+func scanKeyValue(rows *sql.Rows) (*server.KeyValue, error) {
+	kv := &server.KeyValue{}
+	var create, delete bool
+	var prevRevision int64
+	var prevValue []byte
+
+	err := rows.Scan(
+		&kv.ModRevision,
+		&kv.Key,
+		&create,
+		&delete,
+		&kv.CreateRevision,
+		&prevRevision,
+		&kv.Lease,
+		&kv.Value,
+		&prevValue,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if create {
+		kv.CreateRevision = kv.ModRevision
+	}
+
+	return kv, nil
+}
+
+func scanEvent(rows *sql.Rows) (*server.Event, error) {
+	event := &server.Event{
+		KV:     &server.KeyValue{},
+		PrevKV: &server.KeyValue{},
+	}
 
 	err := rows.Scan(
 		&event.KV.ModRevision,
@@ -550,7 +698,7 @@ func scan(rows *sql.Rows, event *server.Event) error {
 		&event.PrevKV.Value,
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if event.Create {
@@ -562,17 +710,5 @@ func scan(rows *sql.Rows, event *server.Event) error {
 		event.PrevKV.Lease = event.KV.Lease
 	}
 
-	return nil
-}
-
-func (s *SQLLog) DbSize(ctx context.Context) (int64, error) {
-	var err error
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.DbSize", otelName))
-	defer func() {
-		span.RecordError(err)
-		span.End()
-	}()
-	size, err := s.d.GetSize(ctx)
-	span.SetAttributes(attribute.Int64("size", size))
-	return size, err
+	return event, nil
 }

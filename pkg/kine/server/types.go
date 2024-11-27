@@ -13,16 +13,16 @@ var (
 
 type Backend interface {
 	Start(ctx context.Context) error
-	Wait()
-	Get(ctx context.Context, key, rangeEnd string, limit, revision int64) (int64, *KeyValue, error)
+	Stop() error
 	Create(ctx context.Context, key string, value []byte, lease int64) (int64, bool, error)
 	Delete(ctx context.Context, key string, revision int64) (int64, bool, error)
 	List(ctx context.Context, prefix, startKey string, limit, revision int64) (int64, []*KeyValue, error)
 	Count(ctx context.Context, prefix, startKey string, revision int64) (int64, int64, error)
 	Update(ctx context.Context, key string, value []byte, revision, lease int64) (int64, bool, error)
-	Watch(ctx context.Context, key string, revision int64) <-chan []*Event
+	Watch(ctx context.Context, key string, revision int64) (<-chan []*Event, error)
 	DbSize(ctx context.Context) (int64, error)
 	DoCompact(ctx context.Context) error
+	Close() error
 }
 
 type KeyValue struct {

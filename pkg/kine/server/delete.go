@@ -21,8 +21,7 @@ func isDelete(txn *etcdserverpb.TxnRequest) (int64, string, bool) {
 	return 0, "", false
 }
 
-func (l *LimitedServer) delete(ctx context.Context, key string, revision int64) (*etcdserverpb.TxnResponse, error) {
-	var err error
+func (l *LimitedServer) delete(ctx context.Context, key string, revision int64) (_ *etcdserverpb.TxnResponse, err error) {
 	deleteCnt.Add(ctx, 1)
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.delete", otelName))
 	defer func() {
@@ -57,7 +56,7 @@ func (l *LimitedServer) delete(ctx context.Context, key string, revision int64) 
 			},
 		}
 	} else {
-		rev, kv, err := l.backend.Get(ctx, key, "", 1, rev)
+		rev, kv, err := l.backend.List(ctx, key, "", 1, rev)
 		if err != nil {
 			return nil, err
 		}
@@ -66,7 +65,7 @@ func (l *LimitedServer) delete(ctx context.Context, key string, revision int64) 
 				Response: &etcdserverpb.ResponseOp_ResponseRange{
 					ResponseRange: &etcdserverpb.RangeResponse{
 						Header: txnHeader(rev),
-						Kvs:    toKVs(kv),
+						Kvs:    toKVs(kv...),
 					},
 				},
 			},
