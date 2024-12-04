@@ -21,7 +21,7 @@ func (s *KVServerBridge) Status(ctx context.Context, r *etcdserverpb.StatusReque
 	return &etcdserverpb.StatusResponse{
 		Header:  &etcdserverpb.ResponseHeader{},
 		DbSize:  size,
-		Version: s.emulatedETCDVersion,
+		Version: s.emulatedEtcdVersion,
 	}, nil
 }
 
