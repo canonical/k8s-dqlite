@@ -64,6 +64,7 @@ func New(
 	diskMode bool,
 	clientSessionCacheSize uint,
 	minTLSVersion string,
+	emulatedEtcdVersion string,
 	watchAvailableStorageInterval time.Duration,
 	watchAvailableStorageMinBytes uint64,
 	lowAvailableStorageAction string,
@@ -222,6 +223,8 @@ func New(
 	}
 	// set datastore connection pool options
 	kineConfig.ConnectionPoolConfig = connectionPoolConfig
+	// set emulated etcd version
+	kineConfig.EmulatedEtcdVersion = emulatedEtcdVersion
 	// handle tuning parameters
 	if exists, err := fileExists(dir, "tuning.yaml"); err != nil {
 		return nil, fmt.Errorf("failed to check for tuning.yaml: %w", err)
