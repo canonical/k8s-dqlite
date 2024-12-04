@@ -19,7 +19,8 @@ var (
 )
 
 type KVServerBridge struct {
-	limited *LimitedServer
+	limited             *LimitedServer
+	emulatedETCDVersion string
 }
 
 func New(backend Backend, notifyInterval time.Duration) *KVServerBridge {

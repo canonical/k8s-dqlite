@@ -64,6 +64,7 @@ func New(
 	diskMode bool,
 	clientSessionCacheSize uint,
 	minTLSVersion string,
+	emulatedEtcdVersion string,
 	watchAvailableStorageInterval time.Duration,
 	watchAvailableStorageMinBytes uint64,
 	lowAvailableStorageAction string,

@@ -31,8 +31,8 @@ type Config struct {
 	GRPCServer           *grpc.Server
 	Listener             string
 	Endpoint             string
+	EmulatedEtcdVersion  string
 	ConnectionPoolConfig generic.ConnectionPoolConfig
-
 	tls.Config
 	NotifyInterval time.Duration
 }
