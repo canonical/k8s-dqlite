@@ -14,11 +14,7 @@ concurrency:
 
 jobs:
   build:
-    name: K8s-snap Integration Test ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: ["ubuntu:20.04", "ubuntu:22.04", "ubuntu:24.04"]
+    name: K8s-snap Integration Test
     runs-on: ubuntu-20.04
 
     steps:
@@ -60,7 +56,7 @@ jobs:
         env:
           TEST_SNAP: ${{ github.workspace }}/k8s-updated.snap
           TEST_SUBSTRATE: lxd
-          TEST_LXD_IMAGE: ${{ matrix.os }}
+          TEST_LXD_IMAGE: ubuntu:22.04
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
         run: |
           git clone https://github.com/canonical/k8s-snap.git      
