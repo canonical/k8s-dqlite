@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
@@ -21,10 +22,11 @@ type KVServerBridge struct {
 	limited *LimitedServer
 }
 
-func New(backend Backend) *KVServerBridge {
+func New(backend Backend, notifyInterval time.Duration) *KVServerBridge {
 	return &KVServerBridge{
 		limited: &LimitedServer{
-			backend: backend,
+			backend:        backend,
+			notifyInterval: notifyInterval,
 		},
 	}
 }

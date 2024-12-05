@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/dqlite"
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/generic"
@@ -33,6 +34,7 @@ type Config struct {
 	ConnectionPoolConfig generic.ConnectionPoolConfig
 
 	tls.Config
+	NotifyInterval time.Duration
 }
 
 type ETCDConfig struct {
@@ -65,7 +67,7 @@ func Listen(ctx context.Context, config Config) (ETCDConfig, error) {
 		listen = KineSocket
 	}
 
-	b := server.New(backend)
+	b := server.New(backend, config.NotifyInterval)
 	grpcServer := grpcServer(config)
 	b.Register(grpcServer)
 
@@ -130,7 +132,7 @@ func ListenAndReturnBackend(ctx context.Context, config Config) (ETCDConfig, ser
 		listen = KineSocket
 	}
 
-	b := server.New(backend)
+	b := server.New(backend, config.NotifyInterval)
 	grpcServer := grpcServer(config)
 	b.Register(grpcServer)
 
