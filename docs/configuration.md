@@ -21,7 +21,7 @@ The following configuration options are available listed in a table format:
 | `--otel` | Enable traces endpoint | `false` |
 | `--otel-listen` | The address to listen for OpenTelemetry endpoint | `127.0.0.1:4317` |
 | `--metrics-listen` | The address to listen for metrics endpoint | `127.0.0.1:9042` |
-| `--emulated-etcd-version` | The emulated etcd version to return on a call to the status endpoint. Defaults to 3.5.13, in order to indicate support for watch progress notifications. | `3.5.13` |
+| `--emulated-etcd-version` | The emulated etcd version to return on a call to the status endpoint. Defaults to 3.5.12, in order to indicate no support for watch progress notifications yet. | `3.5.12` |
 | `--datastore-max-idle-connections` | Maximum number of idle connections retained by datastore | `5` |
 | `--datastore-max-open-connections` | Maximum number of open connections used by datastore | `5` |
 | `--datastore-connection-max-lifetime` | Maximum amount of time a connection may be reused | `60s` |

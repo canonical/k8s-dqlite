@@ -2,7 +2,7 @@ name: Integration Test K8s-snap
 
 on:
   push:
-    branches: ["master"]
+    branches: ["master", "KU-2276/emulated-etcd-version"] #TODO remove KU-2276/emulated-etcd-version
   pull_request:
 
 permissions:
@@ -30,9 +30,9 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: "1.21"
-      - name: Download latest k8s-snap
+      - name: Download latest k8s-snap #TODO remove v1.32.0-rc0
         run: |
-          sudo snap download k8s --channel=latest/edge --basename k8s
+          sudo snap download k8s --channel=latest/edge/v1.32.0-rc0 --basename k8s
       - name: Install lxd
         uses: canonical/k8s-snap/.github/actions/install-lxd@main
       - name: Build k8s-dqlite
@@ -52,7 +52,7 @@ jobs:
         env:
           TEST_SNAP: ${{ github.workspace }}/k8s-updated.snap
           TEST_SUBSTRATE: lxd
-          TEST_LXD_IMAGE: ubuntu:22.04
+          TEST_LXD_IMAGE: ${{ matrix.os }}
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
         run: |
           git clone https://github.com/canonical/k8s-snap.git      
