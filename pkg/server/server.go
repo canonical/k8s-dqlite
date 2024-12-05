@@ -69,6 +69,8 @@ func New(
 	lowAvailableStorageAction string,
 	connectionPoolConfig generic.ConnectionPoolConfig,
 	watchQueryTimeout time.Duration,
+	watchProgressNotifyInterval time.Duration,
+
 ) (*Server, error) {
 	var (
 		options         []app.Option
@@ -222,6 +224,8 @@ func New(
 	}
 	// set datastore connection pool options
 	kineConfig.ConnectionPoolConfig = connectionPoolConfig
+	// set watch progress notify interval
+	kineConfig.NotifyInterval = watchProgressNotifyInterval
 	// handle tuning parameters
 	if exists, err := fileExists(dir, "tuning.yaml"); err != nil {
 		return nil, fmt.Errorf("failed to check for tuning.yaml: %w", err)
