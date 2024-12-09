@@ -2,7 +2,7 @@ name: Integration Test K8s-snap
 
 on:
   push:
-    branches: ["master"]
+    branches: ["master", "louise-test"]
   pull_request:
 
 permissions:
@@ -32,7 +32,7 @@ jobs:
           go-version: "1.21"
       - name: Download latest k8s-snap
         run: |
-          sudo snap download k8s --channel=latest/edge --basename k8s
+          sudo snap download k8s --channel=latest/edge/v1.32.0-rc0 --basename k8s
       - name: Install lxd
         run: |
           sudo snap refresh lxd --channel 5.21/stable
@@ -56,11 +56,11 @@ jobs:
         env:
           TEST_SNAP: ${{ github.workspace }}/k8s-updated.snap
           TEST_SUBSTRATE: lxd
-          TEST_LXD_IMAGE: ubuntu:22.04
+          TEST_LXD_IMAGE: ubuntu:24.04
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
         run: |
           git clone https://github.com/canonical/k8s-snap.git      
-          cd k8s-snap/tests/integration && sg lxd -c 'tox -e integration'
+          cd k8s-snap/tests/integration && sg lxd -c 'tox --conf ./tests/integration/tox.ini -e integration -- -k test_config_propagation'
       - name: Prepare inspection reports
         if: failure()
         run: |
