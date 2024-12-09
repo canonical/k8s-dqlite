@@ -18,11 +18,13 @@ var (
 )
 
 type KVServerBridge struct {
-	limited *LimitedServer
+	limited             *LimitedServer
+	emulatedEtcdVersion string
 }
 
-func New(backend Backend) *KVServerBridge {
+func New(backend Backend, emulatedEtcdVersion string) *KVServerBridge {
 	return &KVServerBridge{
+		emulatedEtcdVersion: emulatedEtcdVersion,
 		limited: &LimitedServer{
 			backend: backend,
 		},

@@ -30,8 +30,8 @@ type Config struct {
 	GRPCServer           *grpc.Server
 	Listener             string
 	Endpoint             string
+	EmulatedEtcdVersion  string
 	ConnectionPoolConfig generic.ConnectionPoolConfig
-
 	tls.Config
 }
 
@@ -65,7 +65,7 @@ func Listen(ctx context.Context, config Config) (ETCDConfig, error) {
 		listen = KineSocket
 	}
 
-	b := server.New(backend)
+	b := server.New(backend, config.EmulatedEtcdVersion)
 	grpcServer := grpcServer(config)
 	b.Register(grpcServer)
 
@@ -130,7 +130,7 @@ func ListenAndReturnBackend(ctx context.Context, config Config) (ETCDConfig, ser
 		listen = KineSocket
 	}
 
-	b := server.New(backend)
+	b := server.New(backend, config.EmulatedEtcdVersion)
 	grpcServer := grpcServer(config)
 	b.Register(grpcServer)
 
