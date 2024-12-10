@@ -7,8 +7,9 @@ import (
 )
 
 var (
-	ErrKeyExists = rpctypes.ErrGRPCDuplicateKey
-	ErrCompacted = rpctypes.ErrGRPCCompacted
+	ErrKeyExists     = rpctypes.ErrGRPCDuplicateKey
+	ErrCompacted     = rpctypes.ErrGRPCCompacted
+	ErrGRPCUnhealthy = rpctypes.ErrGRPCUnhealthy
 )
 
 type Backend interface {
@@ -45,4 +46,5 @@ type WatchResult struct {
 	CurrentRevision int64
 	CompactRevision int64
 	Events          <-chan []*Event
+	Errorc          <-chan error
 }

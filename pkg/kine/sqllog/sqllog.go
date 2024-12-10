@@ -372,7 +372,8 @@ func (s *SQLLog) Watch(ctx context.Context, key string, startRevision int64) (se
 	)
 
 	res := make(chan []*server.Event, 100)
-	wr := server.WatchResult{Events: res}
+	errc := make(chan error, 1)
+	wr := server.WatchResult{Events: res, Errorc: errc}
 
 	values, err := s.broadcaster.Subscribe(ctx)
 	if err != nil {
@@ -385,12 +386,20 @@ func (s *SQLLog) Watch(ctx context.Context, key string, startRevision int64) (se
 
 	initialRevision, initialEvents, err := s.After(ctx, key, startRevision, 0)
 	if err != nil {
-		span.RecordError(err)
-		if err == server.ErrCompacted {
-			compact, _, _ := s.d.GetCompactRevision(ctx)
-			wr.CompactRevision = compact
-			wr.CurrentRevision = initialRevision
+		if !errors.Is(err, context.Canceled) {
+			if err == server.ErrCompacted {
+				logrus.Errorf("Failed to list %s for revision %d: %v", key, startRevision, err)
+				span.RecordError(err)
+				compact, _, _ := s.d.GetCompactRevision(ctx)
+				wr.CompactRevision = compact
+				wr.CurrentRevision = initialRevision
+			} else {
+				errc <- server.ErrGRPCUnhealthy
+			}
 		}
+		// TODO: confirm that we want to cancel watch here
+		close(res)
+		s.wg.Done()
 	}
 
 	if len(initialEvents) > 0 {
