@@ -22,6 +22,7 @@ const (
 	otelName         = "sqllog"
 	SupersededCount  = 100
 	compactBatchSize = 1000
+	pollBatchSize    = 500
 )
 
 var (
@@ -71,6 +72,7 @@ type SQLLog struct {
 	d           Dialect
 	broadcaster broadcaster.Broadcaster[[]*server.Event]
 	notify      chan int64
+	currentRev  int64
 	wg          sync.WaitGroup
 }
 
@@ -216,6 +218,13 @@ func (s *SQLLog) DoCompact(ctx context.Context) (err error) {
 	return nil
 }
 
+func (s *SQLLog) CurrentRevision(ctx context.Context) (int64, error) {
+	if s.currentRev != 0 {
+		return s.currentRev, nil
+	}
+	return s.d.CurrentRevision(ctx)
+}
+
 func (s *SQLLog) After(ctx context.Context, prefix string, revision, limit int64) (int64, []*server.Event, error) {
 	var err error
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.After", otelName))
@@ -338,13 +347,13 @@ func (s *SQLLog) ttl(ctx context.Context) {
 			go run(ctx, key, revision, time.Duration(lease)*time.Second)
 		}
 
-		watchCh, err := s.Watch(ctx, "/", startRevision)
+		wr, err := s.Watch(ctx, "/", startRevision)
 		if err != nil {
 			logrus.Errorf("failed to watch events for ttl: %v", err)
 			return
 		}
 
-		for events := range watchCh {
+		for events := range wr.Events {
 			for _, event := range events {
 				if event.KV.Lease > 0 {
 					go run(ctx, event.KV.Key, event.KV.ModRevision, time.Duration(event.KV.Lease)*time.Second)
@@ -354,7 +363,7 @@ func (s *SQLLog) ttl(ctx context.Context) {
 	}()
 }
 
-func (s *SQLLog) Watch(ctx context.Context, key string, startRevision int64) (<-chan []*server.Event, error) {
+func (s *SQLLog) Watch(ctx context.Context, key string, startRevision int64) (server.WatchResult, error) {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Watch", otelName))
 	defer span.End()
 	span.SetAttributes(
@@ -362,9 +371,12 @@ func (s *SQLLog) Watch(ctx context.Context, key string, startRevision int64) (<-
 		attribute.Int64("startRevision", startRevision),
 	)
 
+	res := make(chan []*server.Event, 100)
+	wr := server.WatchResult{Events: res}
+
 	values, err := s.broadcaster.Subscribe(ctx)
 	if err != nil {
-		return nil, err
+		return wr, err
 	}
 
 	if startRevision > 0 {
@@ -374,10 +386,13 @@ func (s *SQLLog) Watch(ctx context.Context, key string, startRevision int64) (<-
 	initialRevision, initialEvents, err := s.After(ctx, key, startRevision, 0)
 	if err != nil {
 		span.RecordError(err)
-		return nil, err
+		if err == server.ErrCompacted {
+			compact, _, _ := s.d.GetCompactRevision(ctx)
+			wr.CompactRevision = compact
+			wr.CurrentRevision = initialRevision
+		}
 	}
 
-	res := make(chan []*server.Event, 100)
 	if len(initialEvents) > 0 {
 		res <- initialEvents
 	}
@@ -396,7 +411,8 @@ func (s *SQLLog) Watch(ctx context.Context, key string, startRevision int64) (<-
 			}
 		}
 	}()
-	return res, nil
+
+	return wr, nil
 }
 
 func filterEvents(events []*server.Event, key string, startRevision int64) []*server.Event {
@@ -457,8 +473,8 @@ func (s *SQLLog) startWatch(ctx context.Context) (chan []*server.Event, error) {
 }
 
 func (s *SQLLog) poll(ctx context.Context, result chan []*server.Event, pollStart int64) {
+	s.currentRev = pollStart
 	var (
-		last        = pollStart
 		skip        int64
 		skipTime    time.Time
 		waitForMore = true
@@ -474,7 +490,7 @@ func (s *SQLLog) poll(ctx context.Context, result chan []*server.Event, pollStar
 			case <-ctx.Done():
 				return
 			case check := <-s.notify:
-				if check <= last {
+				if check <= s.currentRev {
 					continue
 				}
 			case <-wait.C:
@@ -484,7 +500,7 @@ func (s *SQLLog) poll(ctx context.Context, result chan []*server.Event, pollStar
 		watchCtx, cancel := context.WithTimeout(ctx, s.d.GetWatchQueryTimeout())
 		defer cancel()
 
-		rows, err := s.d.After(watchCtx, last, 500)
+		rows, err := s.d.After(watchCtx, s.currentRev, pollBatchSize)
 		if err != nil {
 			if !errors.Is(err, context.DeadlineExceeded) {
 				logrus.Errorf("fail to list latest changes: %v", err)
@@ -504,7 +520,7 @@ func (s *SQLLog) poll(ctx context.Context, result chan []*server.Event, pollStar
 
 		waitForMore = len(events) < 100
 
-		rev := last
+		rev := s.currentRev
 		var (
 			sequential []*server.Event
 			saveLast   bool
@@ -515,6 +531,7 @@ func (s *SQLLog) poll(ctx context.Context, result chan []*server.Event, pollStar
 			// Ensure that we are notifying events in a sequential fashion. For example if we find row 4 before 3
 			// we don't want to notify row 4 because 3 is essentially dropped forever.
 			if event.KV.ModRevision != next {
+				logrus.Tracef("MODREVISION GAP: expected %v, got %v", next, event.KV.ModRevision)
 				if canSkipRevision(next, skip, skipTime) {
 					// This situation should never happen, but we have it here as a fallback just for unknown reasons
 					// we don't want to pause all watches forever
@@ -553,7 +570,7 @@ func (s *SQLLog) poll(ctx context.Context, result chan []*server.Event, pollStar
 		}
 
 		if saveLast {
-			last = rev
+			s.currentRev = rev
 			if len(sequential) > 0 {
 				result <- sequential
 			}
