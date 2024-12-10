@@ -41,6 +41,8 @@ jobs:
           sg lxd -c 'lxc version'
       - name: Build k8s-dqlite
         run: |
+          #switch to different branch
+          git checkout KU-2290/watch-progress-request       
           make static
       - name: Unpack Snap
         run: |
