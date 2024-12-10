@@ -111,8 +111,8 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 		// If the watch result has a non-zero CompactRevision, then the watch request failed due to
 		// the requested start revision having been compacted.  Pass the current and and compact
 		// revision to the client via the cancel response, along with the correct error message.
-		if err != nil {
-			w.Cancel(id, 0, 0, err) //TODO: need to return currrev and compact rev
+		if err == ErrCompacted {
+			w.Cancel(id, wr.CurrentRevision, wr.CompactRevision, ErrCompacted)
 			return
 		}
 
@@ -170,7 +170,12 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 				}
 			}
 		}
-		w.Cancel(id, 0, 0, nil)
+		select {
+		case err := <-wr.Errorc:
+			w.Cancel(id, 0, 0, err)
+		default:
+			w.Cancel(id, 0, 0, nil)
+		}
 		logrus.Debugf("WATCH CLOSE id=%d, key=%s", id, key)
 	}()
 }
@@ -218,7 +223,7 @@ func (w *watcher) Cancel(watchID int64, revision, compactRev int64, err error) {
 
 	serr := w.server.Send(&etcdserverpb.WatchResponse{
 		Header:          txnHeader(revision),
-		Canceled:        err != nil,
+		Canceled:        true,
 		CancelReason:    reason,
 		WatchId:         watchID,
 		CompactRevision: compactRev,
