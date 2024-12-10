@@ -1,6 +1,8 @@
 module github.com/canonical/k8s-dqlite
 
-go 1.22
+go 1.22.0
+
+toolchain go1.22.10
 
 require (
 	github.com/canonical/go-dqlite/v2 v2.0.0
@@ -21,9 +23,11 @@ require (
 	go.opentelemetry.io/otel/sdk v1.31.0
 	go.opentelemetry.io/otel/sdk/metric v1.31.0
 	go.opentelemetry.io/otel/trace v1.31.0
+	golang.org/x/exp v0.0.0-20241204233417-43b7b7cde48d
 	golang.org/x/sys v0.26.0
 	google.golang.org/grpc v1.67.1
 	gopkg.in/yaml.v2 v2.4.0
+	k8s.io/apimachinery v0.31.3
 )
 
 require (
@@ -71,7 +75,7 @@ require (
 	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/crypto v0.28.0 // indirect
 	golang.org/x/net v0.30.0 // indirect
-	golang.org/x/sync v0.8.0 // indirect
+	golang.org/x/sync v0.10.0 // indirect
 	golang.org/x/text v0.19.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
 	google.golang.org/genproto v0.0.0-20240311173647-c811ad7063a7 // indirect
@@ -80,5 +84,7 @@ require (
 	google.golang.org/protobuf v1.35.1 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	k8s.io/klog/v2 v2.130.1 // indirect
+	k8s.io/utils v0.0.0-20240711033017-18e509b52bc8 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )

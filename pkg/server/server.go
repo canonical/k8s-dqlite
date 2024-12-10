@@ -64,11 +64,14 @@ func New(
 	diskMode bool,
 	clientSessionCacheSize uint,
 	minTLSVersion string,
+	emulatedEtcdVersion string,
 	watchAvailableStorageInterval time.Duration,
 	watchAvailableStorageMinBytes uint64,
 	lowAvailableStorageAction string,
 	connectionPoolConfig generic.ConnectionPoolConfig,
 	watchQueryTimeout time.Duration,
+	watchProgressNotifyInterval time.Duration,
+
 ) (*Server, error) {
 	var (
 		options         []app.Option
@@ -222,6 +225,10 @@ func New(
 	}
 	// set datastore connection pool options
 	kineConfig.ConnectionPoolConfig = connectionPoolConfig
+	// set emulated etcd version
+	kineConfig.EmulatedEtcdVersion = emulatedEtcdVersion
+	// set watch progress notify interval
+	kineConfig.NotifyInterval = watchProgressNotifyInterval
 	// handle tuning parameters
 	if exists, err := fileExists(dir, "tuning.yaml"); err != nil {
 		return nil, fmt.Errorf("failed to check for tuning.yaml: %w", err)
@@ -340,7 +347,7 @@ func (s *Server) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to start kine: %w", err)
 	}
-	logrus.WithFields(logrus.Fields{"address": s.kineConfig.Listener, "database": s.kineConfig.Endpoint}).Print("Started kine")
+	logrus.WithFields(logrus.Fields{"address": s.kineConfig.Listener, "database": s.kineConfig.Endpoint, "emulatedEtcdVersion": s.kineConfig.EmulatedEtcdVersion}).Print("Started kine")
 
 	s.backend = backend
 

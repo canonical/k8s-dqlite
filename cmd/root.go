@@ -32,6 +32,7 @@ var (
 		metricsAddress         string
 		otel                   bool
 		otelAddress            string
+		emulatedEtcdVersion    string
 
 		connectionPoolConfig generic.ConnectionPoolConfig
 
@@ -39,8 +40,9 @@ var (
 		watchAvailableStorageMinBytes uint64
 		lowAvailableStorageAction     string
 
-		etcdMode          bool
-		watchQueryTimeout time.Duration
+		etcdMode                    bool
+		watchQueryTimeout           time.Duration
+		watchProgressNotifyInterval time.Duration
 	}
 
 	rootCmd = &cobra.Command{
@@ -101,11 +103,13 @@ var (
 				rootCmdOpts.diskMode,
 				rootCmdOpts.clientSessionCacheSize,
 				rootCmdOpts.minTLSVersion,
+				rootCmdOpts.emulatedEtcdVersion,
 				rootCmdOpts.watchAvailableStorageInterval,
 				rootCmdOpts.watchAvailableStorageMinBytes,
 				rootCmdOpts.lowAvailableStorageAction,
 				rootCmdOpts.connectionPoolConfig,
 				rootCmdOpts.watchQueryTimeout,
+				rootCmdOpts.watchProgressNotifyInterval,
 			)
 			if err != nil {
 				logrus.WithError(err).Fatal("Failed to create server")
@@ -173,6 +177,7 @@ func init() {
 	rootCmd.Flags().BoolVar(&rootCmdOpts.otel, "otel", false, "enable traces endpoint")
 	rootCmd.Flags().StringVar(&rootCmdOpts.otelAddress, "otel-listen", "127.0.0.1:4317", "listen address for OpenTelemetry endpoint")
 	rootCmd.Flags().StringVar(&rootCmdOpts.metricsAddress, "metrics-listen", "127.0.0.1:9042", "listen address for metrics endpoint")
+	rootCmd.Flags().StringVar(&rootCmdOpts.emulatedEtcdVersion, "emulated-etcd-version", "3.5.13", "The emulated etcd version to return on a call to the status endpoint. Defaults to 3.5.13, in order to indicate no support for watch progress notifications yet.")
 	rootCmd.Flags().IntVar(&rootCmdOpts.connectionPoolConfig.MaxIdle, "datastore-max-idle-connections", 5, "Maximum number of idle connections retained by datastore. If value = 0, the system default will be used. If value < 0, idle connections will not be reused.")
 	rootCmd.Flags().IntVar(&rootCmdOpts.connectionPoolConfig.MaxOpen, "datastore-max-open-connections", 5, "Maximum number of open connections used by datastore. If value <= 0, then there is no limit")
 	rootCmd.Flags().DurationVar(&rootCmdOpts.connectionPoolConfig.MaxLifetime, "datastore-connection-max-lifetime", 60*time.Second, "Maximum amount of time a connection may be reused. If value <= 0, then there is no limit.")
@@ -181,6 +186,7 @@ func init() {
 	rootCmd.Flags().Uint64Var(&rootCmdOpts.watchAvailableStorageMinBytes, "watch-storage-available-size-min-bytes", 10*1024*1024, "Minimum required available disk size (in bytes) to continue operation. If available disk space gets below this threshold, then the --low-available-storage-action is performed")
 	rootCmd.Flags().StringVar(&rootCmdOpts.lowAvailableStorageAction, "low-available-storage-action", "none", "Action to perform in case the available storage is low. One of (none|handover|terminate). none means no action is performed. handover means the dqlite node will handover its leadership role, if any. terminate means this dqlite node will shutdown")
 	rootCmd.Flags().DurationVar(&rootCmdOpts.watchQueryTimeout, "watch-query-timeout", 20*time.Second, "Timeout for querying events in the watch poll loop. If timeout is reached, the poll loop will be re-triggered. The minimum value is 5 seconds.")
+	rootCmd.Flags().DurationVar(&rootCmdOpts.watchProgressNotifyInterval, "watch-progress-notify-interval", 5*time.Second, "Interval between periodic watch progress notifications. Default is 5s to ensure support for watch progress notifications.")
 
 	rootCmd.AddCommand(&cobra.Command{
 		Use:  "version",
