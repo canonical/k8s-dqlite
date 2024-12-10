@@ -42,6 +42,7 @@ jobs:
       - name: Build k8s-dqlite
         run: |
           #switch to different branch
+          git fetch origin ${{ github.base_ref || github.ref }}
           git checkout KU-2290/watch-progress-request       
           make static
       - name: Unpack Snap
