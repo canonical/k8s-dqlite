@@ -43,6 +43,7 @@ jobs:
           sg lxd -c 'lxc version'
       - name: Build k8s-dqlite
         run: |
+          git branch
           make static
       - name: Unpack Snap
         run: |
