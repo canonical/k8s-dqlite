@@ -32,7 +32,6 @@ var (
 		metricsAddress         string
 		otel                   bool
 		otelAddress            string
-		emulatedEtcdVersion    string
 
 		connectionPoolConfig generic.ConnectionPoolConfig
 
@@ -103,7 +102,6 @@ var (
 				rootCmdOpts.diskMode,
 				rootCmdOpts.clientSessionCacheSize,
 				rootCmdOpts.minTLSVersion,
-				rootCmdOpts.emulatedEtcdVersion,
 				rootCmdOpts.watchAvailableStorageInterval,
 				rootCmdOpts.watchAvailableStorageMinBytes,
 				rootCmdOpts.lowAvailableStorageAction,
@@ -177,7 +175,6 @@ func init() {
 	rootCmd.Flags().BoolVar(&rootCmdOpts.otel, "otel", false, "enable traces endpoint")
 	rootCmd.Flags().StringVar(&rootCmdOpts.otelAddress, "otel-listen", "127.0.0.1:4317", "listen address for OpenTelemetry endpoint")
 	rootCmd.Flags().StringVar(&rootCmdOpts.metricsAddress, "metrics-listen", "127.0.0.1:9042", "listen address for metrics endpoint")
-	rootCmd.Flags().StringVar(&rootCmdOpts.emulatedEtcdVersion, "emulated-etcd-version", "3.5.13", "The emulated etcd version to return on a call to the status endpoint. Defaults to 3.5.13, in order to indicate no support for watch progress notifications yet.")
 	rootCmd.Flags().IntVar(&rootCmdOpts.connectionPoolConfig.MaxIdle, "datastore-max-idle-connections", 5, "Maximum number of idle connections retained by datastore. If value = 0, the system default will be used. If value < 0, idle connections will not be reused.")
 	rootCmd.Flags().IntVar(&rootCmdOpts.connectionPoolConfig.MaxOpen, "datastore-max-open-connections", 5, "Maximum number of open connections used by datastore. If value <= 0, then there is no limit")
 	rootCmd.Flags().DurationVar(&rootCmdOpts.connectionPoolConfig.MaxLifetime, "datastore-connection-max-lifetime", 60*time.Second, "Maximum amount of time a connection may be reused. If value <= 0, then there is no limit.")
