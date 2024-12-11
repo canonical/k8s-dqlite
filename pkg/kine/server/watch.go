@@ -124,12 +124,7 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 
 			// Wait for events or progress notifications
 			select {
-			case events, ok := <-wr.Events:
-				if !ok {
-					// Channel was closed, break out of the loop
-					outer = false
-					break
-				}
+			case events = <-wr.Events:
 				// We received events; batch any additional queued events
 				reads++
 				inner := true
