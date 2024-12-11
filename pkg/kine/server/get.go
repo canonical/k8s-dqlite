@@ -23,11 +23,6 @@ func (l *LimitedServer) get(ctx context.Context, r *etcdserverpb.RangeRequest) (
 		attribute.Int64("revision", r.Revision),
 	)
 
-	if r.Limit != 0 && len(r.RangeEnd) != 0 {
-		err := fmt.Errorf("invalid combination of rangeEnd and limit, limit should be 0 got %d", r.Limit)
-		return nil, err
-	}
-
 	rev, kv, err := l.backend.List(ctx, string(r.Key), "", 1, r.Revision)
 	if err != nil {
 		return nil, err
