@@ -64,7 +64,6 @@ func New(
 	diskMode bool,
 	clientSessionCacheSize uint,
 	minTLSVersion string,
-	emulatedEtcdVersion string,
 	watchAvailableStorageInterval time.Duration,
 	watchAvailableStorageMinBytes uint64,
 	lowAvailableStorageAction string,
@@ -345,7 +344,7 @@ func (s *Server) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to start kine: %w", err)
 	}
-	logrus.WithFields(logrus.Fields{"address": s.kineConfig.Listener, "database": s.kineConfig.Endpoint, "emulatedEtcdVersion": s.kineConfig.EmulatedEtcdVersion}).Print("Started kine")
+	logrus.WithFields(logrus.Fields{"address": s.kineConfig.Listener, "database": s.kineConfig.Endpoint}).Print("Started kine")
 
 	s.backend = backend
 
