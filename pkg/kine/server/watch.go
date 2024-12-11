@@ -108,8 +108,7 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 		}
 
 		wr, err := w.backend.Watch(ctx, key, startRevision)
-		// If the watch result has a non-zero CompactRevision, then the watch request failed due to
-		// the requested start revision having been compacted.  Pass the current and and compact
+		// the requested start revision is compacted.  Pass the current and and compact
 		// revision to the client via the cancel response, along with the correct error message.
 		if err == ErrCompacted {
 			w.Cancel(id, wr.CurrentRevision, wr.CompactRevision, ErrCompacted)
@@ -123,10 +122,15 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 			var events []*Event
 			var revision int64
 
-			// Block on initial read from events or progress channel
+			// Wait for events or progress notifications
 			select {
-			case events = <-wr.Events:
-				// got events; read additional queued events from the channel and add to batch
+			case events, ok := <-wr.Events:
+				if !ok {
+					// Channel was closed, break out of the loop
+					outer = false
+					break
+				}
+				// We received events; batch any additional queued events
 				reads++
 				inner := true
 				for inner {
@@ -135,19 +139,20 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 						reads++
 						events = append(events, e...)
 						if !ok {
-							// channel was closed, break out of both loops
+							// channel is closed, break out of both loops
 							inner = false
 							outer = false
 						}
 					default:
+						// No more events in the queue, we can exit the inner loop
 						inner = false
 					}
 				}
 			case revision = <-progressCh:
-				// have been requested to send progress with no events
+				// Received progress update without events
 			}
 
-			// get max revision from collected events
+			// Determine the highest revision among the collected events
 			if len(events) > 0 {
 				revision = events[len(events)-1].KV.ModRevision
 				if trace {
@@ -157,7 +162,7 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 				}
 			}
 
-			// send response. note that there are no events if this is a progress response.
+			// Send response, even if this is a progress-only response and no events occured
 			if revision >= startRevision {
 				wr := &etcdserverpb.WatchResponse{
 					Header:  txnHeader(revision),
@@ -170,6 +175,7 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 				}
 			}
 		}
+		// handle errors from the channel or gracefully cancel the watch
 		select {
 		case err := <-wr.Errorc:
 			w.Cancel(id, 0, 0, err)

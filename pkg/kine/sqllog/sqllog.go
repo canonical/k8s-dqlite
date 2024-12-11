@@ -375,8 +375,11 @@ func (s *SQLLog) Watch(ctx context.Context, key string, startRevision int64) (se
 	errc := make(chan error, 1)
 	wr := server.WatchResult{Events: res, Errorc: errc}
 
+	// starting watching right away so we don't miss anything
+	ctx, cancel := context.WithCancel(ctx)
 	values, err := s.broadcaster.Subscribe(ctx)
 	if err != nil {
+		cancel()
 		return wr, err
 	}
 
@@ -387,6 +390,7 @@ func (s *SQLLog) Watch(ctx context.Context, key string, startRevision int64) (se
 	initialRevision, initialEvents, err := s.After(ctx, key, startRevision, 0)
 	if err != nil {
 		if !errors.Is(err, context.Canceled) {
+			// In case the key has been compacted we need to inform the api-server about the current-revision and the compact revision in the cancel watch response to the api-server.
 			if err == server.ErrCompacted {
 				logrus.Errorf("Failed to list %s for revision %d: %v", key, startRevision, err)
 				span.RecordError(err)
@@ -394,12 +398,13 @@ func (s *SQLLog) Watch(ctx context.Context, key string, startRevision int64) (se
 				wr.CompactRevision = compact
 				wr.CurrentRevision = initialRevision
 			} else {
+				// If the After query fails because k8s-dqlite restarts we cancel the watch and return an error message that the api-server understands: server.ErrGRPCUnhealthy
+				// See fix: https://github.com/k3s-io/kine/pull/373
 				errc <- server.ErrGRPCUnhealthy
 			}
 		}
-		// TODO: confirm that we want to cancel watch here
-		close(res)
-		s.wg.Done()
+		// Cancel the watcher by cancelling the context of its subscription to the broadcaster
+		cancel()
 	}
 
 	if len(initialEvents) > 0 {
@@ -411,8 +416,10 @@ func (s *SQLLog) Watch(ctx context.Context, key string, startRevision int64) (se
 		defer func() {
 			close(res)
 			s.wg.Done()
+			cancel()
 		}()
 
+		// Filter for events that update/create/delete the given key
 		for events := range values {
 			filtered := filterEvents(events, key, initialRevision)
 			if len(filtered) > 0 {
