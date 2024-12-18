@@ -13,18 +13,13 @@ import (
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
-// The emulated etcd version is returned on a call to the status endpoint. The version 3.5.13, indicates support for the watch progress notifications.
-// See: https://github.com/kubernetes/kubernetes/blob/beb696c2c9467dbc44cbaf35c5a4a3daf0321db3/staging/src/k8s.io/apiserver/pkg/storage/feature/feature_support_checker.go#L157
-const emulatedEtcdVersion = "3.5.13"
-
 var (
 	_ etcdserverpb.KVServer    = (*KVServerBridge)(nil)
 	_ etcdserverpb.WatchServer = (*KVServerBridge)(nil)
 )
 
 type KVServerBridge struct {
-	limited             *LimitedServer
-	emulatedEtcdVersion string
+	limited *LimitedServer
 }
 
 func New(backend Backend, notifyInterval time.Duration) *KVServerBridge {
