@@ -22,6 +22,7 @@ const (
 	otelName         = "sqllog"
 	SupersededCount  = 100
 	compactBatchSize = 1000
+	pollBatchSize    = 500
 )
 
 var (
@@ -192,7 +193,7 @@ func (s *SQLLog) DoCompact(ctx context.Context) (err error) {
 	// small batches. Given that this logic runs every second,
 	// on regime it should take usually just a couple batches
 	// to keep the pace.
-	start, target, err := s.d.GetCompactRevision(ctx)
+	start, target, err := s.GetCompactRevision(ctx)
 	if err != nil {
 		return err
 	}
@@ -216,6 +217,14 @@ func (s *SQLLog) DoCompact(ctx context.Context) (err error) {
 	return nil
 }
 
+func (s *SQLLog) CurrentRevision(ctx context.Context) (int64, error) {
+	return s.d.CurrentRevision(ctx)
+}
+
+func (s *SQLLog) GetCompactRevision(ctx context.Context) (int64, int64, error) {
+	return s.d.GetCompactRevision(ctx)
+}
+
 func (s *SQLLog) After(ctx context.Context, prefix string, revision, limit int64) (int64, []*server.Event, error) {
 	var err error
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.After", otelName))
@@ -229,7 +238,7 @@ func (s *SQLLog) After(ctx context.Context, prefix string, revision, limit int64
 		attribute.Int64("limit", limit),
 	)
 
-	compactRevision, currentRevision, err := s.d.GetCompactRevision(ctx)
+	compactRevision, currentRevision, err := s.GetCompactRevision(ctx)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -266,7 +275,7 @@ func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revis
 		attribute.Int64("revision", revision),
 	)
 
-	compactRevision, currentRevision, err := s.d.GetCompactRevision(ctx)
+	compactRevision, currentRevision, err := s.GetCompactRevision(ctx)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -362,8 +371,11 @@ func (s *SQLLog) Watch(ctx context.Context, key string, startRevision int64) (<-
 		attribute.Int64("startRevision", startRevision),
 	)
 
+	// starting watching right away so we don't miss anything
+	ctx, cancel := context.WithCancel(ctx)
 	values, err := s.broadcaster.Subscribe(ctx)
 	if err != nil {
+		cancel()
 		return nil, err
 	}
 
@@ -373,7 +385,16 @@ func (s *SQLLog) Watch(ctx context.Context, key string, startRevision int64) (<-
 
 	initialRevision, initialEvents, err := s.After(ctx, key, startRevision, 0)
 	if err != nil {
-		span.RecordError(err)
+		if !errors.Is(err, context.Canceled) {
+			span.RecordError(err)
+			logrus.Errorf("Failed to list %s for revision %d: %v", key, startRevision, err)
+			// We return an error message that the api-server understands: server.ErrGRPCUnhealthy
+			if err != server.ErrCompacted {
+				err = server.ErrGRPCUnhealthy
+			}
+		}
+		// Cancel the watcher by cancelling the context of its subscription to the broadcaster
+		cancel()
 		return nil, err
 	}
 
@@ -387,8 +408,10 @@ func (s *SQLLog) Watch(ctx context.Context, key string, startRevision int64) (<-
 		defer func() {
 			close(res)
 			s.wg.Done()
+			cancel()
 		}()
 
+		// Filter for events that update/create/delete the given key
 		for events := range values {
 			filtered := filterEvents(events, key, initialRevision)
 			if len(filtered) > 0 {
@@ -396,6 +419,7 @@ func (s *SQLLog) Watch(ctx context.Context, key string, startRevision int64) (<-
 			}
 		}
 	}()
+
 	return res, nil
 }
 
@@ -421,7 +445,7 @@ func (s *SQLLog) startWatch(ctx context.Context) (chan []*server.Event, error) {
 		return nil, err
 	}
 
-	pollStart, _, err := s.d.GetCompactRevision(ctx)
+	pollStart, _, err := s.GetCompactRevision(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -484,7 +508,7 @@ func (s *SQLLog) poll(ctx context.Context, result chan []*server.Event, pollStar
 		watchCtx, cancel := context.WithTimeout(ctx, s.d.GetWatchQueryTimeout())
 		defer cancel()
 
-		rows, err := s.d.After(watchCtx, last, 500)
+		rows, err := s.d.After(watchCtx, last, pollBatchSize)
 		if err != nil {
 			if !errors.Is(err, context.DeadlineExceeded) {
 				logrus.Errorf("fail to list latest changes: %v", err)
@@ -515,6 +539,7 @@ func (s *SQLLog) poll(ctx context.Context, result chan []*server.Event, pollStar
 			// Ensure that we are notifying events in a sequential fashion. For example if we find row 4 before 3
 			// we don't want to notify row 4 because 3 is essentially dropped forever.
 			if event.KV.ModRevision != next {
+				logrus.Tracef("MODREVISION GAP: expected %v, got %v", next, event.KV.ModRevision)
 				if canSkipRevision(next, skip, skipTime) {
 					// This situation should never happen, but we have it here as a fallback just for unknown reasons
 					// we don't want to pause all watches forever
@@ -578,7 +603,7 @@ func (s *SQLLog) Count(ctx context.Context, prefix, startKey string, revision in
 		attribute.Int64("revision", revision),
 	)
 
-	compactRevision, currentRevision, err := s.d.GetCompactRevision(ctx)
+	compactRevision, currentRevision, err := s.GetCompactRevision(ctx)
 	if err != nil {
 		return 0, 0, err
 	}
