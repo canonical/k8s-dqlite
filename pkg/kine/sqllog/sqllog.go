@@ -72,7 +72,6 @@ type SQLLog struct {
 	d           Dialect
 	broadcaster broadcaster.Broadcaster[[]*server.Event]
 	notify      chan int64
-	currentRev  int64
 	wg          sync.WaitGroup
 }
 
@@ -194,7 +193,7 @@ func (s *SQLLog) DoCompact(ctx context.Context) (err error) {
 	// small batches. Given that this logic runs every second,
 	// on regime it should take usually just a couple batches
 	// to keep the pace.
-	start, target, err := s.d.GetCompactRevision(ctx)
+	start, target, err := s.GetCompactRevision(ctx)
 	if err != nil {
 		return err
 	}
@@ -219,10 +218,11 @@ func (s *SQLLog) DoCompact(ctx context.Context) (err error) {
 }
 
 func (s *SQLLog) CurrentRevision(ctx context.Context) (int64, error) {
-	if s.currentRev != 0 {
-		return s.currentRev, nil
-	}
 	return s.d.CurrentRevision(ctx)
+}
+
+func (s *SQLLog) GetCompactRevision(ctx context.Context) (int64, int64, error) {
+	return s.d.GetCompactRevision(ctx)
 }
 
 func (s *SQLLog) After(ctx context.Context, prefix string, revision, limit int64) (int64, []*server.Event, error) {
@@ -238,7 +238,7 @@ func (s *SQLLog) After(ctx context.Context, prefix string, revision, limit int64
 		attribute.Int64("limit", limit),
 	)
 
-	compactRevision, currentRevision, err := s.d.GetCompactRevision(ctx)
+	compactRevision, currentRevision, err := s.GetCompactRevision(ctx)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -275,7 +275,7 @@ func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revis
 		attribute.Int64("revision", revision),
 	)
 
-	compactRevision, currentRevision, err := s.d.GetCompactRevision(ctx)
+	compactRevision, currentRevision, err := s.GetCompactRevision(ctx)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -347,13 +347,13 @@ func (s *SQLLog) ttl(ctx context.Context) {
 			go run(ctx, key, revision, time.Duration(lease)*time.Second)
 		}
 
-		wr, err := s.Watch(ctx, "/", startRevision)
+		watchCh, err := s.Watch(ctx, "/", startRevision)
 		if err != nil {
 			logrus.Errorf("failed to watch events for ttl: %v", err)
 			return
 		}
 
-		for events := range wr.Events {
+		for events := range watchCh {
 			for _, event := range events {
 				if event.KV.Lease > 0 {
 					go run(ctx, event.KV.Key, event.KV.ModRevision, time.Duration(event.KV.Lease)*time.Second)
@@ -363,7 +363,7 @@ func (s *SQLLog) ttl(ctx context.Context) {
 	}()
 }
 
-func (s *SQLLog) Watch(ctx context.Context, key string, startRevision int64) (server.WatchResult, error) {
+func (s *SQLLog) Watch(ctx context.Context, key string, startRevision int64) (<-chan []*server.Event, error) {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Watch", otelName))
 	defer span.End()
 	span.SetAttributes(
@@ -371,16 +371,12 @@ func (s *SQLLog) Watch(ctx context.Context, key string, startRevision int64) (se
 		attribute.Int64("startRevision", startRevision),
 	)
 
-	res := make(chan []*server.Event, 100)
-	errc := make(chan error, 1)
-	wr := server.WatchResult{Events: res, Errorc: errc}
-
 	// starting watching right away so we don't miss anything
 	ctx, cancel := context.WithCancel(ctx)
 	values, err := s.broadcaster.Subscribe(ctx)
 	if err != nil {
 		cancel()
-		return wr, err
+		return nil, err
 	}
 
 	if startRevision > 0 {
@@ -390,23 +386,19 @@ func (s *SQLLog) Watch(ctx context.Context, key string, startRevision int64) (se
 	initialRevision, initialEvents, err := s.After(ctx, key, startRevision, 0)
 	if err != nil {
 		if !errors.Is(err, context.Canceled) {
-			// In case the key has been compacted we need to inform the api-server about the current-revision and the compact revision in the cancel watch response to the api-server.
-			if err == server.ErrCompacted {
-				logrus.Errorf("Failed to list %s for revision %d: %v", key, startRevision, err)
-				span.RecordError(err)
-				compact, _, _ := s.d.GetCompactRevision(ctx)
-				wr.CompactRevision = compact
-				wr.CurrentRevision = initialRevision
-			} else {
-				// If the After query fails because k8s-dqlite restarts we cancel the watch and return an error message that the api-server understands: server.ErrGRPCUnhealthy
-				// See fix: https://github.com/k3s-io/kine/pull/373
-				errc <- server.ErrGRPCUnhealthy
+			span.RecordError(err)
+			logrus.Errorf("Failed to list %s for revision %d: %v", key, startRevision, err)
+			// We return an error message that the api-server understands: server.ErrGRPCUnhealthy
+			if err != server.ErrCompacted {
+				err = server.ErrGRPCUnhealthy
 			}
 		}
 		// Cancel the watcher by cancelling the context of its subscription to the broadcaster
 		cancel()
+		return nil, err
 	}
 
+	res := make(chan []*server.Event, 100)
 	if len(initialEvents) > 0 {
 		res <- initialEvents
 	}
@@ -428,7 +420,7 @@ func (s *SQLLog) Watch(ctx context.Context, key string, startRevision int64) (se
 		}
 	}()
 
-	return wr, nil
+	return res, nil
 }
 
 func filterEvents(events []*server.Event, key string, startRevision int64) []*server.Event {
@@ -453,7 +445,7 @@ func (s *SQLLog) startWatch(ctx context.Context) (chan []*server.Event, error) {
 		return nil, err
 	}
 
-	pollStart, _, err := s.d.GetCompactRevision(ctx)
+	pollStart, _, err := s.GetCompactRevision(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -489,8 +481,8 @@ func (s *SQLLog) startWatch(ctx context.Context) (chan []*server.Event, error) {
 }
 
 func (s *SQLLog) poll(ctx context.Context, result chan []*server.Event, pollStart int64) {
-	s.currentRev = pollStart
 	var (
+		last        = pollStart
 		skip        int64
 		skipTime    time.Time
 		waitForMore = true
@@ -506,7 +498,7 @@ func (s *SQLLog) poll(ctx context.Context, result chan []*server.Event, pollStar
 			case <-ctx.Done():
 				return
 			case check := <-s.notify:
-				if check <= s.currentRev {
+				if check <= last {
 					continue
 				}
 			case <-wait.C:
@@ -516,7 +508,7 @@ func (s *SQLLog) poll(ctx context.Context, result chan []*server.Event, pollStar
 		watchCtx, cancel := context.WithTimeout(ctx, s.d.GetWatchQueryTimeout())
 		defer cancel()
 
-		rows, err := s.d.After(watchCtx, s.currentRev, pollBatchSize)
+		rows, err := s.d.After(watchCtx, last, pollBatchSize)
 		if err != nil {
 			if !errors.Is(err, context.DeadlineExceeded) {
 				logrus.Errorf("fail to list latest changes: %v", err)
@@ -536,7 +528,7 @@ func (s *SQLLog) poll(ctx context.Context, result chan []*server.Event, pollStar
 
 		waitForMore = len(events) < 100
 
-		rev := s.currentRev
+		rev := last
 		var (
 			sequential []*server.Event
 			saveLast   bool
@@ -586,7 +578,7 @@ func (s *SQLLog) poll(ctx context.Context, result chan []*server.Event, pollStar
 		}
 
 		if saveLast {
-			s.currentRev = rev
+			last = rev
 			if len(sequential) > 0 {
 				result <- sequential
 			}
@@ -611,7 +603,7 @@ func (s *SQLLog) Count(ctx context.Context, prefix, startKey string, revision in
 		attribute.Int64("revision", revision),
 	)
 
-	compactRevision, currentRevision, err := s.d.GetCompactRevision(ctx)
+	compactRevision, currentRevision, err := s.GetCompactRevision(ctx)
 	if err != nil {
 		return 0, 0, err
 	}
