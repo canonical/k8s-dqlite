@@ -166,11 +166,11 @@ def instances(
 
         if bootstrap_config is not None:
             first_node.exec(
-                ["k8s", "bootstrap", "--file", "-"],
+                ["k8s", "bootstrap", "--timeout", "180s", "--file", "-"],
                 input=str.encode(bootstrap_config),
             )
         else:
-            first_node.exec(["k8s", "bootstrap"])
+            first_node.exec(["k8s", "bootstrap", "--timeout", "180s"])
 
     yield instances
 
