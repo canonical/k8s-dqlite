@@ -50,12 +50,13 @@ jobs:
           sudo lxd init --auto
           sudo usermod --append --groups lxd $USER
           sg lxd -c 'lxc version'
-      - name: Ensure lxd network traffic flows by removing docker if installed
+      # Docker sets iptables rules that interfere with LXD.
+      # https://documentation.ubuntu.com/lxd/en/latest/howto/network_bridge_firewalld/#prevent-connectivity-issues-with-lxd-and-docker
+      - name: Apply Docker iptables workaround
+        shell: bash
         run: |
-          if command -v docker >/dev/null 2>&1; then
-            echo "Docker is installed, purging it"
-            sudo apt-get purge -y docker-engine docker docker.io docker-ce docker-ce-cli containerd runc
-          fi
+          sudo iptables -I DOCKER-USER -i lxdbr0 -j ACCEPT
+          sudo iptables -I DOCKER-USER -o lxdbr0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
       - name: Download latest k8s-snap
         run: |
           sudo snap download k8s --channel=latest/edge --basename k8s
