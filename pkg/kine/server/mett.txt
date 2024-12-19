@@ -1,0 +1,79 @@
+
+
+- initial brainstorm workshop
+
+OPEA 30 minutes intro, micro services spin up agents show architecture.
+
+graph, databases
+
+afterwards canonical part of the workshop   
+
+having the deployment on microk8s, 
+neo4j, vanilla example but extend it to the edge
+
+infrastructure provided no problem
+
+
+90 minutes
+
+30/40 minutes 
+
+
+environment, instructions, EKS, 
+
+
+cloud nighttag intel developer cloud
+ipcs there
+aipc
+
+access to the environment
+
+idc account 
+
+
+hardware: aipc 
+
+nvidia gpu 
+gaudi 
+
+run RAG with opensearch 
+
+cpu only with gpu its fast without its slow like 1minute per response
+
+
+run RAG architecture 
+
+
+access gpu
+
+pvcs or gaudis checking what arch we have
+
+run RAG on gaudi accelerator
+
+on cloud they dont have nvidia
+
+what generation zion
+
+24.04 ubuntu 16 cores 1 soket 
+
+aipc, gpu 
+training on dater center on the edge
+
+probably nothing on gaudi more on zion
+
+
+share overall architecture
+
+chatqnA
+
+opensearch, 
+
+graph rag deployed in our environment
+
+
+OPEA - OpenPlatform for Enterprise AI (linux foundation project)
+--> RAG - Retrieval Augmented Generation
+
+ChatQnA - Chat Question and Answer bot 
+
+

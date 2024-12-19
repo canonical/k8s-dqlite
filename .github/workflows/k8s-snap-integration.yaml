@@ -15,7 +15,7 @@ concurrency:
 jobs:
   build:
     name: K8s-snap Integration Test
-    runs-on: ubuntu-20.04
+    runs-on: self-hosted-linux-amd64-jammy-large
 
     steps:
       - name: Checking out repo
@@ -23,7 +23,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.8"
+          python-version: "3.10"
       - name: Install tox
         run: pip install tox
       - name: Install Go
@@ -39,6 +39,13 @@ jobs:
           sudo lxd init --auto
           sudo usermod --append --groups lxd $USER
           sg lxd -c 'lxc version'
+      # Docker sets iptables rules that interfere with LXD.
+      # https://documentation.ubuntu.com/lxd/en/latest/howto/network_bridge_firewalld/#prevent-connectivity-issues-with-lxd-and-docker
+      - name: Apply Docker iptables workaround
+        shell: bash
+        run: |
+          sudo iptables -I DOCKER-USER -i lxdbr0 -j ACCEPT
+          sudo iptables -I DOCKER-USER -o lxdbr0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
       - name: Build k8s-dqlite
         run: |
           make static
@@ -58,9 +65,13 @@ jobs:
           TEST_SUBSTRATE: lxd
           TEST_LXD_IMAGE: ubuntu:22.04
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
+          # Test the latest (up to) 6 releases for the flavour
+          TEST_VERSION_UPGRADE_CHANNELS: "recent 6 classic"
+          # Upgrading from 1.30 is not supported.
+          TEST_VERSION_UPGRADE_MIN_RELEASE: "1.31"
         run: |
           git clone https://github.com/canonical/k8s-snap.git      
-          cd k8s-snap/tests/integration && sg lxd -c 'tox -e integration'
+          cd k8s-snap/tests/integration && sg lxd -c 'tox -e integration -- --tags up_to_nightly'
       - name: Prepare inspection reports
         if: failure()
         run: |
