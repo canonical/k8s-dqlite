@@ -15,7 +15,7 @@ concurrency:
 jobs:
   build:
     name: K8s-snap Integration Test
-    runs-on: ["self-hosted", "Linux", "AMD64", "jammy", "large"]
+    runs-on: self-hosted-linux-amd64-jammy-large
 
     steps:
       - name: Checking out repo
@@ -65,7 +65,7 @@ jobs:
           TEST_MIRROR_LIST: '[{"name": "ghcr.io", "port": 5000, "remote": "https://ghcr.io", "username": "${{ github.actor }}", "password": "${{ secrets.GITHUB_TOKEN }}"}, {"name": "docker.io", "port": 5001, "remote": "https://registry-1.docker.io", "username": "", "password": ""}, {"name": "rocks.canonical.com", "port": 5002, "remote": "https://rocks.canonical.com/cdk"}]'
         run: |
           git clone https://github.com/canonical/k8s-snap.git      
-          cd k8s-snap/tests/integration && sg lxd -c 'tox -e integration'
+          cd k8s-snap/tests/integration && sg lxd -c 'tox -e integration -- --tags up_to_nightly'
       - name: Prepare inspection reports
         if: failure()
         run: |
