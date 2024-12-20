@@ -17,7 +17,7 @@ func TestWatch(t *testing.T) {
 		// pollTimeout is the timeout for waiting to receive an event.
 		pollTimeout = 50 * time.Millisecond
 
-		// progressNotifyTimeout is the timeout for waiting to receive a progress notify. Adjusts for jitter in the progress notification.
+		// progressNotifyTimeout is the timeout for waiting to receive a progress notify.
 		progressNotifyTimeout = 1 * time.Second
 
 		// idleTimeout is the amount of time to wait to ensure that no events
