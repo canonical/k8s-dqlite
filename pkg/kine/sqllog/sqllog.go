@@ -193,7 +193,7 @@ func (s *SQLLog) DoCompact(ctx context.Context) (err error) {
 	// small batches. Given that this logic runs every second,
 	// on regime it should take usually just a couple batches
 	// to keep the pace.
-	start, target, err := s.GetCompactRevision(ctx)
+	start, target, err := s.d.GetCompactRevision(ctx)
 	if err != nil {
 		return err
 	}
@@ -238,7 +238,7 @@ func (s *SQLLog) After(ctx context.Context, prefix string, revision, limit int64
 		attribute.Int64("limit", limit),
 	)
 
-	compactRevision, currentRevision, err := s.GetCompactRevision(ctx)
+	compactRevision, currentRevision, err := s.d.GetCompactRevision(ctx)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -275,7 +275,7 @@ func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revis
 		attribute.Int64("revision", revision),
 	)
 
-	compactRevision, currentRevision, err := s.GetCompactRevision(ctx)
+	compactRevision, currentRevision, err := s.d.GetCompactRevision(ctx)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -445,7 +445,7 @@ func (s *SQLLog) startWatch(ctx context.Context) (chan []*server.Event, error) {
 		return nil, err
 	}
 
-	pollStart, _, err := s.GetCompactRevision(ctx)
+	pollStart, _, err := s.d.GetCompactRevision(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -603,7 +603,7 @@ func (s *SQLLog) Count(ctx context.Context, prefix, startKey string, revision in
 		attribute.Int64("revision", revision),
 	)
 
-	compactRevision, currentRevision, err := s.GetCompactRevision(ctx)
+	compactRevision, currentRevision, err := s.d.GetCompactRevision(ctx)
 	if err != nil {
 		return 0, 0, err
 	}
