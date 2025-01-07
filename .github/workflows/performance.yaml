@@ -2,7 +2,7 @@ name: Performance Test K8s-snap
 
 on:
   push:
-    branches: ["master"]
+    branches: ["master", "test-fix"] #TODO rm me
   pull_request:
 
 permissions:
@@ -45,17 +45,7 @@ jobs:
           sudo apt install r-base
           sudo Rscript -e 'install.packages(c("ggplot2", "dplyr", "optparse"), repos="https://cloud.r-project.org")'
       - name: Install lxd
-        run: |
-          sudo snap refresh lxd --channel 5.21/stable
-          sudo lxd init --auto
-          sudo usermod --append --groups lxd $USER
-          sg lxd -c 'lxc version'
-      - name: Ensure lxd network traffic flows by removing docker if installed
-        run: |
-          if command -v docker >/dev/null 2>&1; then
-            echo "Docker is installed, purging it"
-            sudo apt-get purge -y docker-engine docker docker.io docker-ce docker-ce-cli containerd runc
-          fi
+        uses: canonical/k8s-snap/.github/actions/install-lxd
       - name: Download latest k8s-snap
         run: |
           sudo snap download k8s --channel=latest/edge --basename k8s
@@ -90,7 +80,7 @@ jobs:
         run: |
           cd test/performance
           mkdir -p ./results/head
-          sg lxd -c 'tox -e performance'
+          sudo --user "$USER" --preserve-env --preserve-env=PATH -- env -- tox -e performance
       - name: Run Performance test for base code snap
         env:
           TEST_SNAP: ${{ github.workspace }}/base-code.snap
@@ -102,7 +92,7 @@ jobs:
         run: |
           cd test/performance 
           mkdir -p ./results/base-code
-          sg lxd -c 'tox -e performance'
+          sudo --user "$USER" --preserve-env --preserve-env=PATH -- env -- tox -e performance
       - name: Generate 3 node Graphs
         run: |
           cd test/performance

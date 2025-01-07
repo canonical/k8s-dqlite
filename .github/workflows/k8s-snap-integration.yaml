@@ -2,7 +2,7 @@ name: Integration Test K8s-snap
 
 on:
   push:
-    branches: ["master"]
+    branches: ["master", "test-fix"] #TODO rm me
   pull_request:
 
 permissions:
@@ -23,7 +23,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.8"
+          python-version: "3.10"
       - name: Install tox
         run: pip install tox
       - name: Install Go
@@ -34,11 +34,7 @@ jobs:
         run: |
           sudo snap download k8s --channel=latest/edge --basename k8s
       - name: Install lxd
-        run: |
-          sudo snap refresh lxd --channel 5.21/stable
-          sudo lxd init --auto
-          sudo usermod --append --groups lxd $USER
-          sg lxd -c 'lxc version'
+        uses: canonical/k8s-snap/.github/actions/install-lxd
       - name: Build k8s-dqlite
         run: |
           make static
@@ -60,7 +56,7 @@ jobs:
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
         run: |
           git clone https://github.com/canonical/k8s-snap.git      
-          cd k8s-snap/tests/integration && sg lxd -c 'tox -e integration'
+          cd k8s-snap/tests/integration && sudo --user "$USER" --preserve-env --preserve-env=PATH -- env -- tox -e integration
       - name: Prepare inspection reports
         if: failure()
         run: |
