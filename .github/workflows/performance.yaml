@@ -23,10 +23,6 @@ jobs:
     name: K8s-snap Performance Test
     runs-on: ubuntu-20.04
     steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@v2
-        with:
-          egress-policy: audit
       - name: Checking out repo
         uses: actions/checkout@v4
       - name: Setup Python
@@ -45,7 +41,7 @@ jobs:
           sudo apt install r-base
           sudo Rscript -e 'install.packages(c("ggplot2", "dplyr", "optparse"), repos="https://cloud.r-project.org")'
       - name: Install lxd
-        uses: canonical/k8s-snap/.github/actions/install-lxd
+        uses: canonical/k8s-snap/.github/actions/install-lxd@main
       - name: Download latest k8s-snap
         run: |
           sudo snap download k8s --channel=latest/edge --basename k8s

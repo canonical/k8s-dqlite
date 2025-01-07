@@ -34,7 +34,7 @@ jobs:
         run: |
           sudo snap download k8s --channel=latest/edge --basename k8s
       - name: Install lxd
-        uses: canonical/k8s-snap/.github/actions/install-lxd
+        uses: canonical/k8s-snap/.github/actions/install-lxd@main
       - name: Build k8s-dqlite
         run: |
           make static
