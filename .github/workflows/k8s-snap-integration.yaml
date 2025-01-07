@@ -56,7 +56,7 @@ jobs:
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
         run: |
           git clone https://github.com/canonical/k8s-snap.git      
-          cd k8s-snap/tests/integration && sudo --user "$USER" --preserve-env --preserve-env=PATH -- env -- tox -e integration
+          cd k8s-snap/tests/integration && sudo --user "$USER" --preserve-env --preserve-env=PATH -- env -- tox -e integration --tags pull_request
       - name: Prepare inspection reports
         if: failure()
         run: |
