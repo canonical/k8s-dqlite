@@ -84,7 +84,7 @@ func newKineServer(ctx context.Context, tb testing.TB, options *kineOptions) *ki
 	for _, param := range options.endpointParameters {
 		endpointConfig.Endpoint = fmt.Sprintf("%s&%s", endpointConfig.Endpoint, param)
 	}
-	config, backend, err := endpoint.ListenAndReturnBackend(ctx, *endpointConfig)
+	config, backend, err := endpoint.ListenAndReturnBackend(ctx, endpointConfig)
 	if err != nil {
 		tb.Fatal(err)
 	}
