@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/dqlite"
-	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/generic"
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/sqlite"
 	"github.com/canonical/k8s-dqlite/pkg/kine/server"
 	"github.com/canonical/k8s-dqlite/pkg/kine/sqllog"
@@ -33,7 +32,8 @@ type Config struct {
 	GRPCServer           *grpc.Server
 	Listener             string
 	Endpoint             string
-	ConnectionPoolConfig generic.ConnectionPoolConfig
+	ConnectionPoolConfig sqlite.ConnectionPoolConfig
+
 	tls.Config
 	NotifyInterval time.Duration
 }

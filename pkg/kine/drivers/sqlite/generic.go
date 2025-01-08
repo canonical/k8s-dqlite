@@ -1,4 +1,4 @@
-package generic
+package sqlite
 
 import (
 	"context"

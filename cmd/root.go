@@ -9,7 +9,7 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/generic"
+	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/sqlite"
 	"github.com/canonical/k8s-dqlite/pkg/server"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
@@ -33,7 +33,7 @@ var (
 		otel                   bool
 		otelAddress            string
 
-		connectionPoolConfig generic.ConnectionPoolConfig
+		connectionPoolConfig sqlite.ConnectionPoolConfig
 
 		watchAvailableStorageInterval time.Duration
 		watchAvailableStorageMinBytes uint64

@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/generic"
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/sqlite"
 	"github.com/sirupsen/logrus"
 )
@@ -53,7 +52,7 @@ func TestMigration(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	connPoolConfig := generic.ConnectionPoolConfig{
+	connPoolConfig := sqlite.ConnectionPoolConfig{
 		MaxIdle:     5,
 		MaxOpen:     5,
 		MaxLifetime: 60 * time.Second,
