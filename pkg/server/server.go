@@ -13,7 +13,6 @@ import (
 	"github.com/canonical/go-dqlite/v2"
 	"github.com/canonical/go-dqlite/v2/app"
 	"github.com/canonical/go-dqlite/v2/client"
-	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/sqlite"
 	"github.com/canonical/k8s-dqlite/pkg/kine/endpoint"
 	"github.com/canonical/k8s-dqlite/pkg/kine/server"
 	kine_tls "github.com/canonical/k8s-dqlite/pkg/kine/tls"
@@ -28,7 +27,7 @@ type Server struct {
 	backend server.Backend
 
 	// kineConfig is the configuration to use for starting kine against the dqlite application.
-	kineConfig endpoint.Config
+	kineConfig *endpoint.Config
 
 	// storageDir is the root directory used for dqlite storage.
 	storageDir string
@@ -74,7 +73,7 @@ func New(
 	watchAvailableStorageInterval time.Duration,
 	watchAvailableStorageMinBytes uint64,
 	lowAvailableStorageAction string,
-	connectionPoolConfig sqlite.ConnectionPoolConfig,
+	connectionPoolConfig *endpoint.ConnectionPoolConfig,
 	watchQueryTimeout time.Duration,
 	watchProgressNotifyInterval time.Duration,
 
@@ -312,7 +311,7 @@ func New(
 
 	return &Server{
 		app:        app,
-		kineConfig: kineConfig,
+		kineConfig: &kineConfig,
 
 		storageDir:                    dir,
 		watchAvailableStorageMinBytes: watchAvailableStorageMinBytes,

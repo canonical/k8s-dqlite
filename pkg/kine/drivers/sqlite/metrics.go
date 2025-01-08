@@ -43,14 +43,6 @@ func recordOpResult(txName string, err error, startTime time.Time) {
 	metricsOpResult.WithLabelValues(txName, resultLabel).Inc()
 }
 
-func incCurrentOps(txName string) {
-	metricsCurrentOps.WithLabelValues(txName).Inc()
-}
-
-func decCurrentOps(txName string) {
-	metricsCurrentOps.WithLabelValues(txName).Dec()
-}
-
 func init() {
 	prometheus.MustRegister(
 		metricsTxResult,

@@ -2,6 +2,7 @@ package endpoint
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net"
 	"net/url"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/canonical/k8s-dqlite/pkg/database"
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/dqlite"
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/sqlite"
 	"github.com/canonical/k8s-dqlite/pkg/kine/server"
@@ -23,19 +25,49 @@ import (
 )
 
 const (
-	KineSocket    = "unix://kine.sock"
-	SQLiteBackend = "sqlite"
-	DQLiteBackend = "dqlite"
+	KineSocket          = "unix://kine.sock"
+	SQLiteBackend       = "sqlite"
+	DQLiteBackend       = "dqlite"
+	defaultMaxIdleConns = 2 // default from database/sql
 )
 
 type Config struct {
 	GRPCServer           *grpc.Server
 	Listener             string
 	Endpoint             string
-	ConnectionPoolConfig sqlite.ConnectionPoolConfig
+	ConnectionPoolConfig *ConnectionPoolConfig
 
 	tls.Config
 	NotifyInterval time.Duration
+}
+
+type ConnectionPoolConfig struct {
+	MaxIdle     int
+	MaxOpen     int
+	MaxLifetime time.Duration
+	MaxIdleTime time.Duration
+}
+
+func (conf *ConnectionPoolConfig) apply(db *sql.DB) {
+	// behavior of database/sql - zero means defaultMaxIdleConns; negative means 0
+	var maxIdle int
+	if conf.MaxIdle < 0 {
+		maxIdle = 0
+	} else if conf.MaxIdle == 0 {
+		maxIdle = defaultMaxIdleConns
+	}
+
+	logrus.Infof(
+		"Configuring database connection pooling: maxIdleConns=%d, maxOpenConns=%d, connMaxLifetime=%v, connMaxIdleTime=%v ",
+		maxIdle,
+		conf.MaxOpen,
+		conf.MaxLifetime,
+		conf.MaxIdleTime,
+	)
+	db.SetMaxIdleConns(conf.MaxIdle)
+	db.SetMaxOpenConns(conf.MaxOpen)
+	db.SetConnMaxLifetime(conf.MaxLifetime)
+	db.SetConnMaxIdleTime(conf.MaxIdleTime)
 }
 
 type ETCDConfig struct {
@@ -43,8 +75,8 @@ type ETCDConfig struct {
 	TLSConfig tls.Config
 }
 
-func Listen(ctx context.Context, config Config) (ETCDConfig, error) {
-	backend, err := getKineStorageBackend(ctx, config)
+func Listen(ctx context.Context, config *Config) (ETCDConfig, error) {
+	backend, err := openKineStorageBackend(ctx, config)
 	if err != nil {
 		return ETCDConfig{}, errors.Wrap(err, "building kine")
 	}
@@ -106,8 +138,8 @@ func networkAndAddress(str string) (string, string) {
 	return "", str
 }
 
-func ListenAndReturnBackend(ctx context.Context, config Config) (ETCDConfig, server.Backend, error) {
-	backend, err := getKineStorageBackend(ctx, config)
+func ListenAndReturnBackend(ctx context.Context, config *Config) (ETCDConfig, server.Backend, error) {
+	backend, err := openKineStorageBackend(ctx, config)
 	if err != nil {
 		return ETCDConfig{}, nil, errors.Wrap(err, "building kine")
 	}
@@ -144,7 +176,7 @@ func ListenAndReturnBackend(ctx context.Context, config Config) (ETCDConfig, ser
 	}, backend, nil
 }
 
-func grpcServer(config Config) *grpc.Server {
+func grpcServer(config *Config) *grpc.Server {
 	if config.GRPCServer != nil {
 		return config.GRPCServer
 	}
@@ -162,7 +194,7 @@ func grpcServer(config Config) *grpc.Server {
 	return grpc.NewServer(gopts...)
 }
 
-func getKineStorageBackend(ctx context.Context, config Config) (server.Backend, error) {
+func openKineStorageBackend(ctx context.Context, config *Config) (server.Backend, error) {
 	var (
 		driver sqllog.Driver
 		err    error
@@ -175,18 +207,14 @@ func getKineStorageBackend(ctx context.Context, config Config) (server.Backend, 
 
 	switch options.BackendType {
 	case SQLiteBackend:
-		dataSourceName := options.DataSourceName
-		if dataSourceName == "" {
-			if err := os.MkdirAll("./db", 0700); err != nil {
-				return nil, err
-			}
-			dataSourceName = "./db/state.db?_journal=WAL&_synchronous=FULL&_foreign_keys=1"
-		}
-		driver, err = sqlite.NewDriver(ctx, "sqlite3", dataSourceName, &config.ConnectionPoolConfig)
+		driver, err = openSqlite(ctx, options.DataSourceName, config.ConnectionPoolConfig)
 	case DQLiteBackend:
-		driver, err = dqlite.NewDriver(ctx, options.DriverName, options.DataSourceName, &config.ConnectionPoolConfig)
+		driver, err = openDqlite(ctx, options.DriverName, options.DataSourceName, config.ConnectionPoolConfig)
 	default:
 		return nil, fmt.Errorf("backend type %s is not defined", options.BackendType)
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	return sqllog.New(&sqllog.SQLLogOptions{
@@ -195,6 +223,71 @@ func getKineStorageBackend(ctx context.Context, config Config) (server.Backend, 
 		PollInterval:      options.PollInterval,
 		WatchQueryTimeout: options.WatchQueryTimeout,
 	}), err
+}
+
+func openSqlite(ctx context.Context, dataSourceName string, connPoolConfig *ConnectionPoolConfig) (sqllog.Driver, error) {
+	if dataSourceName == "" {
+		if err := os.MkdirAll("./db", 0700); err != nil {
+			return nil, err
+		}
+		dataSourceName = "./db/state.db?_journal=WAL&_synchronous=FULL&_foreign_keys=1"
+	}
+	db, err := sql.Open("sqlite3", dataSourceName)
+	if err != nil {
+		return nil, err
+	}
+	if connPoolConfig != nil {
+		connPoolConfig.apply(db)
+	}
+
+	return sqlite.NewDriver(ctx, &sqlite.DriverOptions{
+		DB: database.NewPrepared(db),
+	})
+}
+
+func openDqlite(ctx context.Context, driverName, dataSourceName string, connPoolConfig *ConnectionPoolConfig) (sqllog.Driver, error) {
+	var (
+		db  *sql.DB
+		err error
+	)
+	for i := 0; i < 300; i++ {
+		db, err = openAndTest(ctx, driverName, dataSourceName)
+		if err == nil {
+			break
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(time.Second):
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if connPoolConfig != nil {
+		connPoolConfig.apply(db)
+	}
+
+	return dqlite.NewDriver(ctx, &dqlite.DriverOptions{
+		DB: database.NewPrepared(db),
+	})
+}
+
+func openAndTest(ctx context.Context, driverName, dataSourceName string) (*sql.DB, error) {
+	db, err := sql.Open(driverName, dataSourceName)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := db.PingContext(ctx); err != nil {
+		logrus.Errorf("failed to ping connection: %v", err)
+		db.Close()
+		return nil, err
+	}
+
+	return db, nil
 }
 
 type backendOptions struct {

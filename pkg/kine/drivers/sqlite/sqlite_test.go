@@ -5,8 +5,8 @@ import (
 	"database/sql"
 	"path"
 	"testing"
-	"time"
 
+	"github.com/canonical/k8s-dqlite/pkg/database"
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/sqlite"
 	"github.com/sirupsen/logrus"
 )
@@ -51,14 +51,9 @@ func TestMigration(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ctx := context.Background()
-	connPoolConfig := sqlite.ConnectionPoolConfig{
-		MaxIdle:     5,
-		MaxOpen:     5,
-		MaxLifetime: 60 * time.Second,
-		MaxIdleTime: 0 * time.Second,
-	}
-	if _, err := sqlite.NewDriver(ctx, "sqlite3", dbPath, &connPoolConfig); err != nil {
+	if _, err := sqlite.NewDriver(context.Background(), &sqlite.DriverOptions{
+		DB: database.NewPrepared(db),
+	}); err != nil {
 		t.Fatal(err)
 	}
 

@@ -4,10 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/canonical/k8s-dqlite/pkg/database"
 	"github.com/sirupsen/logrus"
@@ -18,8 +18,7 @@ import (
 )
 
 const (
-	otelName            = "sqlite"
-	defaultMaxIdleConns = 2 // default from database/sql
+	otelName = "sqlite"
 )
 
 var (
@@ -230,94 +229,38 @@ const maxRetries = 500
 type Stripped string
 
 func (s Stripped) String() string {
-	str := strings.ReplaceAll(string(s), "\n", "")
-	return regexp.MustCompile("[\t ]+").ReplaceAllString(str, " ")
+	builder := &strings.Builder{}
+	whitespace := true
+	for _, r := range s {
+		if unicode.IsSpace(r) {
+			if whitespace {
+				continue
+			}
+			whitespace = true
+			builder.WriteRune(' ')
+		} else {
+			whitespace = false
+			builder.WriteRune(r)
+		}
+	}
+	return builder.String()
 }
-
-type ErrRetry func(error) bool
-type ErrCode func(error) string
 
 type Driver struct {
-	sync.Mutex
+	mu sync.Mutex
 
-	LockWrites bool
+	options *DriverOptions
+}
+
+type DriverOptions struct {
 	DB         database.Interface
-	Retry      ErrRetry
-	ErrCode    ErrCode
-}
-
-type ConnectionPoolConfig struct {
-	MaxIdle     int
-	MaxOpen     int
-	MaxLifetime time.Duration
-	MaxIdleTime time.Duration
-}
-
-func configureConnectionPooling(connPoolConfig *ConnectionPoolConfig, db *sql.DB) {
-	// behavior of database/sql - zero means defaultMaxIdleConns; negative means 0
-	if connPoolConfig.MaxIdle < 0 {
-		connPoolConfig.MaxIdle = 0
-	} else if connPoolConfig.MaxIdle == 0 {
-		connPoolConfig.MaxIdle = defaultMaxIdleConns
-	}
-
-	logrus.Infof(
-		"Configuring database connection pooling: maxIdleConns=%d, maxOpenConns=%d, connMaxLifetime=%v, connMaxIdleTime=%v ",
-		connPoolConfig.MaxIdle,
-		connPoolConfig.MaxOpen,
-		connPoolConfig.MaxLifetime,
-		connPoolConfig.MaxIdleTime,
-	)
-	db.SetMaxIdleConns(connPoolConfig.MaxIdle)
-	db.SetMaxOpenConns(connPoolConfig.MaxOpen)
-	db.SetConnMaxLifetime(connPoolConfig.MaxLifetime)
-	db.SetConnMaxIdleTime(connPoolConfig.MaxIdleTime)
-}
-
-func openAndTest(driverName, dataSourceName string) (*sql.DB, error) {
-	db, err := sql.Open(driverName, dataSourceName)
-	if err != nil {
-		return nil, err
-	}
-
-	for i := 0; i < 3; i++ {
-		if err := db.Ping(); err != nil {
-			db.Close()
-			return nil, err
-		}
-	}
-
-	return db, nil
-}
-
-func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig *ConnectionPoolConfig) (*Driver, error) {
-	var (
-		db  *sql.DB
-		err error
-	)
-	for i := 0; i < 300; i++ {
-		db, err = openAndTest(driverName, dataSourceName)
-		if err == nil {
-			break
-		}
-
-		logrus.Errorf("failed to ping connection: %v", err)
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(time.Second):
-		}
-	}
-
-	configureConnectionPooling(connPoolConfig, db)
-
-	return &Driver{
-		DB: database.NewPrepared(db),
-	}, err
+	LockWrites bool
+	Retry      func(error) bool
+	ErrCode    func(error) string
 }
 
 func (d *Driver) Close() error {
-	return d.DB.Close()
+	return d.options.DB.Close()
 }
 
 func getPrefixRange(prefix string) (start, end string) {
@@ -356,11 +299,11 @@ func (d *Driver) query(ctx context.Context, txName, query string, args ...interf
 		} else {
 			logrus.Debugf("QUERY (try: %d) %v : %s", retryCount, args, Stripped(query))
 		}
-		rows, err = d.DB.QueryContext(ctx, query, args...)
+		rows, err = d.options.DB.QueryContext(ctx, query, args...)
 		if err == nil {
 			break
 		}
-		if d.Retry == nil || !d.Retry(err) {
+		if !d.options.Retry(err) {
 			break
 		}
 	}
@@ -380,9 +323,9 @@ func (d *Driver) execute(ctx context.Context, txName, query string, args ...inte
 		attribute.String("tx_name", txName),
 	)
 
-	if d.LockWrites {
-		d.Lock()
-		defer d.Unlock()
+	if d.options.LockWrites {
+		d.mu.Lock()
+		defer d.mu.Unlock()
 		span.AddEvent("acquired write lock")
 	}
 
@@ -400,11 +343,11 @@ func (d *Driver) execute(ctx context.Context, txName, query string, args ...inte
 		} else {
 			logrus.Tracef("EXEC (try: %d) %v : %s", retryCount, args, Stripped(query))
 		}
-		result, err = d.DB.ExecContext(ctx, query, args...)
+		result, err = d.options.DB.ExecContext(ctx, query, args...)
 		if err == nil {
 			break
 		}
-		if d.Retry == nil || !d.Retry(err) {
+		if !d.options.Retry(err) {
 			break
 		}
 	}
@@ -541,7 +484,7 @@ func (d *Driver) Compact(ctx context.Context, revision int64) (err error) {
 
 	for retryCount := 0; retryCount < maxRetries; retryCount++ {
 		err = d.tryCompact(ctx, compactStart, revision)
-		if err == nil || d.Retry == nil || !d.Retry(err) {
+		if err == nil || !d.options.Retry(err) {
 			break
 		}
 	}
@@ -557,7 +500,7 @@ func (d *Driver) tryCompact(ctx context.Context, start, end int64) (err error) {
 	span.SetAttributes(attribute.Int64("start", start), attribute.Int64("end", end))
 	compactBatchCnt.Add(ctx, 1)
 
-	tx, err := d.DB.BeginTx(ctx, nil)
+	tx, err := d.options.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
