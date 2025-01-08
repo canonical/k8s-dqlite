@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	otelName            = "generic"
+	otelName            = "sqlite"
 	defaultMaxIdleConns = 2 // default from database/sql
 )
 
@@ -237,7 +237,7 @@ func (s Stripped) String() string {
 type ErrRetry func(error) bool
 type ErrCode func(error) string
 
-type Generic struct {
+type Driver struct {
 	sync.Mutex
 
 	LockWrites bool
@@ -290,7 +290,7 @@ func openAndTest(driverName, dataSourceName string) (*sql.DB, error) {
 	return db, nil
 }
 
-func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig *ConnectionPoolConfig) (*Generic, error) {
+func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig *ConnectionPoolConfig) (*Driver, error) {
 	var (
 		db  *sql.DB
 		err error
@@ -311,12 +311,12 @@ func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig
 
 	configureConnectionPooling(connPoolConfig, db)
 
-	return &Generic{
+	return &Driver{
 		DB: database.NewPrepared(db),
 	}, err
 }
 
-func (d *Generic) Close() error {
+func (d *Driver) Close() error {
 	return d.DB.Close()
 }
 
@@ -332,7 +332,7 @@ func getPrefixRange(prefix string) (start, end string) {
 	return start, end
 }
 
-func (d *Generic) query(ctx context.Context, txName, query string, args ...interface{}) (rows *sql.Rows, err error) {
+func (d *Driver) query(ctx context.Context, txName, query string, args ...interface{}) (rows *sql.Rows, err error) {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.query", otelName))
 	defer func() {
 		span.RecordError(err)
@@ -369,7 +369,7 @@ func (d *Generic) query(ctx context.Context, txName, query string, args ...inter
 	return rows, err
 }
 
-func (d *Generic) execute(ctx context.Context, txName, query string, args ...interface{}) (result sql.Result, err error) {
+func (d *Driver) execute(ctx context.Context, txName, query string, args ...interface{}) (result sql.Result, err error) {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.execute", otelName))
 	defer func() {
 		span.RecordError(err)
@@ -413,7 +413,7 @@ func (d *Generic) execute(ctx context.Context, txName, query string, args ...int
 	return result, err
 }
 
-func (d *Generic) Count(ctx context.Context, prefix, startKey string, revision int64) (int64, error) {
+func (d *Driver) Count(ctx context.Context, prefix, startKey string, revision int64) (int64, error) {
 	start, end := getPrefixRange(prefix)
 	if startKey != "" {
 		start = startKey + "\x01"
@@ -438,7 +438,7 @@ func (d *Generic) Count(ctx context.Context, prefix, startKey string, revision i
 	return id, err
 }
 
-func (d *Generic) Create(ctx context.Context, key string, value []byte, ttl int64) (rev int64, succeeded bool, err error) {
+func (d *Driver) Create(ctx context.Context, key string, value []byte, ttl int64) (rev int64, succeeded bool, err error) {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Create", otelName))
 
 	defer func() {
@@ -466,7 +466,7 @@ func (d *Generic) Create(ctx context.Context, key string, value []byte, ttl int6
 	return rev, true, err
 }
 
-func (d *Generic) Update(ctx context.Context, key string, value []byte, preRev, ttl int64) (rev int64, updated bool, err error) {
+func (d *Driver) Update(ctx context.Context, key string, value []byte, preRev, ttl int64) (rev int64, updated bool, err error) {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Update", otelName))
 	defer func() {
 		span.RecordError(err)
@@ -488,7 +488,7 @@ func (d *Generic) Update(ctx context.Context, key string, value []byte, preRev, 
 	return rev, true, err
 }
 
-func (d *Generic) Delete(ctx context.Context, key string, revision int64) (rev int64, deleted bool, err error) {
+func (d *Driver) Delete(ctx context.Context, key string, revision int64) (rev int64, deleted bool, err error) {
 	deleteCnt.Add(ctx, 1)
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Delete", otelName))
 	defer func() {
@@ -517,7 +517,7 @@ func (d *Generic) Delete(ctx context.Context, key string, revision int64) (rev i
 // Compact compacts the database up to the revision provided in the method's call.
 // After the call, any request for a version older than the given revision will return
 // a compacted error.
-func (d *Generic) Compact(ctx context.Context, revision int64) (err error) {
+func (d *Driver) Compact(ctx context.Context, revision int64) (err error) {
 	compactCnt.Add(ctx, 1)
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Compact", otelName))
 	defer func() {
@@ -548,7 +548,7 @@ func (d *Generic) Compact(ctx context.Context, revision int64) (err error) {
 	return err
 }
 
-func (d *Generic) tryCompact(ctx context.Context, start, end int64) (err error) {
+func (d *Driver) tryCompact(ctx context.Context, start, end int64) (err error) {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.tryCompact", otelName))
 	defer func() {
 		span.RecordError(err)
@@ -604,7 +604,7 @@ func (d *Generic) tryCompact(ctx context.Context, start, end int64) (err error) 
 	return tx.Commit()
 }
 
-func (d *Generic) GetCompactRevision(ctx context.Context) (int64, int64, error) {
+func (d *Driver) GetCompactRevision(ctx context.Context) (int64, int64, error) {
 	getCompactRevCnt.Add(ctx, 1)
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.get_compact_revision", otelName))
 	var compact, target sql.NullInt64
@@ -637,7 +637,7 @@ func (d *Generic) GetCompactRevision(ctx context.Context) (int64, int64, error) 
 	return compact.Int64, target.Int64, err
 }
 
-func (d *Generic) DeleteRevision(ctx context.Context, revision int64) error {
+func (d *Driver) DeleteRevision(ctx context.Context, revision int64) error {
 	var err error
 	deleteRevCnt.Add(ctx, 1)
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.delete_revision", otelName))
@@ -651,7 +651,7 @@ func (d *Generic) DeleteRevision(ctx context.Context, revision int64) error {
 	return err
 }
 
-func (d *Generic) List(ctx context.Context, prefix, startKey string, limit, revision int64) (*sql.Rows, error) {
+func (d *Driver) List(ctx context.Context, prefix, startKey string, limit, revision int64) (*sql.Rows, error) {
 	start, end := getPrefixRange(prefix)
 	if startKey != "" {
 		start = startKey + "\x01"
@@ -664,11 +664,11 @@ func (d *Generic) List(ctx context.Context, prefix, startKey string, limit, revi
 	return d.query(ctx, "list_revision_start_sql", sql, start, end, revision)
 }
 
-func (d *Generic) ListTTL(ctx context.Context, revision int64) (*sql.Rows, error) {
+func (d *Driver) ListTTL(ctx context.Context, revision int64) (*sql.Rows, error) {
 	return d.query(ctx, "ttl_sql", ttlSQL, revision)
 }
 
-func (d *Generic) CurrentRevision(ctx context.Context) (int64, error) {
+func (d *Driver) CurrentRevision(ctx context.Context) (int64, error) {
 	var id int64
 	var err error
 
@@ -699,7 +699,7 @@ func (d *Generic) CurrentRevision(ctx context.Context) (int64, error) {
 	return id, nil
 }
 
-func (d *Generic) AfterPrefix(ctx context.Context, prefix string, rev, limit int64) (*sql.Rows, error) {
+func (d *Driver) AfterPrefix(ctx context.Context, prefix string, rev, limit int64) (*sql.Rows, error) {
 	start, end := getPrefixRange(prefix)
 	sql := afterSQLPrefix
 	if limit > 0 {
@@ -709,7 +709,7 @@ func (d *Generic) AfterPrefix(ctx context.Context, prefix string, rev, limit int
 	return d.query(ctx, "after_sql_prefix", sql, start, end, rev)
 }
 
-func (d *Generic) After(ctx context.Context, rev, limit int64) (*sql.Rows, error) {
+func (d *Driver) After(ctx context.Context, rev, limit int64) (*sql.Rows, error) {
 	sql := afterSQL
 	if limit > 0 {
 		sql = fmt.Sprintf("%s LIMIT ?", sql)
@@ -718,17 +718,17 @@ func (d *Generic) After(ctx context.Context, rev, limit int64) (*sql.Rows, error
 	return d.query(ctx, "after_sql", sql, rev)
 }
 
-func (d *Generic) Fill(ctx context.Context, revision int64) error {
+func (d *Driver) Fill(ctx context.Context, revision int64) error {
 	fillCnt.Add(ctx, 1)
 	_, err := d.execute(ctx, "fill_sql", fillSQL, revision, fmt.Sprintf("gap-%d", revision), 0, 1, 0, 0, 0, nil, nil)
 	return err
 }
 
-func (d *Generic) IsFill(key string) bool {
+func (d *Driver) IsFill(key string) bool {
 	return strings.HasPrefix(key, "gap-")
 }
 
-func (d *Generic) GetSize(ctx context.Context) (int64, error) {
+func (d *Driver) GetSize(ctx context.Context) (int64, error) {
 	rows, err := d.query(ctx, "get_size_sql", getSizeSQL)
 	if err != nil {
 		return 0, err
