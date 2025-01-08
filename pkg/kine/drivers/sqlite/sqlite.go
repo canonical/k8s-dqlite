@@ -11,7 +11,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func NewDriver(ctx context.Context, driverName, dataSourceName string, connectionPoolConfig *ConnectionPoolConfig) (*Generic, error) {
+func NewDriver(ctx context.Context, driverName, dataSourceName string, connectionPoolConfig *ConnectionPoolConfig) (*Driver, error) {
 	const retryAttempts = 300
 
 	driver, err := Open(ctx, driverName, dataSourceName, connectionPoolConfig)
