@@ -6,16 +6,15 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/generic"
 	"github.com/mattn/go-sqlite3"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
-func NewDriver(ctx context.Context, driverName, dataSourceName string, connectionPoolConfig *generic.ConnectionPoolConfig) (*generic.Generic, error) {
+func NewDriver(ctx context.Context, driverName, dataSourceName string, connectionPoolConfig *ConnectionPoolConfig) (*Generic, error) {
 	const retryAttempts = 300
 
-	driver, err := generic.Open(ctx, driverName, dataSourceName, connectionPoolConfig)
+	driver, err := Open(ctx, driverName, dataSourceName, connectionPoolConfig)
 	if err != nil {
 		return nil, err
 	}

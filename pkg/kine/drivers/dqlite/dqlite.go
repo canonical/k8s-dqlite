@@ -8,7 +8,6 @@ import (
 
 	"github.com/canonical/go-dqlite/v2"
 	"github.com/canonical/go-dqlite/v2/driver"
-	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/generic"
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/sqlite"
 	"github.com/canonical/k8s-dqlite/pkg/kine/sqllog"
 	"github.com/mattn/go-sqlite3"
@@ -23,7 +22,7 @@ func init() {
 	}
 }
 
-func NewDriver(ctx context.Context, driverName, datasourceName string, connectionPoolConfig *generic.ConnectionPoolConfig) (sqllog.Driver, error) {
+func NewDriver(ctx context.Context, driverName, datasourceName string, connectionPoolConfig *sqlite.ConnectionPoolConfig) (sqllog.Driver, error) {
 	logrus.Printf("New kine for dqlite")
 
 	driver_, err := sqlite.NewDriver(ctx, driverName, datasourceName, connectionPoolConfig)

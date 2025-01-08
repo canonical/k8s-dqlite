@@ -13,7 +13,7 @@ import (
 	"github.com/canonical/go-dqlite/v2"
 	"github.com/canonical/go-dqlite/v2/app"
 	"github.com/canonical/go-dqlite/v2/client"
-	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/generic"
+	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/sqlite"
 	"github.com/canonical/k8s-dqlite/pkg/kine/endpoint"
 	"github.com/canonical/k8s-dqlite/pkg/kine/server"
 	kine_tls "github.com/canonical/k8s-dqlite/pkg/kine/tls"
@@ -74,7 +74,7 @@ func New(
 	watchAvailableStorageInterval time.Duration,
 	watchAvailableStorageMinBytes uint64,
 	lowAvailableStorageAction string,
-	connectionPoolConfig generic.ConnectionPoolConfig,
+	connectionPoolConfig sqlite.ConnectionPoolConfig,
 	watchQueryTimeout time.Duration,
 	watchProgressNotifyInterval time.Duration,
 
