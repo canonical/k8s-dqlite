@@ -42,7 +42,7 @@ jobs:
           go-version: "1.22"
       - name: Set-up R
         run: |
-          sudo apt install r-base
+          sudo apt-get install -y r-base
           sudo Rscript -e 'install.packages(c("ggplot2", "dplyr", "optparse"), repos="https://cloud.r-project.org")'
       - name: Install lxd
         uses: canonical/k8s-snap/.github/actions/install-lxd@main
