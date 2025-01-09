@@ -11,6 +11,7 @@ import (
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/generic"
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/sqlite"
 	"github.com/canonical/k8s-dqlite/pkg/kine/server"
+	"github.com/canonical/k8s-dqlite/pkg/kine/sqllog"
 	"github.com/canonical/k8s-dqlite/pkg/kine/tls"
 	"github.com/mattn/go-sqlite3"
 	"github.com/pkg/errors"
@@ -24,28 +25,27 @@ func init() {
 	}
 }
 
-func New(ctx context.Context, datasourceName string, tlsInfo tls.Config, connectionPoolConfig *generic.ConnectionPoolConfig) (server.Backend, error) {
-	backend, _, err := NewVariant(ctx, datasourceName, connectionPoolConfig)
-	return backend, err
+func New(ctx context.Context, datasourceName string, tlsInfo tls.Config, connectionPoolConfig *generic.ConnectionPoolConfig) (sqllog.Dialect, error) {
+	return NewVariant(ctx, datasourceName, connectionPoolConfig)
 }
 
-func NewVariant(ctx context.Context, datasourceName string, connectionPoolConfig *generic.ConnectionPoolConfig) (server.Backend, *generic.Generic, error) {
+func NewVariant(ctx context.Context, datasourceName string, connectionPoolConfig *generic.ConnectionPoolConfig) (sqllog.Dialect, error) {
 	logrus.Printf("New kine for dqlite")
 
 	// Driver name will be extracted from query parameters
-	backend, generic, err := sqlite.NewVariant(ctx, "", datasourceName, connectionPoolConfig)
+	generic, err := sqlite.NewVariant(ctx, "", datasourceName, connectionPoolConfig)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "sqlite client")
+		return nil, errors.Wrap(err, "sqlite client")
 	}
 
 	conn, err := generic.DB.Conn(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	defer conn.Close()
 
 	if err := migrate(ctx, conn); err != nil {
-		return nil, nil, errors.Wrap(err, "failed to migrate DB from sqlite")
+		return nil, errors.Wrap(err, "failed to migrate DB from sqlite")
 	}
 	generic.LockWrites = true
 	generic.Retry = func(err error) bool {
@@ -79,7 +79,7 @@ func NewVariant(ctx context.Context, datasourceName string, connectionPoolConfig
 		return false
 	}
 
-	return backend, generic, nil
+	return generic, nil
 }
 
 func migrate(ctx context.Context, newDB *sql.Conn) (exitErr error) {

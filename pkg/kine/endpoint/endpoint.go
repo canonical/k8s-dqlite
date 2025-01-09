@@ -12,6 +12,7 @@ import (
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/generic"
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/sqlite"
 	"github.com/canonical/k8s-dqlite/pkg/kine/server"
+	"github.com/canonical/k8s-dqlite/pkg/kine/sqllog"
 	"github.com/canonical/k8s-dqlite/pkg/kine/tls"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -153,21 +154,21 @@ func grpcServer(config Config) *grpc.Server {
 	return grpc.NewServer(gopts...)
 }
 
-func getKineStorageBackend(ctx context.Context, driver, dsn string, cfg Config) (server.Backend, error) {
+func getKineStorageBackend(ctx context.Context, backendType, dsn string, cfg Config) (server.Backend, error) {
 	var (
-		backend server.Backend
-		err     error
+		driver sqllog.Dialect
+		err    error
 	)
-	switch driver {
+	switch backendType {
 	case SQLiteBackend:
-		backend, err = sqlite.New(ctx, dsn, &cfg.ConnectionPoolConfig)
+		driver, err = sqlite.New(ctx, dsn, &cfg.ConnectionPoolConfig)
 	case DQLiteBackend:
-		backend, err = dqlite.New(ctx, dsn, cfg.Config, &cfg.ConnectionPoolConfig)
+		driver, err = dqlite.New(ctx, dsn, cfg.Config, &cfg.ConnectionPoolConfig)
 	default:
 		return nil, fmt.Errorf("storage backend is not defined")
 	}
 
-	return backend, err
+	return sqllog.New(driver), err
 }
 
 func ParseStorageEndpoint(storageEndpoint string) (string, string) {

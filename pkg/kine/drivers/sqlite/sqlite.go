@@ -11,7 +11,6 @@ import (
 
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/generic"
 	"github.com/canonical/k8s-dqlite/pkg/kine/server"
-	"github.com/canonical/k8s-dqlite/pkg/kine/sqllog"
 	"github.com/mattn/go-sqlite3"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -26,27 +25,27 @@ type opts struct {
 	watchQueryTimeout time.Duration
 }
 
-func New(ctx context.Context, dataSourceName string, connectionPoolConfig *generic.ConnectionPoolConfig) (server.Backend, error) {
-	backend, _, err := NewVariant(ctx, "sqlite3", dataSourceName, connectionPoolConfig)
+func New(ctx context.Context, dataSourceName string, connectionPoolConfig *generic.ConnectionPoolConfig) (*generic.Generic, error) {
+	driver, err := NewVariant(ctx, "sqlite3", dataSourceName, connectionPoolConfig)
 	if err != nil {
 		return nil, err
 	}
 
-	return backend, err
+	return driver, err
 }
 
-func NewVariant(ctx context.Context, driverName, dataSourceName string, connectionPoolConfig *generic.ConnectionPoolConfig) (server.Backend, *generic.Generic, error) {
+func NewVariant(ctx context.Context, driverName, dataSourceName string, connectionPoolConfig *generic.ConnectionPoolConfig) (*generic.Generic, error) {
 	const retryAttempts = 300
 
 	opts, err := parseOpts(dataSourceName)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	if driverName == "" {
 		// Check if driver name is set via query parameters
 		if opts.driverName == "" {
-			return nil, nil, fmt.Errorf("required option 'driver-name' not set in connection string")
+			return nil, fmt.Errorf("required option 'driver-name' not set in connection string")
 		}
 		driverName = opts.driverName
 	}
@@ -54,14 +53,14 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string, connecti
 
 	if opts.dsn == "" {
 		if err := os.MkdirAll("./db", 0700); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		opts.dsn = "./db/state.db?_journal=WAL&_synchronous=FULL&_foreign_keys=1"
 	}
 
 	dialect, err := generic.Open(ctx, driverName, opts.dsn, connectionPoolConfig)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	for i := 0; i < retryAttempts; i++ {
 		err = func() error {
@@ -78,7 +77,7 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string, connecti
 		logrus.Errorf("failed to setup db: %v", err)
 		select {
 		case <-ctx.Done():
-			return nil, nil, ctx.Err()
+			return nil, ctx.Err()
 		case <-time.After(time.Second):
 		}
 		time.Sleep(time.Second)
@@ -97,7 +96,7 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string, connecti
 		}
 	}
 
-	return sqllog.New(dialect), dialect, nil
+	return dialect, nil
 }
 
 // setup performs table setup, which may include creation of the Kine table if
