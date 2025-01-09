@@ -25,11 +25,11 @@ func init() {
 	}
 }
 
-func New(ctx context.Context, datasourceName string, tlsInfo tls.Config, connectionPoolConfig *generic.ConnectionPoolConfig) (sqllog.Dialect, error) {
+func New(ctx context.Context, datasourceName string, tlsInfo tls.Config, connectionPoolConfig *generic.ConnectionPoolConfig) (sqllog.Driver, error) {
 	return NewVariant(ctx, datasourceName, connectionPoolConfig)
 }
 
-func NewVariant(ctx context.Context, datasourceName string, connectionPoolConfig *generic.ConnectionPoolConfig) (sqllog.Dialect, error) {
+func NewVariant(ctx context.Context, datasourceName string, connectionPoolConfig *generic.ConnectionPoolConfig) (sqllog.Driver, error) {
 	logrus.Printf("New kine for dqlite")
 
 	// Driver name will be extracted from query parameters

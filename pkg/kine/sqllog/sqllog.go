@@ -42,7 +42,7 @@ func init() {
 	}
 }
 
-type Dialect interface {
+type Driver interface {
 	List(ctx context.Context, prefix, startKey string, limit, revision int64) (*sql.Rows, error)
 	ListTTL(ctx context.Context, revision int64) (*sql.Rows, error)
 	Count(ctx context.Context, prefix, startKey string, revision int64) (int64, error)
@@ -69,13 +69,13 @@ type SQLLog struct {
 	stop    func()
 	started bool
 
-	d           Dialect
+	d           Driver
 	broadcaster broadcaster.Broadcaster[[]*server.Event]
 	notify      chan int64
 	wg          sync.WaitGroup
 }
 
-func New(d Dialect) *SQLLog {
+func New(d Driver) *SQLLog {
 	return &SQLLog{
 		d:      d,
 		notify: make(chan int64, 1024),

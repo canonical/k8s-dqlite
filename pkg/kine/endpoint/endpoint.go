@@ -156,7 +156,7 @@ func grpcServer(config Config) *grpc.Server {
 
 func getKineStorageBackend(ctx context.Context, backendType, dsn string, cfg Config) (server.Backend, error) {
 	var (
-		driver sqllog.Dialect
+		driver sqllog.Driver
 		err    error
 	)
 	switch backendType {
