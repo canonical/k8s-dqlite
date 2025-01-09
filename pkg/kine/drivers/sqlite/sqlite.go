@@ -64,7 +64,14 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string, connecti
 		return nil, nil, err
 	}
 	for i := 0; i < retryAttempts; i++ {
-		err = setup(ctx, dialect.DB.Underlying())
+		err = func() error {
+			conn, err := dialect.DB.Conn(ctx)
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+			return setup(ctx, conn)
+		}()
 		if err == nil {
 			break
 		}
@@ -104,7 +111,7 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string, connecti
 // it doesn't already exist, migrating key_value table contents to the Kine
 // table if the key_value table exists, all in a single database transaction.
 // changes are rolled back if an error occurs.
-func setup(ctx context.Context, db *sql.DB) error {
+func setup(ctx context.Context, db *sql.Conn) error {
 	// Optimistically ask for the user_version without starting a transaction
 	var currentSchemaVersion SchemaVersion
 
