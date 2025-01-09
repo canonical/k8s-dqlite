@@ -36,22 +36,20 @@ type Config struct {
 }
 
 type ETCDConfig struct {
-	Endpoints   []string
-	TLSConfig   tls.Config
-	LeaderElect bool
+	Endpoints []string
+	TLSConfig tls.Config
 }
 
 func Listen(ctx context.Context, config Config) (ETCDConfig, error) {
 	driver, dsn := ParseStorageEndpoint(config.Endpoint)
 	if driver == ETCDBackend {
 		return ETCDConfig{
-			Endpoints:   strings.Split(config.Endpoint, ","),
-			TLSConfig:   config.Config,
-			LeaderElect: true,
+			Endpoints: strings.Split(config.Endpoint, ","),
+			TLSConfig: config.Config,
 		}, nil
 	}
 
-	leaderelect, backend, err := getKineStorageBackend(ctx, driver, dsn, config)
+	backend, err := getKineStorageBackend(ctx, driver, dsn, config)
 	if err != nil {
 		return ETCDConfig{}, errors.Wrap(err, "building kine")
 	}
@@ -82,9 +80,8 @@ func Listen(ctx context.Context, config Config) (ETCDConfig, error) {
 	context.AfterFunc(ctx, grpcServer.Stop)
 
 	return ETCDConfig{
-		LeaderElect: leaderelect,
-		Endpoints:   []string{listen},
-		TLSConfig:   tls.Config{},
+		Endpoints: []string{listen},
+		TLSConfig: tls.Config{},
 	}, nil
 }
 
@@ -110,13 +107,12 @@ func ListenAndReturnBackend(ctx context.Context, config Config) (ETCDConfig, ser
 	driver, dsn := ParseStorageEndpoint(config.Endpoint)
 	if driver == ETCDBackend {
 		return ETCDConfig{
-			Endpoints:   strings.Split(config.Endpoint, ","),
-			TLSConfig:   config.Config,
-			LeaderElect: true,
+			Endpoints: strings.Split(config.Endpoint, ","),
+			TLSConfig: config.Config,
 		}, nil, nil
 	}
 
-	leaderelect, backend, err := getKineStorageBackend(ctx, driver, dsn, config)
+	backend, err := getKineStorageBackend(ctx, driver, dsn, config)
 	if err != nil {
 		return ETCDConfig{}, nil, errors.Wrap(err, "building kine")
 	}
@@ -148,9 +144,8 @@ func ListenAndReturnBackend(ctx context.Context, config Config) (ETCDConfig, ser
 	context.AfterFunc(ctx, grpcServer.Stop)
 
 	return ETCDConfig{
-		LeaderElect: leaderelect,
-		Endpoints:   []string{listen},
-		TLSConfig:   tls.Config{},
+		Endpoints: []string{listen},
+		TLSConfig: tls.Config{},
 	}, backend, nil
 }
 
@@ -172,23 +167,21 @@ func grpcServer(config Config) *grpc.Server {
 	return grpc.NewServer(gopts...)
 }
 
-func getKineStorageBackend(ctx context.Context, driver, dsn string, cfg Config) (bool, server.Backend, error) {
+func getKineStorageBackend(ctx context.Context, driver, dsn string, cfg Config) (server.Backend, error) {
 	var (
-		backend     server.Backend
-		leaderElect = true
-		err         error
+		backend server.Backend
+		err     error
 	)
 	switch driver {
 	case SQLiteBackend:
-		leaderElect = false
 		backend, err = sqlite.New(ctx, dsn, &cfg.ConnectionPoolConfig)
 	case DQLiteBackend:
 		backend, err = dqlite.New(ctx, dsn, cfg.Config, &cfg.ConnectionPoolConfig)
 	default:
-		return false, nil, fmt.Errorf("storage backend is not defined")
+		return nil, fmt.Errorf("storage backend is not defined")
 	}
 
-	return leaderElect, backend, err
+	return backend, err
 }
 
 func ParseStorageEndpoint(storageEndpoint string) (string, string) {
