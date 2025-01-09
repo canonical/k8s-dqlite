@@ -25,6 +25,10 @@ type preparedDb[T Transaction] struct {
 	store      map[string]*sql.Stmt
 }
 
+// NewPrepared creates a new Interface that wraps the given database and
+// uses a prepare cache to reduce the number of prepare calls. The cache
+// is only used when calling ExecContext and QueryContext methods on the
+// main instance or in a transaction.
 func NewPrepared[T Transaction](db Wrapped[T]) Interface {
 	return &preparedDb[T]{
 		underlying: db,

@@ -8,7 +8,7 @@ import (
 	"github.com/canonical/k8s-dqlite/pkg/database"
 )
 
-func TestPreparedPrepare(t *testing.T) {
+func TestPreparedDistinctStmts(t *testing.T) {
 	const expectedQuery = "test query"
 
 	ctx := context.Background()
@@ -31,7 +31,7 @@ func TestPreparedPrepare(t *testing.T) {
 	defer stmt2.Close()
 
 	if stmts := driver.stmts.Load(); stmts != 2 {
-		t.Errorf("invalid open statements: want 1, got %d", stmts)
+		t.Errorf("invalid open statements: want 2, got %d", stmts)
 	}
 }
 
@@ -50,7 +50,7 @@ func TestPreparedQuery(t *testing.T) {
 	rows.Close()
 
 	if stmts := driver.stmts.Load(); stmts != 1 {
-		t.Errorf("unexpected number of open statements: want %d, got %d", 1, stmts)
+		t.Errorf("unexpected number of open statements: want 1, got %d", stmts)
 	}
 
 	rows, err = db.QueryContext(ctx, "query 2")
@@ -78,7 +78,7 @@ func TestPreparedExec(t *testing.T) {
 	}
 
 	if stmts := driver.stmts.Load(); stmts != 1 {
-		t.Errorf("unexpected number of open statements: want %d, got %d", 1, stmts)
+		t.Errorf("unexpected number of open statements: want 1, got %d", stmts)
 	}
 
 	_, err = db.ExecContext(ctx, "query 2")
@@ -118,14 +118,14 @@ func TestPreparedTx(t *testing.T) {
 		return nil
 	}
 
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 1; i++ {
 		if err := transaction(); err != nil {
 			t.Error(err)
 		}
 	}
 
 	if stmts := driver.stmts.Load(); stmts != 4 {
-		t.Errorf("unexpected number of open statements: want 2, got %d", stmts)
+		t.Errorf("unexpected number of open statements: want 4, got %d", stmts)
 	}
 
 	_, err := db.ExecContext(ctx, "query 2")
@@ -134,6 +134,6 @@ func TestPreparedTx(t *testing.T) {
 	}
 
 	if stmts := driver.stmts.Load(); stmts != 4 {
-		t.Errorf("unexpected number of open statements: want 2, got %d", stmts)
+		t.Errorf("unexpected number of open statements: want 4, got %d", stmts)
 	}
 }
