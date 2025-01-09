@@ -34,11 +34,7 @@ jobs:
         run: |
           sudo snap download k8s --channel=latest/edge --basename k8s
       - name: Install lxd
-        run: |
-          sudo snap refresh lxd --channel 5.21/stable
-          sudo lxd init --auto
-          sudo usermod --append --groups lxd $USER
-          sg lxd -c 'lxc version'
+        uses: canonical/k8s-snap/.github/actions/install-lxd@main
       - name: Build k8s-dqlite
         run: |
           make static
