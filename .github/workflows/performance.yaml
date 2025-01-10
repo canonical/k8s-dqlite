@@ -21,7 +21,7 @@ env:
 jobs:
   build:
     name: K8s-snap Performance Test
-    runs-on: ubuntu-20.04
+    runs-on: self-hosted-linux-amd64-jammy-large
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@v2
@@ -42,20 +42,10 @@ jobs:
           go-version: "1.22"
       - name: Set-up R
         run: |
-          sudo apt install r-base
+          sudo apt-get install -y r-base
           sudo Rscript -e 'install.packages(c("ggplot2", "dplyr", "optparse"), repos="https://cloud.r-project.org")'
       - name: Install lxd
-        run: |
-          sudo snap refresh lxd --channel 5.21/stable
-          sudo lxd init --auto
-          sudo usermod --append --groups lxd $USER
-          sg lxd -c 'lxc version'
-      - name: Ensure lxd network traffic flows by removing docker if installed
-        run: |
-          if command -v docker >/dev/null 2>&1; then
-            echo "Docker is installed, purging it"
-            sudo apt-get purge -y docker-engine docker docker.io docker-ce docker-ce-cli containerd runc
-          fi
+        uses: canonical/k8s-snap/.github/actions/install-lxd@main
       - name: Download latest k8s-snap
         run: |
           sudo snap download k8s --channel=latest/edge --basename k8s
