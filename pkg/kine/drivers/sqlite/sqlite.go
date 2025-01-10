@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/generic"
-	"github.com/canonical/k8s-dqlite/pkg/kine/server"
 	"github.com/mattn/go-sqlite3"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -58,13 +57,13 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string, connecti
 		opts.dsn = "./db/state.db?_journal=WAL&_synchronous=FULL&_foreign_keys=1"
 	}
 
-	dialect, err := generic.Open(ctx, driverName, opts.dsn, connectionPoolConfig)
+	driver, err := generic.Open(ctx, driverName, opts.dsn, connectionPoolConfig)
 	if err != nil {
 		return nil, err
 	}
 	for i := 0; i < retryAttempts; i++ {
 		err = func() error {
-			conn, err := dialect.DB.Conn(ctx)
+			conn, err := driver.DB.Conn(ctx)
 			if err != nil {
 				return err
 			}
@@ -83,12 +82,12 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string, connecti
 		time.Sleep(time.Second)
 	}
 
-	dialect.CompactInterval = opts.compactInterval
-	dialect.PollInterval = opts.pollInterval
-	dialect.WatchQueryTimeout = opts.watchQueryTimeout
+	driver.CompactInterval = opts.compactInterval
+	driver.PollInterval = opts.pollInterval
+	driver.WatchQueryTimeout = opts.watchQueryTimeout
 
 	if driverName == "sqlite3" {
-		dialect.Retry = func(err error) bool {
+		driver.Retry = func(err error) bool {
 			if err, ok := err.(sqlite3.Error); ok {
 				return err.Code == sqlite3.ErrBusy
 			}
@@ -96,7 +95,7 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string, connecti
 		}
 	}
 
-	return dialect, nil
+	return driver, nil
 }
 
 // setup performs table setup, which may include creation of the Kine table if
