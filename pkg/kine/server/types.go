@@ -7,7 +7,6 @@ import (
 )
 
 var (
-	ErrKeyExists     = rpctypes.ErrGRPCDuplicateKey
 	ErrCompacted     = rpctypes.ErrGRPCCompacted
 	ErrGRPCUnhealthy = rpctypes.ErrGRPCUnhealthy
 )
