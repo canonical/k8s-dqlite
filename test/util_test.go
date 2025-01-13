@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"path"
 	"strings"
 	"testing"
@@ -130,16 +131,31 @@ func newKineServer(ctx context.Context, tb testing.TB, options *kineOptions) *ki
 }
 
 func startSqlite(_ context.Context, tb testing.TB, dir string) (*endpoint.Config, *sql.DB) {
-	dbPath := path.Join(dir, "data.db") + "?_journal=WAL&_synchronous=FULL&_foreign_keys=1"
+	dbPath := path.Join(dir, "data.db")
 
 	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
 		tb.Fatal(err)
 	}
 
+	listenerUri := url.URL{
+		Scheme: "unix",
+		Path:   path.Join(dir, "kine.sock"),
+	}
+
+	endpointUri := url.URL{
+		Scheme: "sqlite",
+		Path:   dbPath,
+		RawQuery: url.Values{
+			"_journal":      []string{"WAL"},
+			"_synchronous":  []string{"FULL"},
+			"_foreign_keys": []string{"1"},
+		}.Encode(),
+	}
+
 	return &endpoint.Config{
-		Listener:       fmt.Sprintf("unix://%s/kine.sock", dir),
-		Endpoint:       fmt.Sprintf("sqlite://%s", dbPath),
+		Listener:       listenerUri.String(),
+		Endpoint:       endpointUri.String(),
 		NotifyInterval: 5 * time.Second,
 	}, db
 }

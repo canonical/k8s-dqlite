@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"path"
 	"strings"
 	"time"
 
@@ -43,8 +44,7 @@ type ETCDConfig struct {
 }
 
 func Listen(ctx context.Context, config Config) (ETCDConfig, error) {
-	driver, dsn := ParseStorageEndpoint(config.Endpoint)
-	backend, err := getKineStorageBackend(ctx, driver, dsn, config)
+	backend, err := getKineStorageBackend(ctx, config)
 	if err != nil {
 		return ETCDConfig{}, errors.Wrap(err, "building kine")
 	}
@@ -80,7 +80,7 @@ func Listen(ctx context.Context, config Config) (ETCDConfig, error) {
 	}, nil
 }
 
-func createListener(listen string) (ret net.Listener, rerr error) {
+func createListener(listen string) (_ net.Listener, err error) {
 	network, address := networkAndAddress(listen)
 
 	if network == "unix" {
@@ -88,19 +88,26 @@ func createListener(listen string) (ret net.Listener, rerr error) {
 			logrus.Warnf("failed to remove socket %s: %v", address, err)
 		}
 		defer func() {
-			if err := os.Chmod(address, 0600); err != nil {
-				rerr = err
+			if chmodErr := os.Chmod(address, 0600); chmodErr != nil {
+				err = chmodErr
 			}
 		}()
 	}
 
-	logrus.Infof("Kine listening on %s://%s", network, address)
+	logrus.Infof("Kine listening on %s", listen)
 	return net.Listen(network, address)
 }
 
+func networkAndAddress(str string) (string, string) {
+	before, after, found := strings.Cut(str, "://")
+	if found {
+		return before, after
+	}
+	return "", before
+}
+
 func ListenAndReturnBackend(ctx context.Context, config Config) (ETCDConfig, server.Backend, error) {
-	driver, dsn := ParseStorageEndpoint(config.Endpoint)
-	backend, err := getKineStorageBackend(ctx, driver, dsn, config)
+	backend, err := getKineStorageBackend(ctx, config)
 	if err != nil {
 		return ETCDConfig{}, nil, errors.Wrap(err, "building kine")
 	}
@@ -155,64 +162,50 @@ func grpcServer(config Config) *grpc.Server {
 	return grpc.NewServer(gopts...)
 }
 
-func getKineStorageBackend(ctx context.Context, backendType, uri string, cfg Config) (server.Backend, error) {
+func getKineStorageBackend(ctx context.Context, config Config) (server.Backend, error) {
 	var (
 		driver sqllog.Driver
 		err    error
 	)
 
-	storageOptions, err := parseOpts(uri)
+	options, err := parseOpts(config.Endpoint)
 	if err != nil {
 		return nil, err
 	}
 
-	switch backendType {
+	switch options.BackendType {
 	case SQLiteBackend:
-		dataSourceName := storageOptions.DataSourceName
+		dataSourceName := options.DataSourceName
 		if dataSourceName == "" {
 			if err := os.MkdirAll("./db", 0700); err != nil {
 				return nil, err
 			}
 			dataSourceName = "./db/state.db?_journal=WAL&_synchronous=FULL&_foreign_keys=1"
 		}
-		driver, err = sqlite.New(ctx, "sqlite3", dataSourceName, &cfg.ConnectionPoolConfig)
+		driver, err = sqlite.New(ctx, "sqlite3", dataSourceName, &config.ConnectionPoolConfig)
 	case DQLiteBackend:
-		driver, err = dqlite.New(ctx, storageOptions.DriverName, storageOptions.DataSourceName, &cfg.ConnectionPoolConfig)
+		driver, err = dqlite.New(ctx, options.DriverName, options.DataSourceName, &config.ConnectionPoolConfig)
 	default:
-		return nil, fmt.Errorf("storage backend is not defined")
+		return nil, fmt.Errorf("backend type %s is not defined", options.BackendType)
 	}
 
 	return sqllog.New(&sqllog.SQLLogOptions{
 		Driver:            driver,
-		CompactInterval:   storageOptions.CompactInterval,
-		PollInterval:      storageOptions.PollInterval,
-		WatchQueryTimeout: storageOptions.WatchQueryTimeout,
+		CompactInterval:   options.CompactInterval,
+		PollInterval:      options.PollInterval,
+		WatchQueryTimeout: options.WatchQueryTimeout,
 	}), err
 }
 
-func ParseStorageEndpoint(storageEndpoint string) (string, string) {
-	network, address := networkAndAddress(storageEndpoint)
-	if network == "" {
-		network = SQLiteBackend
-	}
-	return network, address
-}
-
-func networkAndAddress(str string) (string, string) {
-	parts := strings.SplitN(str, "://", 2)
-	if len(parts) > 1 {
-		return parts[0], parts[1]
-	}
-	return "", parts[0]
-}
-
 type backendOptions struct {
+	// BackendType is the type of backend to use.
+	BackendType string
+
+	// DriverName is the name of the database driver.
+	DriverName string
+
 	// DataSourceName is the uri for the database file.
 	DataSourceName string
-
-	// DriverName is the name of the database driver. It is only used for dqlite.
-	// If empty, a pre-registered default is used.
-	DriverName string
 
 	CompactInterval   time.Duration
 	PollInterval      time.Duration
@@ -220,52 +213,72 @@ type backendOptions struct {
 }
 
 func parseOpts(rawUri string) (*backendOptions, error) {
-	result := &backendOptions{}
-
 	uri, err := url.Parse(rawUri)
 	if err != nil {
 		return nil, err
 	}
+
+	// The configuration of kine uses the schema as the
+	// driver name. However that forces the URL to be
+	// absolute, while using a relative path. As such,
+	// the host, if present, should actually be part
+	// of the path.
+	uri.Path = path.Join(uri.Host, uri.Path)
+	uri.Host = ""
 
 	options, err := url.ParseQuery(uri.RawQuery)
 	if err != nil {
 		return nil, err
 	}
 
-	if driverName := options.Get("driver-name"); driverName != "" {
-		delete(options, "driver-name")
-		result.DriverName = driverName
+	backendType := uri.Scheme
+	if backendType == "" {
+		backendType = SQLiteBackend
 	}
 
-	if compactInterval := options.Get("compact-interval"); compactInterval != "" {
-		delete(options, "compact-interval")
-		interval, err := time.ParseDuration(compactInterval)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse compact-interval duration value %q: %w", compactInterval, err)
+	driverName := options.Get("driver-name")
+	options.Del("driver-name")
+
+	getDuration := func(name string, defaultValue time.Duration) (time.Duration, error) {
+		defer options.Del(name)
+
+		value := options.Get(name)
+		if value == "" {
+			return defaultValue, nil
 		}
-		result.CompactInterval = interval
-	}
-
-	if pollInterval := options.Get("poll-interval"); pollInterval != "" {
-		delete(options, "poll-interval")
-		interval, err := time.ParseDuration(pollInterval)
+		duration, err := time.ParseDuration(value)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse poll-interval duration value %q: %w", pollInterval, err)
+			return 0, fmt.Errorf("failed to parse compact-interval duration value %q: %w", value, err)
 		}
-		result.PollInterval = interval
+		return duration, nil
 	}
 
-	if watchQueryTimeout := options.Get("watch-query-timeout"); watchQueryTimeout != "" {
-		delete(options, "watch-query-timeout")
-		interval, err := time.ParseDuration(watchQueryTimeout)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse watch-query-timeout duration value %q: %w", watchQueryTimeout, err)
-		}
-		result.WatchQueryTimeout = interval
+	compactInterval, err := getDuration("compact-interval", 5*time.Minute)
+	if err != nil {
+		return nil, err
 	}
 
-	uri.RawQuery = url.Values(options).Encode()
-	result.DataSourceName = uri.String()
+	pollInterval, err := getDuration("poll-interval", 1*time.Second)
+	if err != nil {
+		return nil, err
+	}
 
-	return result, nil
+	watchQueryTimeout, err := getDuration("watch-query-timeout", 20*time.Second)
+	if err != nil {
+		return nil, err
+	}
+
+	dataSource := &url.URL{
+		Path:     uri.Path,
+		RawQuery: options.Encode(),
+	}
+
+	return &backendOptions{
+		BackendType:       backendType,
+		DataSourceName:    dataSource.String(),
+		DriverName:        driverName,
+		CompactInterval:   compactInterval,
+		PollInterval:      pollInterval,
+		WatchQueryTimeout: watchQueryTimeout,
+	}, nil
 }
