@@ -11,7 +11,6 @@ import (
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/generic"
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/sqlite"
 	"github.com/canonical/k8s-dqlite/pkg/kine/sqllog"
-	"github.com/canonical/k8s-dqlite/pkg/kine/tls"
 	"github.com/mattn/go-sqlite3"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -24,15 +23,10 @@ func init() {
 	}
 }
 
-func New(ctx context.Context, datasourceName string, tlsInfo tls.Config, connectionPoolConfig *generic.ConnectionPoolConfig) (sqllog.Driver, error) {
-	return NewVariant(ctx, datasourceName, connectionPoolConfig)
-}
-
-func NewVariant(ctx context.Context, datasourceName string, connectionPoolConfig *generic.ConnectionPoolConfig) (sqllog.Driver, error) {
+func New(ctx context.Context, driverName, datasourceName string, connectionPoolConfig *generic.ConnectionPoolConfig) (sqllog.Driver, error) {
 	logrus.Printf("New kine for dqlite")
 
-	// Driver name will be extracted from query parameters
-	driver_, err := sqlite.NewVariant(ctx, "", datasourceName, connectionPoolConfig)
+	driver_, err := sqlite.New(ctx, driverName, datasourceName, connectionPoolConfig)
 	if err != nil {
 		return nil, errors.Wrap(err, "sqlite client")
 	}

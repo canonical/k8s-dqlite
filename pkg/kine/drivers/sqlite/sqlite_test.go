@@ -59,7 +59,7 @@ func TestMigration(t *testing.T) {
 		MaxLifetime: 60 * time.Second,
 		MaxIdleTime: 0 * time.Second,
 	}
-	if _, err := sqlite.New(ctx, dbPath, &connPoolConfig); err != nil {
+	if _, err := sqlite.New(ctx, "sqlite3", dbPath, &connPoolConfig); err != nil {
 		t.Fatal(err)
 	}
 

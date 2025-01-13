@@ -4,9 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"net/url"
-	"os"
-	"strings"
 	"time"
 
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/generic"
@@ -15,49 +12,10 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type opts struct {
-	dsn        string
-	driverName string // If not empty, use a pre-registered dqlite driver
-
-	compactInterval   time.Duration
-	pollInterval      time.Duration
-	watchQueryTimeout time.Duration
-}
-
-func New(ctx context.Context, dataSourceName string, connectionPoolConfig *generic.ConnectionPoolConfig) (*generic.Generic, error) {
-	driver, err := NewVariant(ctx, "sqlite3", dataSourceName, connectionPoolConfig)
-	if err != nil {
-		return nil, err
-	}
-
-	return driver, err
-}
-
-func NewVariant(ctx context.Context, driverName, dataSourceName string, connectionPoolConfig *generic.ConnectionPoolConfig) (*generic.Generic, error) {
+func New(ctx context.Context, driverName, dataSourceName string, connectionPoolConfig *generic.ConnectionPoolConfig) (*generic.Generic, error) {
 	const retryAttempts = 300
 
-	opts, err := parseOpts(dataSourceName)
-	if err != nil {
-		return nil, err
-	}
-
-	if driverName == "" {
-		// Check if driver name is set via query parameters
-		if opts.driverName == "" {
-			return nil, fmt.Errorf("required option 'driver-name' not set in connection string")
-		}
-		driverName = opts.driverName
-	}
-	logrus.Printf("DriverName is %s.", driverName)
-
-	if opts.dsn == "" {
-		if err := os.MkdirAll("./db", 0700); err != nil {
-			return nil, err
-		}
-		opts.dsn = "./db/state.db?_journal=WAL&_synchronous=FULL&_foreign_keys=1"
-	}
-
-	driver, err := generic.Open(ctx, driverName, opts.dsn, connectionPoolConfig)
+	driver, err := generic.Open(ctx, driverName, dataSourceName, connectionPoolConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -81,10 +39,6 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string, connecti
 		}
 		time.Sleep(time.Second)
 	}
-
-	driver.CompactInterval = opts.compactInterval
-	driver.PollInterval = opts.pollInterval
-	driver.WatchQueryTimeout = opts.watchQueryTimeout
 
 	if driverName == "sqlite3" {
 		driver.Retry = func(err error) bool {
@@ -163,60 +117,4 @@ func migrate(ctx context.Context, txn *sql.Tx) error {
 	}
 
 	return nil
-}
-
-func parseOpts(dsn string) (opts, error) {
-	result := opts{
-		dsn: dsn,
-	}
-
-	parts := strings.SplitN(dsn, "?", 2)
-	if len(parts) == 1 {
-		return result, nil
-	}
-
-	values, err := url.ParseQuery(parts[1])
-	if err != nil {
-		return result, err
-	}
-
-	for k, vs := range values {
-		if len(vs) == 0 {
-			continue
-		}
-
-		switch k {
-		case "driver-name":
-			result.driverName = vs[0]
-		case "compact-interval":
-			d, err := time.ParseDuration(vs[0])
-			if err != nil {
-				return opts{}, fmt.Errorf("failed to parse compact-interval duration value %q: %w", vs[0], err)
-			}
-			result.compactInterval = d
-		case "poll-interval":
-			d, err := time.ParseDuration(vs[0])
-			if err != nil {
-				return opts{}, fmt.Errorf("failed to parse poll-interval duration value %q: %w", vs[0], err)
-			}
-			result.pollInterval = d
-		case "watch-query-timeout":
-			d, err := time.ParseDuration(vs[0])
-			if err != nil {
-				return opts{}, fmt.Errorf("failed to parse watch-query-timeout duration value %q: %w", vs[0], err)
-			}
-			result.watchQueryTimeout = d
-		default:
-			continue
-		}
-		delete(values, k)
-	}
-
-	if len(values) == 0 {
-		result.dsn = parts[0]
-	} else {
-		result.dsn = fmt.Sprintf("%s?%s", parts[0], values.Encode())
-	}
-
-	return result, nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -154,21 +155,39 @@ func grpcServer(config Config) *grpc.Server {
 	return grpc.NewServer(gopts...)
 }
 
-func getKineStorageBackend(ctx context.Context, backendType, dsn string, cfg Config) (server.Backend, error) {
+func getKineStorageBackend(ctx context.Context, backendType, uri string, cfg Config) (server.Backend, error) {
 	var (
 		driver sqllog.Driver
 		err    error
 	)
+
+	storageOptions, err := parseOpts(uri)
+	if err != nil {
+		return nil, err
+	}
+
 	switch backendType {
 	case SQLiteBackend:
-		driver, err = sqlite.New(ctx, dsn, &cfg.ConnectionPoolConfig)
+		dataSourceName := storageOptions.DataSourceName
+		if dataSourceName == "" {
+			if err := os.MkdirAll("./db", 0700); err != nil {
+				return nil, err
+			}
+			dataSourceName = "./db/state.db?_journal=WAL&_synchronous=FULL&_foreign_keys=1"
+		}
+		driver, err = sqlite.New(ctx, "sqlite3", dataSourceName, &cfg.ConnectionPoolConfig)
 	case DQLiteBackend:
-		driver, err = dqlite.New(ctx, dsn, cfg.Config, &cfg.ConnectionPoolConfig)
+		driver, err = dqlite.New(ctx, storageOptions.DriverName, storageOptions.DataSourceName, &cfg.ConnectionPoolConfig)
 	default:
 		return nil, fmt.Errorf("storage backend is not defined")
 	}
 
-	return sqllog.New(driver), err
+	return sqllog.New(&sqllog.SQLLogOptions{
+		Driver:            driver,
+		CompactInterval:   storageOptions.CompactInterval,
+		PollInterval:      storageOptions.PollInterval,
+		WatchQueryTimeout: storageOptions.WatchQueryTimeout,
+	}), err
 }
 
 func ParseStorageEndpoint(storageEndpoint string) (string, string) {
@@ -185,4 +204,68 @@ func networkAndAddress(str string) (string, string) {
 		return parts[0], parts[1]
 	}
 	return "", parts[0]
+}
+
+type backendOptions struct {
+	// DataSourceName is the uri for the database file.
+	DataSourceName string
+
+	// DriverName is the name of the database driver. It is only used for dqlite.
+	// If empty, a pre-registered default is used.
+	DriverName string
+
+	CompactInterval   time.Duration
+	PollInterval      time.Duration
+	WatchQueryTimeout time.Duration
+}
+
+func parseOpts(rawUri string) (*backendOptions, error) {
+	result := &backendOptions{}
+
+	uri, err := url.Parse(rawUri)
+	if err != nil {
+		return nil, err
+	}
+
+	options, err := url.ParseQuery(uri.RawQuery)
+	if err != nil {
+		return nil, err
+	}
+
+	if driverName := options.Get("driver-name"); driverName != "" {
+		delete(options, "driver-name")
+		result.DriverName = driverName
+	}
+
+	if compactInterval := options.Get("compact-interval"); compactInterval != "" {
+		delete(options, "compact-interval")
+		interval, err := time.ParseDuration(compactInterval)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse compact-interval duration value %q: %w", compactInterval, err)
+		}
+		result.CompactInterval = interval
+	}
+
+	if pollInterval := options.Get("poll-interval"); pollInterval != "" {
+		delete(options, "poll-interval")
+		interval, err := time.ParseDuration(pollInterval)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse poll-interval duration value %q: %w", pollInterval, err)
+		}
+		result.PollInterval = interval
+	}
+
+	if watchQueryTimeout := options.Get("watch-query-timeout"); watchQueryTimeout != "" {
+		delete(options, "watch-query-timeout")
+		interval, err := time.ParseDuration(watchQueryTimeout)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse watch-query-timeout duration value %q: %w", watchQueryTimeout, err)
+		}
+		result.WatchQueryTimeout = interval
+	}
+
+	uri.RawQuery = url.Values(options).Encode()
+	result.DataSourceName = uri.String()
+
+	return result, nil
 }
