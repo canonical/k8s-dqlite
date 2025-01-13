@@ -23,7 +23,6 @@ const (
 	KineSocket    = "unix://kine.sock"
 	SQLiteBackend = "sqlite"
 	DQLiteBackend = "dqlite"
-	ETCDBackend   = "etcd3"
 )
 
 type Config struct {
@@ -42,13 +41,6 @@ type ETCDConfig struct {
 
 func Listen(ctx context.Context, config Config) (ETCDConfig, error) {
 	driver, dsn := ParseStorageEndpoint(config.Endpoint)
-	if driver == ETCDBackend {
-		return ETCDConfig{
-			Endpoints: strings.Split(config.Endpoint, ","),
-			TLSConfig: config.Config,
-		}, nil
-	}
-
 	backend, err := getKineStorageBackend(ctx, driver, dsn, config)
 	if err != nil {
 		return ETCDConfig{}, errors.Wrap(err, "building kine")
@@ -105,13 +97,6 @@ func createListener(listen string) (ret net.Listener, rerr error) {
 
 func ListenAndReturnBackend(ctx context.Context, config Config) (ETCDConfig, server.Backend, error) {
 	driver, dsn := ParseStorageEndpoint(config.Endpoint)
-	if driver == ETCDBackend {
-		return ETCDConfig{
-			Endpoints: strings.Split(config.Endpoint, ","),
-			TLSConfig: config.Config,
-		}, nil, nil
-	}
-
 	backend, err := getKineStorageBackend(ctx, driver, dsn, config)
 	if err != nil {
 		return ETCDConfig{}, nil, errors.Wrap(err, "building kine")
@@ -186,13 +171,8 @@ func getKineStorageBackend(ctx context.Context, driver, dsn string, cfg Config) 
 
 func ParseStorageEndpoint(storageEndpoint string) (string, string) {
 	network, address := networkAndAddress(storageEndpoint)
-	switch network {
-	case "":
-		return SQLiteBackend, ""
-	case "http":
-		fallthrough
-	case "https":
-		return ETCDBackend, address
+	if network == "" {
+		network = SQLiteBackend
 	}
 	return network, address
 }
