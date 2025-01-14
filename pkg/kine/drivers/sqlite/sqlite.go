@@ -77,13 +77,6 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string, connecti
 		time.Sleep(time.Second)
 	}
 
-	dialect.TranslateErr = func(err error) error {
-		if err, ok := err.(sqlite3.Error); ok && err.ExtendedCode == sqlite3.ErrConstraintUnique {
-			return server.ErrKeyExists
-		}
-		return err
-	}
-
 	dialect.CompactInterval = opts.compactInterval
 	dialect.PollInterval = opts.pollInterval
 	dialect.WatchQueryTimeout = opts.watchQueryTimeout
