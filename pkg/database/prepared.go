@@ -22,7 +22,7 @@ func init() {
 type preparedDb[T Transaction] struct {
 	underlying Wrapped[T]
 	mu         sync.RWMutex
-	store      map[string]*sql.Stmt
+	cache      map[string]*sql.Stmt
 }
 
 // NewPrepared creates a new Interface that wraps the given database and
@@ -32,7 +32,7 @@ type preparedDb[T Transaction] struct {
 func NewPrepared[T Transaction](db Wrapped[T]) Interface {
 	return &preparedDb[T]{
 		underlying: db,
-		store:      make(map[string]*sql.Stmt),
+		cache:      make(map[string]*sql.Stmt),
 	}
 }
 
@@ -76,7 +76,7 @@ func (db *preparedDb[T]) prepare(ctx context.Context, query string) (stmt *sql.S
 	}()
 
 	db.mu.RLock()
-	stmt = db.store[query]
+	stmt = db.cache[query]
 	db.mu.RUnlock()
 	if stmt != nil {
 		return stmt, nil
@@ -89,8 +89,10 @@ func (db *preparedDb[T]) prepare(ctx context.Context, query string) (stmt *sql.S
 		return nil, errDBClosed
 	}
 
-	// Check again if the query was prepared during locking
-	stmt = db.store[query]
+	// Given that some time has passed since the unlock of the read lock, and the lock of the
+	// write lock, another goroutine might have already prepared this query, so we should check
+	// again to avoid preparing the same query twice.
+	stmt = db.cache[query]
 	if stmt != nil {
 		return stmt, nil
 	}
@@ -99,7 +101,7 @@ func (db *preparedDb[T]) prepare(ctx context.Context, query string) (stmt *sql.S
 	if err != nil {
 		return nil, err
 	}
-	db.store[query] = prepared
+	db.cache[query] = prepared
 	return prepared, nil
 }
 
@@ -124,12 +126,12 @@ func (db *preparedDb[T]) Close() error {
 	defer db.mu.Unlock()
 
 	errs := []error{}
-	for _, stmt := range db.store {
+	for _, stmt := range db.cache {
 		if err := stmt.Close(); err != nil {
 			errs = append(errs, err)
 		}
 	}
-	db.store = nil
+	db.cache = nil
 
 	if err := db.underlying.Close(); err != nil {
 		errs = append(errs, err)
