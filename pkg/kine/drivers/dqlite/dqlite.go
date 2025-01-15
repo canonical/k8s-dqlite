@@ -78,12 +78,6 @@ func NewVariant(ctx context.Context, datasourceName string, connectionPoolConfig
 
 		return false
 	}
-	generic.TranslateErr = func(err error) error {
-		if strings.Contains(err.Error(), "UNIQUE constraint") {
-			return server.ErrKeyExists
-		}
-		return err
-	}
 
 	return backend, generic, nil
 }

@@ -235,17 +235,15 @@ func (s Stripped) String() string {
 }
 
 type ErrRetry func(error) bool
-type TranslateErr func(error) error
 type ErrCode func(error) string
 
 type Generic struct {
 	sync.Mutex
 
-	LockWrites   bool
-	DB           database.Interface
-	Retry        ErrRetry
-	TranslateErr TranslateErr
-	ErrCode      ErrCode
+	LockWrites bool
+	DB         database.Interface
+	Retry      ErrRetry
+	ErrCode    ErrCode
 
 	// CompactInterval is interval between database compactions performed by kine.
 	CompactInterval time.Duration
@@ -451,12 +449,7 @@ func (d *Generic) Create(ctx context.Context, key string, value []byte, ttl int6
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Create", otelName))
 
 	defer func() {
-		if err != nil {
-			if d.TranslateErr != nil {
-				err = d.TranslateErr(err)
-			}
-			span.RecordError(err)
-		}
+		span.RecordError(err)
 		span.SetAttributes(attribute.Int64("revision", rev))
 		span.End()
 	}()
@@ -483,12 +476,7 @@ func (d *Generic) Create(ctx context.Context, key string, value []byte, ttl int6
 func (d *Generic) Update(ctx context.Context, key string, value []byte, preRev, ttl int64) (rev int64, updated bool, err error) {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Update", otelName))
 	defer func() {
-		if err != nil {
-			if d.TranslateErr != nil {
-				err = d.TranslateErr(err)
-			}
-			span.RecordError(err)
-		}
+		span.RecordError(err)
 		span.End()
 	}()
 

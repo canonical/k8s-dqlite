@@ -17,6 +17,9 @@ func TestWatch(t *testing.T) {
 		// pollTimeout is the timeout for waiting to receive an event.
 		pollTimeout = 50 * time.Millisecond
 
+		// progressNotifyTimeout is the timeout for waiting to receive a progress notify.
+		progressNotifyTimeout = 1 * time.Second
+
 		// idleTimeout is the amount of time to wait to ensure that no events
 		// are received when they should not.
 		idleTimeout = 100 * time.Millisecond
@@ -113,6 +116,16 @@ func TestWatch(t *testing.T) {
 
 				g.Consistently(watchCh, idleTimeout).ShouldNot(Receive())
 			})
+			t.Run("ProgressNotify", func(t *testing.T) {
+				ctx, cancel := context.WithCancel(ctx)
+				defer cancel()
+				g := NewWithT(t)
+				err := kine.client.RequestProgress(ctx)
+				g.Expect(err).NotTo(HaveOccurred())
+
+				g.Eventually(watchCh, progressNotifyTimeout).Should(ReceiveProgressNotify(g))
+			})
+
 		})
 	}
 }
@@ -128,6 +141,12 @@ func ReceiveEvents(g Gomega, checks ...EventMatcher) types.GomegaMatcher {
 			ok = check(event) && ok
 		}
 		return ok
+	}))
+}
+
+func ReceiveProgressNotify(g Gomega) types.GomegaMatcher {
+	return Receive(Satisfy(func(watch clientv3.WatchResponse) bool {
+		return watch.IsProgressNotify()
 	}))
 }
 
