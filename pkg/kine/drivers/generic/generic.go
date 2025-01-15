@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/canonical/k8s-dqlite/pkg/kine/prepared"
+	"github.com/canonical/k8s-dqlite/pkg/database"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -241,7 +241,7 @@ type Generic struct {
 	sync.Mutex
 
 	LockWrites bool
-	DB         *prepared.DB
+	DB         database.Interface
 	Retry      ErrRetry
 	ErrCode    ErrCode
 
@@ -319,7 +319,7 @@ func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig
 	configureConnectionPooling(connPoolConfig, db)
 
 	return &Generic{
-		DB: prepared.New(db),
+		DB: database.NewPrepared(db),
 	}, err
 }
 

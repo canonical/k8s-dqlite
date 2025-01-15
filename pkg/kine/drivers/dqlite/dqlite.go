@@ -37,7 +37,14 @@ func NewVariant(ctx context.Context, datasourceName string, connectionPoolConfig
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "sqlite client")
 	}
-	if err := migrate(ctx, generic.DB.Underlying()); err != nil {
+
+	conn, err := generic.DB.Conn(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer conn.Close()
+
+	if err := migrate(ctx, conn); err != nil {
 		return nil, nil, errors.Wrap(err, "failed to migrate DB from sqlite")
 	}
 	generic.LockWrites = true
@@ -75,7 +82,7 @@ func NewVariant(ctx context.Context, datasourceName string, connectionPoolConfig
 	return backend, generic, nil
 }
 
-func migrate(ctx context.Context, newDB *sql.DB) (exitErr error) {
+func migrate(ctx context.Context, newDB *sql.Conn) (exitErr error) {
 	row := newDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM kine")
 	var count int64
 	if err := row.Scan(&count); err != nil {
