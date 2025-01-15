@@ -50,8 +50,7 @@ func BackupEtcd(ctx context.Context, endpoint, dir string) error {
 // RestoreToDqlite restores database contents from backup directory to a k8s-dqlite database.
 func RestoreToDqlite(ctx context.Context, endpoint, dir string) error {
 	client, err := client.New(kine_endpoint.ETCDConfig{
-		Endpoints:   []string{endpoint},
-		LeaderElect: false,
+		Endpoints: []string{endpoint},
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create client: %w", err)
