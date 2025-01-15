@@ -319,7 +319,7 @@ func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig
 	configureConnectionPooling(connPoolConfig, db)
 
 	return &Generic{
-		DB: database.NewPrepared(db),
+		DB: database.NewBatched(database.NewPrepared(db)),
 	}, err
 }
 
@@ -386,12 +386,6 @@ func (d *Generic) execute(ctx context.Context, txName, query string, args ...int
 	span.SetAttributes(
 		attribute.String("tx_name", txName),
 	)
-
-	if d.LockWrites {
-		d.Lock()
-		defer d.Unlock()
-		span.AddEvent("acquired write lock")
-	}
 
 	start := time.Now()
 	retryCount := 0
