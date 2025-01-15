@@ -72,15 +72,6 @@ type SQLLog struct {
 	broadcaster broadcaster.Broadcaster[[]*server.Event]
 	notify      chan int64
 	wg          sync.WaitGroup
-
-	// compactInterval is interval between database compactions performed by kine.
-	compactInterval time.Duration
-
-	// pollInterval is the event poll interval used by kine.
-	pollInterval time.Duration
-
-	// watchQueryTimeout is the timeout on the after query in the poll loop.
-	watchQueryTimeout time.Duration
 }
 
 type SQLLogOptions struct {
