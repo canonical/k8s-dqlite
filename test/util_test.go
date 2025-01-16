@@ -4,18 +4,20 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"io"
 	"net/url"
 	"path"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/canonical/go-dqlite/v2/app"
+	"github.com/canonical/k8s-dqlite/pkg/database"
 	"github.com/canonical/k8s-dqlite/pkg/instrument"
+	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/dqlite"
+	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/sqlite"
 	"github.com/canonical/k8s-dqlite/pkg/kine/endpoint"
 	"github.com/canonical/k8s-dqlite/pkg/kine/server"
+	"github.com/canonical/k8s-dqlite/pkg/kine/sqllog"
 	"github.com/sirupsen/logrus"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
@@ -25,6 +27,11 @@ func init() {
 	logrus.SetLevel(logrus.FatalLevel)
 }
 
+const (
+	SQLiteBackend = "sqlite"
+	DQLiteBackend = "dqlite"
+)
+
 type kineServer struct {
 	client         *clientv3.Client
 	backend        server.Backend
@@ -33,12 +40,8 @@ type kineServer struct {
 
 type kineOptions struct {
 	// backendType is the type of the kine backend. It can be either
-	// endpoint.SQLiteBackend or endpoint.DQLiteBackend.
+	// SQLiteBackend or DQLiteBackend.
 	backendType string
-
-	// endpointParameters can be used to configure kine parameters
-	// like watch-query-timeout.
-	endpointParameters []string
 
 	// setup is a function to setup the database before a test or
 	// benchmark starts. It is called after the endpoint started,
@@ -55,13 +58,13 @@ func newKineServer(ctx context.Context, tb testing.TB, options *kineOptions) *ki
 	}
 	tb.Cleanup(func() { instrument.StopSQLiteMonitoring() })
 
-	var endpointConfig *endpoint.Config
+	var driver sqllog.Driver
 	var db *sql.DB
 	var dqliteListener *instrument.Listener
 	switch options.backendType {
-	case endpoint.SQLiteBackend:
-		endpointConfig, db = startSqlite(ctx, tb, dir)
-	case endpoint.DQLiteBackend:
+	case SQLiteBackend:
+		driver, db = startSqlite(ctx, tb, dir)
+	case DQLiteBackend:
 		dqliteListener = instrument.NewListener("unix", path.Join(dir, "dqlite.sock"))
 		if err := dqliteListener.Listen(ctx); err != nil {
 			tb.Fatal(err)
@@ -72,27 +75,10 @@ func newKineServer(ctx context.Context, tb testing.TB, options *kineOptions) *ki
 				tb.Error(err)
 			}
 		})
-		endpointConfig, db = startDqlite(ctx, tb, dir, dqliteListener)
+		driver, db = startDqlite(ctx, tb, dir, dqliteListener)
 	default:
 		tb.Fatalf("Testing %s backend not supported", options.backendType)
 	}
-	defer db.Close()
-
-	if !strings.Contains(endpointConfig.Endpoint, "?") {
-		endpointConfig.Endpoint += "?"
-	}
-	for _, param := range options.endpointParameters {
-		endpointConfig.Endpoint = fmt.Sprintf("%s&%s", endpointConfig.Endpoint, param)
-	}
-	config, backend, err := endpoint.ListenAndReturnBackend(ctx, endpointConfig)
-	if err != nil {
-		tb.Fatal(err)
-	}
-	tb.Cleanup(func() {
-		if err := backend.Close(); err != nil {
-			tb.Error("cannot close backend", err)
-		}
-	})
 
 	if options.setup != nil {
 		tx, err := db.BeginTx(ctx, nil)
@@ -108,21 +94,45 @@ func newKineServer(ctx context.Context, tb testing.TB, options *kineOptions) *ki
 		}
 	}
 
-	tlsConfig, err := config.TLSConfig.ClientConfig()
+	backend := sqllog.New(&sqllog.SQLLogOptions{
+		Driver:            driver,
+		CompactInterval:   5 * time.Minute,
+		PollInterval:      1 * time.Second,
+		WatchQueryTimeout: 20 * time.Second,
+	})
+	tb.Cleanup(func() {
+		if err := backend.Close(); err != nil {
+			tb.Error("cannot close backend", err)
+		}
+	})
+	if err := backend.Start(ctx); err != nil {
+		tb.Fatal(err)
+	}
+
+	listenUrl := (&url.URL{
+		Scheme: "unix",
+		Path:   path.Join(dir, "kine.sock"),
+	}).String()
+
+	_, err := endpoint.Listen(ctx, &endpoint.EndpointOptions{
+		ListenAddress: listenUrl,
+		Server:        server.New(backend, 5*time.Second),
+	})
 	if err != nil {
 		tb.Fatal(err)
 	}
+
 	client, err := clientv3.New(clientv3.Config{
-		Endpoints:   []string{endpointConfig.Listener},
+		Endpoints:   []string{listenUrl},
 		DialTimeout: 5 * time.Second,
-		TLS:         tlsConfig,
 	})
+	if err != nil {
+		tb.Fatal(err)
+	}
 	tb.Cleanup(func() {
 		client.Close()
 	})
-	if err != nil {
-		tb.Fatal(err)
-	}
+
 	return &kineServer{
 		client:         client,
 		backend:        backend,
@@ -130,37 +140,25 @@ func newKineServer(ctx context.Context, tb testing.TB, options *kineOptions) *ki
 	}
 }
 
-func startSqlite(_ context.Context, tb testing.TB, dir string) (*endpoint.Config, *sql.DB) {
-	dbPath := path.Join(dir, "data.db")
+func startSqlite(ctx context.Context, tb testing.TB, dir string) (*sqlite.Driver, *sql.DB) {
+	dbPath := path.Join(dir, "data.db?_journal=WAL&_synchronous=FULL&_foreign_keys=1")
 
 	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
 		tb.Fatal(err)
 	}
 
-	listenerUri := url.URL{
-		Scheme: "unix",
-		Path:   path.Join(dir, "kine.sock"),
+	driver, err := sqlite.NewDriver(ctx, &sqlite.DriverOptions{
+		DB: database.NewPrepared(db),
+	})
+	if err != nil {
+		tb.Fatal(err)
 	}
 
-	endpointUri := url.URL{
-		Scheme: "sqlite",
-		Path:   dbPath,
-		RawQuery: url.Values{
-			"_journal":      []string{"WAL"},
-			"_synchronous":  []string{"FULL"},
-			"_foreign_keys": []string{"1"},
-		}.Encode(),
-	}
-
-	return &endpoint.Config{
-		Listener:       listenerUri.String(),
-		Endpoint:       endpointUri.String(),
-		NotifyInterval: 5 * time.Second,
-	}, db
+	return driver, db
 }
 
-func startDqlite(ctx context.Context, tb testing.TB, dir string, listener *instrument.Listener) (*endpoint.Config, *sql.DB) {
+func startDqlite(ctx context.Context, tb testing.TB, dir string, listener *instrument.Listener) (*dqlite.Driver, *sql.DB) {
 	app, err := app.New(dir,
 		app.WithAddress(listener.Address),
 		app.WithExternalConn(listener.Connect, listener.AcceptedConns),
@@ -180,11 +178,18 @@ func startDqlite(ctx context.Context, tb testing.TB, dir string, listener *instr
 		tb.Fatal(err)
 	}
 
-	return &endpoint.Config{
-		Listener:       fmt.Sprintf("unix://%s/kine.sock", dir),
-		Endpoint:       fmt.Sprintf("dqlite://k8s?driver-name=%s", app.Driver()),
-		NotifyInterval: 5 * time.Second,
-	}, db
+	if err := db.PingContext(ctx); err != nil {
+		tb.Fatal(err)
+	}
+
+	driver, err := dqlite.NewDriver(ctx, &dqlite.DriverOptions{
+		DB: database.NewPrepared(db),
+	})
+	if err != nil {
+		tb.Fatal(err)
+	}
+
+	return driver, db
 }
 
 func (ks *kineServer) ReportMetrics(b *testing.B) {
@@ -257,7 +262,6 @@ LIMIT ?`
 		return 0, err
 	}
 	return result.LastInsertId()
-
 }
 
 func deleteMany(ctx context.Context, tx *sql.Tx, prefix string, n int) (int64, error) {

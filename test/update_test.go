@@ -6,14 +6,13 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/canonical/k8s-dqlite/pkg/kine/endpoint"
 	. "github.com/onsi/gomega"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 // TestUpdate is unit testing for the update operation.
 func TestUpdate(t *testing.T) {
-	for _, backendType := range []string{endpoint.SQLiteBackend, endpoint.DQLiteBackend} {
+	for _, backendType := range []string{SQLiteBackend, DQLiteBackend} {
 		t.Run(backendType, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -106,7 +105,7 @@ func TestUpdate(t *testing.T) {
 
 // BenchmarkUpdate is a benchmark for the Update operation.
 func BenchmarkUpdate(b *testing.B) {
-	for _, backendType := range []string{endpoint.SQLiteBackend, endpoint.DQLiteBackend} {
+	for _, backendType := range []string{SQLiteBackend, DQLiteBackend} {
 		for _, workers := range []int{1, 4, 16, 64, 128} {
 			b.Run(fmt.Sprintf("%s/%d-workers", backendType, workers), func(b *testing.B) {
 				b.StopTimer()

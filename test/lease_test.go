@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/canonical/k8s-dqlite/pkg/kine/endpoint"
 	. "github.com/onsi/gomega"
 	mvccpb "go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -22,7 +21,7 @@ func TestLease(t *testing.T) {
 	const leaseValue = "testValue"
 	const ttlSeconds = 1
 
-	for _, backendType := range []string{endpoint.SQLiteBackend, endpoint.DQLiteBackend} {
+	for _, backendType := range []string{SQLiteBackend, DQLiteBackend} {
 		t.Run(backendType, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()

@@ -4,8 +4,8 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"database/sql"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"time"
@@ -13,8 +13,11 @@ import (
 	"github.com/canonical/go-dqlite/v2"
 	"github.com/canonical/go-dqlite/v2/app"
 	"github.com/canonical/go-dqlite/v2/client"
+	"github.com/canonical/k8s-dqlite/pkg/database"
+	dqliteDriver "github.com/canonical/k8s-dqlite/pkg/kine/drivers/dqlite"
 	"github.com/canonical/k8s-dqlite/pkg/kine/endpoint"
 	"github.com/canonical/k8s-dqlite/pkg/kine/server"
+	"github.com/canonical/k8s-dqlite/pkg/kine/sqllog"
 	kine_tls "github.com/canonical/k8s-dqlite/pkg/kine/tls"
 	"github.com/sirupsen/logrus"
 )
@@ -26,8 +29,9 @@ type Server struct {
 
 	backend server.Backend
 
-	// kineConfig is the configuration to use for starting kine against the dqlite application.
-	kineConfig *endpoint.Config
+	// serverConfig is the configuration to use for starting kine against the dqlite application.
+	serverConfig         *ServerConfig
+	connectionPoolConfig *ConnectionPoolConfig
 
 	// storageDir is the root directory used for dqlite storage.
 	storageDir string
@@ -43,6 +47,48 @@ type Server struct {
 
 	// mustStopCh is used when the server must terminate.
 	mustStopCh chan struct{}
+}
+
+type ServerConfig struct {
+	ListenAddress string
+
+	CompactInterval   time.Duration
+	PollInterval      time.Duration
+	WatchQueryTimeout time.Duration
+	NotifyInterval    time.Duration
+
+	TlsConfig kine_tls.Config
+}
+
+type ConnectionPoolConfig struct {
+	MaxIdle     int
+	MaxOpen     int
+	MaxLifetime time.Duration
+	MaxIdleTime time.Duration
+}
+
+func (conf *ConnectionPoolConfig) apply(db *sql.DB) {
+	const defaultMaxIdleConns = 2 // default from database/sql
+
+	// behavior of database/sql - zero means defaultMaxIdleConns; negative means 0
+	var maxIdle int
+	if conf.MaxIdle < 0 {
+		maxIdle = 0
+	} else if conf.MaxIdle == 0 {
+		maxIdle = defaultMaxIdleConns
+	}
+
+	logrus.Infof(
+		"Configuring database connection pooling: maxIdleConns=%d, maxOpenConns=%d, connMaxLifetime=%v, connMaxIdleTime=%v ",
+		maxIdle,
+		conf.MaxOpen,
+		conf.MaxLifetime,
+		conf.MaxIdleTime,
+	)
+	db.SetMaxIdleConns(conf.MaxIdle)
+	db.SetMaxOpenConns(conf.MaxOpen)
+	db.SetConnMaxLifetime(conf.MaxLifetime)
+	db.SetConnMaxIdleTime(conf.MaxIdleTime)
 }
 
 // expectedFilesDuringInitialization is a list of files that are allowed to exist when initializing the dqlite node.
@@ -73,17 +119,20 @@ func New(
 	watchAvailableStorageInterval time.Duration,
 	watchAvailableStorageMinBytes uint64,
 	lowAvailableStorageAction string,
-	connectionPoolConfig *endpoint.ConnectionPoolConfig,
+	connectionPoolConfig *ConnectionPoolConfig,
 	watchQueryTimeout time.Duration,
 	watchProgressNotifyInterval time.Duration,
 
 ) (*Server, error) {
-	var (
-		options         []app.Option
-		kineConfig      endpoint.Config
-		compactInterval *time.Duration
-		pollInterval    *time.Duration
-	)
+	options := []app.Option{}
+	serverConfig := &ServerConfig{
+		ListenAddress: listen,
+
+		CompactInterval:   5 * time.Minute,
+		PollInterval:      1 * time.Second,
+		WatchQueryTimeout: watchQueryTimeout,
+		NotifyInterval:    watchProgressNotifyInterval,
+	}
 
 	switch lowAvailableStorageAction {
 	case "none", "handover", "terminate":
@@ -222,16 +271,13 @@ func New(
 		}
 		logrus.WithField("min_tls_version", minTLSVersion).Print("Enable TLS")
 
-		kineConfig.Config = kine_tls.Config{
+		serverConfig.TlsConfig = kine_tls.Config{
 			CertFile: crtFile,
 			KeyFile:  keyFile,
 		}
 		options = append(options, app.WithTLS(listen, dial))
 	}
-	// set datastore connection pool options
-	kineConfig.ConnectionPoolConfig = connectionPoolConfig
-	// set watch progress notify interval
-	kineConfig.NotifyInterval = watchProgressNotifyInterval
+
 	// handle tuning parameters
 	// declare default
 	snapshotParameters := dqlite.SnapshotParams{
@@ -275,8 +321,12 @@ func New(
 		}
 
 		// these are set in the kine endpoint config below
-		compactInterval = tuning.KineCompactInterval
-		pollInterval = tuning.KinePollInterval
+		if tuning.KineCompactInterval != nil {
+			serverConfig.CompactInterval = *tuning.KineCompactInterval
+		}
+		if tuning.KinePollInterval != nil {
+			serverConfig.PollInterval = *tuning.KinePollInterval
+		}
 	}
 
 	logrus.WithFields(logrus.Fields{"threshold": snapshotParameters.Threshold, "trailing": snapshotParameters.Trailing}).Print("Configure dqlite raft snapshot parameters")
@@ -290,28 +340,16 @@ func New(
 		logrus.Warn("dqlite disk mode operation is current at an experimental state and MUST NOT be used in production. Expect data loss.")
 	}
 
+	// FIXME: this also starts dqlite. It should be moved to `Start`.
 	app, err := app.New(dir, options...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create dqlite app: %w", err)
 	}
 
-	params := make(url.Values)
-	params["driver-name"] = []string{app.Driver()}
-	if v := compactInterval; v != nil {
-		params["compact-interval"] = []string{fmt.Sprintf("%v", *v)}
-	}
-	if v := pollInterval; v != nil {
-		params["poll-interval"] = []string{fmt.Sprintf("%v", *v)}
-	}
-
-	params["watch-query-timeout"] = []string{fmt.Sprintf("%v", watchQueryTimeout)}
-
-	kineConfig.Listener = listen
-	kineConfig.Endpoint = fmt.Sprintf("dqlite://k8s?%s", params.Encode())
-
 	return &Server{
-		app:        app,
-		kineConfig: &kineConfig,
+		app:                  app,
+		serverConfig:         serverConfig,
+		connectionPoolConfig: connectionPoolConfig,
 
 		storageDir:                    dir,
 		watchAvailableStorageMinBytes: watchAvailableStorageMinBytes,
@@ -368,19 +406,117 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	logrus.WithFields(logrus.Fields{"id": s.app.ID(), "address": s.app.Address()}).Print("Started dqlite")
 
-	logrus.WithField("config", s.kineConfig).Debug("Starting kine")
-	_, backend, err := endpoint.ListenAndReturnBackend(ctx, s.kineConfig)
+	logrus.WithField("config", s.serverConfig).Debug("Starting kine")
+
+	db, err := s.robustOpenDb(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to start kine: %w", err)
+		return fmt.Errorf("failed to open database: %w", err)
 	}
-	logrus.WithFields(logrus.Fields{"address": s.kineConfig.Listener, "database": s.kineConfig.Endpoint}).Print("Started kine")
+
+	driver, err := dqliteDriver.NewDriver(ctx, &dqliteDriver.DriverOptions{
+		DB: database.NewPrepared(db),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create dqlite driver: %w", err)
+	}
+
+	backend := sqllog.New(&sqllog.SQLLogOptions{
+		Driver:            driver,
+		CompactInterval:   s.serverConfig.CompactInterval,
+		PollInterval:      s.serverConfig.PollInterval,
+		WatchQueryTimeout: s.serverConfig.WatchQueryTimeout,
+	})
+	if err := backend.Start(ctx); err != nil {
+		backend.Close()
+		return fmt.Errorf("failed to start kine backend: %w", err)
+	}
 
 	s.backend = backend
 
+	_, err = endpoint.Listen(ctx, &endpoint.EndpointOptions{
+		ListenAddress: s.serverConfig.ListenAddress,
+		Server:        server.New(backend, s.serverConfig.NotifyInterval),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to start kine: %w", err)
+	}
+
 	go s.watchAvailableStorageSize(ctx)
 
+	logrus.WithField("address", s.serverConfig.ListenAddress).Print("Started kine")
 	return nil
 }
+
+func (s *Server) robustOpenDb(ctx context.Context) (*sql.DB, error) {
+	var (
+		db  *sql.DB
+		err error
+	)
+	for i := 0; i < 300; i++ {
+		db, err = s.openAndTestDb(ctx)
+		if err == nil {
+			break
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(time.Second):
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	s.connectionPoolConfig.apply(db)
+	return db, nil
+}
+
+func (s *Server) openAndTestDb(ctx context.Context) (*sql.DB, error) {
+	db, err := s.app.Open(ctx, "k8s")
+	if err != nil {
+		return nil, err
+	}
+
+	if err := db.PingContext(ctx); err != nil {
+		logrus.Errorf("failed to ping connection: %v", err)
+		db.Close()
+		return nil, err
+	}
+
+	return db, nil
+}
+
+// func openKineStorageBackend(ctx context.Context, config *Config) (server.Backend, error) {
+// 	var (
+// 		driver sqllog.Driver
+// 		err    error
+// 	)
+
+// 	options, err := parseOpts(config.Endpoint)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	switch options.BackendType {
+// 	case SQLiteBackend:
+// 		driver, err = openSqlite(ctx, options.DataSourceName, config.ConnectionPoolConfig)
+// 	case DQLiteBackend:
+// 		driver, err = openDqlite(ctx, options.DriverName, options.DataSourceName, config.ConnectionPoolConfig)
+// 	default:
+// 		return nil, fmt.Errorf("backend type %s is not defined", options.BackendType)
+// 	}
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	return sqllog.New(&sqllog.SQLLogOptions{
+// 		Driver:            driver,
+// 		CompactInterval:   options.CompactInterval,
+// 		PollInterval:      options.PollInterval,
+// 		WatchQueryTimeout: options.WatchQueryTimeout,
+// 	}), err
+// }
 
 // Shutdown cleans up any resources and attempts to hand-over and shutdown the dqlite application.
 func (s *Server) Shutdown(ctx context.Context) error {
