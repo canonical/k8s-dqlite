@@ -13,6 +13,9 @@ go.vet:
 go.test:
 	$(DQLITE_BUILD_SCRIPTS_DIR)/static-go-test.sh -v -p 1 ./...
 
+go.coverage:
+	$(DQLITE_BUILD_SCRIPTS_DIR)/static-go-test.sh -v -p 1 ./... -coverprofile=coverage.txt --cover --coverpkg=./...
+
 go.bench:
 	$(DQLITE_BUILD_SCRIPTS_DIR)/static-go-test.sh -v -p 1 ./... -run "^$$" -bench "Benchmark" -benchmem -count $(BENCH_COUNT)
 
