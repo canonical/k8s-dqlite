@@ -6,14 +6,13 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/canonical/k8s-dqlite/pkg/kine/endpoint"
 	. "github.com/onsi/gomega"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 // TestGet is unit testing for the Get operation.
 func TestGet(t *testing.T) {
-	for _, backendType := range []string{endpoint.SQLiteBackend, endpoint.DQLiteBackend} {
+	for _, backendType := range []string{SQLiteBackend, DQLiteBackend} {
 		t.Run(backendType, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -116,7 +115,7 @@ func TestGet(t *testing.T) {
 
 // BenchmarkGet is a benchmark for the Get operation.
 func BenchmarkGet(b *testing.B) {
-	for _, backendType := range []string{endpoint.SQLiteBackend, endpoint.DQLiteBackend} {
+	for _, backendType := range []string{SQLiteBackend, DQLiteBackend} {
 		b.Run(backendType, func(b *testing.B) {
 			b.StopTimer()
 			g := NewWithT(b)
