@@ -1,5 +1,5 @@
 #
-# Copyright 2024 Canonical, Ltd.
+# Copyright 2025 Canonical, Ltd.
 #
 import ipaddress
 import json
@@ -167,14 +167,7 @@ def configure_dqlite_logging(instance: harness.Instance):
             ]
         )
     if config.K8S_DQLITE_DEBUG:
-        instance.exec(
-            [
-                "echo",
-                "--debug"
-                ">>",
-                "/var/snap/k8s/common/args/k8s-dqlite"
-            ]
-        )
+        instance.exec(["echo", "--debug", ">>", "/var/snap/k8s/common/args/k8s-dqlite"])
 
 
 def setup_k8s_snap(
