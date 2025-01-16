@@ -82,4 +82,4 @@ def run_kube_burner(instance: harness.Instance):
     """Copies kubeconfig and runs kube-burner on the instance."""
     instance.exec(["mkdir", "-p", "/root/.kube"])
     instance.exec(["k8s", "config", ">", "/root/.kube/config"])
-    instance.exec(["/root/kube-burner", "init", "-c", "/root/api-intensive.yaml"])
+    instance.exec(["/root/kube-burner", "init", "--timeout", config.KUBE_BURNER_TIMEOUT, "-c", "/root/api-intensive.yaml"])

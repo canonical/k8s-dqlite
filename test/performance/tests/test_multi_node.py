@@ -31,6 +31,9 @@ def test_three_node_load(instances: List[harness.Instance]):
 
     metrics.configure_kube_burner(cluster_node)
     process_dict = metrics.collect_metrics(instances)
-    metrics.run_kube_burner(cluster_node)
-    metrics.stop_metrics(instances, process_dict)
-    metrics.pull_metrics(instances, "three-node")
+    try:
+        metrics.run_kube_burner(cluster_node)
+    finally:
+        # Collect the metrics even if kube-burner fails.
+        metrics.stop_metrics(instances, process_dict)
+        metrics.pull_metrics(instances, "three-node")
