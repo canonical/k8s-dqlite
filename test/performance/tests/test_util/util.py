@@ -146,6 +146,28 @@ def _as_int(value: Optional[str]) -> Optional[int]:
         return None
 
 
+def configure_dqlite_trace_level(instance: harness.Instance):
+    """Configure k8s-dqlite tracing (requires restart)."""
+    if config.DQLITE_TRACE_LEVEL:
+        instance.exec(
+            [
+                "echo",
+                f"LIBDQLITE_TRACE={config.DQLITE_TRACE_LEVEL}",
+                ">>",
+                "/var/snap/k8s/common/args/k8s-dqlite-env",
+            ]
+        )
+    if config.RAFT_TRACE_LEVEL:
+        instance.exec(
+            [
+                "echo",
+                f"LIBRAFT_TRACE={config.RAFT_TRACE_LEVEL}",
+                ">>",
+                "/var/snap/k8s/common/args/k8s-dqlite-env",
+            ]
+        )
+
+
 def setup_k8s_snap(
     instance: harness.Instance,
     tmp_path: Path,
@@ -185,6 +207,9 @@ def setup_k8s_snap(
         cmd += [config.SNAP_NAME, "--channel", channel]
 
     instance.exec(cmd)
+
+    configure_dqlite_trace_level(instance)
+
     if connect_interfaces:
         LOG.info("Ensure k8s interfaces and network requirements")
         instance.exec(["/snap/k8s/current/k8s/hack/init.sh"], stdout=subprocess.DEVNULL)

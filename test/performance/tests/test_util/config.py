@@ -51,3 +51,7 @@ LXD_IMAGE = os.getenv("TEST_LXD_IMAGE") or "ubuntu:22.04"
 
 # LXD_PROFILE_NAME is the profile name to use for LXD containers.
 LXD_PROFILE_NAME = os.getenv("TEST_LXD_PROFILE_NAME") or "k8s-performance"
+
+# Set the following to 1 for verbose dqlite trace messages
+DQLITE_TRACE_LEVEL = os.getenv("TEST_DQLITE_TRACE_LEVEL")
+RAFT_TRACE_LEVEL = os.getenv("TEST_RAFT_TRACE_LEVEL")
