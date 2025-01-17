@@ -9,7 +9,8 @@ def test_single_node_load(session_instance: harness.Instance):
     metrics.configure_kube_burner(session_instance)
     process_dict = metrics.collect_metrics([session_instance])
     try:
-        metrics.run_kube_burner(session_instance)
+        for iteration in range(10):
+            metrics.run_kube_burner(session_instance)
     finally:
         # Collect the metrics even if kube-burner fails.
         metrics.stop_metrics([session_instance], process_dict)

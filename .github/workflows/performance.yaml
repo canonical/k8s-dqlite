@@ -77,10 +77,19 @@ jobs:
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
           TEST_METRICS_DIR: ${{ github.workspace }}/test/performance/results/head
           TEST_RUN_NAME: head
+          TEST_DQLITE_TRACE_LEVEL: 1
+          TEST_RAFT_TRACE_LEVEL: 1
+          TEST_K8S_DQLITE_DEBUG: 1
         run: |
           cd test/performance
           mkdir -p ./results/head
-          sg lxd -c 'tox -e performance'
+          set -ex
+          iteration=0
+          while [[ $iteration -lt 10 ]]; do
+            echo "iteration: $iteration"
+            sg lxd -c 'tox -e performance'
+            iteration=$(( $iteration + 1 ))
+          done
       - name: Run Performance test for base code snap
         env:
           TEST_SNAP: ${{ github.workspace }}/base-code.snap
@@ -89,16 +98,25 @@ jobs:
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
           TEST_METRICS_DIR: ${{ github.workspace }}/test/performance/results/base-code
           TEST_RUN_NAME: base-code
+          TEST_DQLITE_TRACE_LEVEL: 1
+          TEST_RAFT_TRACE_LEVEL: 1
+          TEST_K8S_DQLITE_DEBUG: 1
         run: |
           cd test/performance 
           mkdir -p ./results/base-code
-          sg lxd -c 'tox -e performance'
-      - name: Generate 3 node Graphs
-        if: always()
-        run: |
-          cd test/performance
-          sudo Rscript parse-performance-metrics.R -p ./results/head -o ./results/head -f *three-node.log
-          sudo Rscript parse-performance-metrics.R -p ./results/base-code -o ./results/base-code -f *three-node.log
+          set -ex
+          iteration=0
+          while [[ $iteration -lt 10 ]]; do
+            echo "iteration: $iteration"
+            sg lxd -c 'tox -e performance'
+            iteration=$(( $iteration + 1 ))
+          done
+      # - name: Generate 3 node Graphs
+      #   if: always()
+      #   run: |
+      #     cd test/performance
+      #     sudo Rscript parse-performance-metrics.R -p ./results/head -o ./results/head -f *three-node.log
+      #     sudo Rscript parse-performance-metrics.R -p ./results/base-code -o ./results/base-code -f *three-node.log
       - name: Generate single node Graphs
         if: always()
         run: |
