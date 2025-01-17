@@ -8,9 +8,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
 	"go.etcd.io/etcd/api/v3/mvccpb"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/health"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 var (
@@ -22,6 +19,11 @@ type KVServerBridge struct {
 	limited *LimitedServer
 }
 
+var _ etcdserverpb.LeaseServer = &KVServerBridge{}
+var _ etcdserverpb.WatchServer = &KVServerBridge{}
+var _ etcdserverpb.KVServer = &KVServerBridge{}
+var _ etcdserverpb.MaintenanceServer = &KVServerBridge{}
+
 func New(backend Backend, notifyInterval time.Duration) *KVServerBridge {
 	return &KVServerBridge{
 		limited: &LimitedServer{
@@ -29,17 +31,6 @@ func New(backend Backend, notifyInterval time.Duration) *KVServerBridge {
 			notifyInterval: notifyInterval,
 		},
 	}
-}
-
-func (k *KVServerBridge) Register(server *grpc.Server) {
-	etcdserverpb.RegisterLeaseServer(server, k)
-	etcdserverpb.RegisterWatchServer(server, k)
-	etcdserverpb.RegisterKVServer(server, k)
-	etcdserverpb.RegisterMaintenanceServer(server, k)
-
-	hsrv := health.NewServer()
-	hsrv.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
-	healthpb.RegisterHealthServer(server, hsrv)
 }
 
 func (k *KVServerBridge) Range(ctx context.Context, r *etcdserverpb.RangeRequest) (*etcdserverpb.RangeResponse, error) {
