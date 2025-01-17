@@ -94,11 +94,13 @@ jobs:
           mkdir -p ./results/base-code
           sg lxd -c 'tox -e performance'
       - name: Generate 3 node Graphs
+        if: always()
         run: |
           cd test/performance
           sudo Rscript parse-performance-metrics.R -p ./results/head -o ./results/head -f *three-node.log
           sudo Rscript parse-performance-metrics.R -p ./results/base-code -o ./results/base-code -f *three-node.log
       - name: Generate single node Graphs
+        if: always()
         run: |
           cd test/performance
           mkdir -p ./results/single-node
@@ -107,6 +109,7 @@ jobs:
           sudo Rscript parse-performance-metrics.R -p ./results/single-node -o ./results/single-node -f *single-node.log
       - name: Upload performance result
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: performance-results
           path: ${{ github.workspace }}/test/performance/results

@@ -1,5 +1,5 @@
 #
-# Copyright 2024 Canonical, Ltd.
+# Copyright 2025 Canonical, Ltd.
 #
 import os
 from pathlib import Path
@@ -36,6 +36,9 @@ KUBE_BURNER_URL = (
     or "https://github.com/kube-burner/kube-burner/releases/download/v1.2/kube-burner-1.2-Linux-x86_64.tar.gz"
 )
 
+# Global kube-burner invocation timeout.
+KUBE_BURNER_TIMEOUT = os.getenv("TEST_KUBE_BURNER_TIMEOUT") or "10m"
+
 # FLAVOR is the flavour to use for running the performance tests.
 FLAVOR = os.getenv("TEST_FLAVOR") or ""
 
@@ -48,3 +51,9 @@ LXD_IMAGE = os.getenv("TEST_LXD_IMAGE") or "ubuntu:22.04"
 
 # LXD_PROFILE_NAME is the profile name to use for LXD containers.
 LXD_PROFILE_NAME = os.getenv("TEST_LXD_PROFILE_NAME") or "k8s-performance"
+
+# Enable k8s-dqlite debug logging.
+K8S_DQLITE_DEBUG = os.getenv("TEST_K8S_DQLITE_DEBUG") == "1"
+# Set the following to 1 for verbose dqlite trace messages.
+DQLITE_TRACE_LEVEL = os.getenv("TEST_DQLITE_TRACE_LEVEL")
+RAFT_TRACE_LEVEL = os.getenv("TEST_RAFT_TRACE_LEVEL")

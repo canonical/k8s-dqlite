@@ -1,5 +1,5 @@
 #
-# Copyright 2024 Canonical, Ltd.
+# Copyright 2025 Canonical, Ltd.
 #
 import itertools
 import logging
