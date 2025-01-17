@@ -244,13 +244,6 @@ type Generic struct {
 	DB         database.Interface
 	Retry      ErrRetry
 	ErrCode    ErrCode
-
-	// CompactInterval is interval between database compactions performed by kine.
-	CompactInterval time.Duration
-	// PollInterval is the event poll interval used by kine.
-	PollInterval time.Duration
-	// WatchQueryTimeout is the timeout on the after query in the poll loop.
-	WatchQueryTimeout time.Duration
 }
 
 type ConnectionPoolConfig struct {
@@ -754,25 +747,4 @@ func (d *Generic) GetSize(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	return size, nil
-}
-
-func (d *Generic) GetCompactInterval() time.Duration {
-	if v := d.CompactInterval; v > 0 {
-		return v
-	}
-	return 5 * time.Minute
-}
-
-func (d *Generic) GetWatchQueryTimeout() time.Duration {
-	if v := d.WatchQueryTimeout; v >= 5*time.Second {
-		return v
-	}
-	return 20 * time.Second
-}
-
-func (d *Generic) GetPollInterval() time.Duration {
-	if v := d.PollInterval; v > 0 {
-		return v
-	}
-	return time.Second
 }
