@@ -31,7 +31,8 @@ def _generate_inspection_report(h: harness.Harness, instance_id: str):
     inspection_path = Path(config.INSPECTION_REPORTS_DIR)
     result = h.exec(
         instance_id,
-        ["/snap/k8s/current/k8s/scripts/inspect.sh", "/inspection-report.tar.gz"],
+        ["/snap/k8s/current/k8s/scripts/inspect.sh", "--all-namespaces",
+         "--num-snap-log-entries", "1000000", "/inspection-report.tar.gz"],
         capture_output=True,
         text=True,
         check=False,
