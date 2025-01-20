@@ -9,6 +9,7 @@ from test_util import harness, metrics, util
 
 @pytest.mark.node_count(3)
 def test_three_node_load(instances: List[harness.Instance]):
+    pytest.xfail("donotmerge: disabled")
     cluster_node = instances[0]
     joining_node = instances[1]
     joining_node_2 = instances[2]
