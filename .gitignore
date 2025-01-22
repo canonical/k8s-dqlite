@@ -19,3 +19,4 @@ k8s-dqlite
 hack/.build/
 hack/.deps/
 test/performance/results/*
+coverage.txt

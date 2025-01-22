@@ -1,0 +1,51 @@
+name: Nightly Jobs
+
+on:
+  schedule:
+    # At 00:00 every day
+    - cron: '0 0 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  TICS:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          # Latest branches
+          - { branch: master }
+    steps:
+      - name: Checking out repo
+        uses: actions/checkout@v4
+        with:
+          ref: ${{matrix.branch}}
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: './go.mod'
+      - name: go mod download
+        run: go mod download
+      - name: TICS scan
+        run: |
+          export TICSAUTHTOKEN=${{ secrets.TICSAUTHTOKEN }}
+
+          # TICS requires us to have the test results in cobertura xml format under the
+          # directory use below
+          sudo make go.test
+          go install github.com/boumenot/gocover-cobertura@latest
+          gocover-cobertura < coverage.txt > coverage.xml
+          mkdir .coverage
+          mv ./coverage.xml ./.coverage/
+
+          # Install the TICS and staticcheck
+          go install honnef.co/go/tools/cmd/staticcheck@v0.5.1
+          . <(curl --silent --show-error 'https://canonical.tiobe.com/tiobeweb/TICS/api/public/v1/fapi/installtics/Script?cfg=default&platform=linux&url=https://canonical.tiobe.com/tiobeweb/TICS/')
+
+          # We need to have our project built
+          make -j
+
+          TICSQServer -project k8s-dqlite -tmpdir /tmp/tics -branchdir $HOME/work/k8s-dqlite/k8s-dqlite/
