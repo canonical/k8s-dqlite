@@ -4,6 +4,8 @@ on:
   schedule:
     - cron: '0 10 * * *'
 
+permissions: {}
+
 jobs:
   list-branches-to-scan:
     runs-on: ubuntu-latest
