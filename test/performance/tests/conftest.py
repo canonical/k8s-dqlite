@@ -31,8 +31,15 @@ def _generate_inspection_report(h: harness.Harness, instance_id: str):
     inspection_path = Path(config.INSPECTION_REPORTS_DIR)
     result = h.exec(
         instance_id,
-        ["/snap/k8s/current/k8s/scripts/inspect.sh", "--all-namespaces",
-         "--num-snap-log-entries", "1000000", "/inspection-report.tar.gz"],
+        [
+            "/snap/k8s/current/k8s/scripts/inspect.sh",
+            "--all-namespaces",
+            "--num-snap-log-entries",
+            "1000000",
+            "--core-dump-dir",
+            config.CORE_DUMP_DIR,
+            "/inspection-report.tar.gz",
+        ],
         capture_output=True,
         text=True,
         check=False,
@@ -160,6 +167,7 @@ def instances(
         instance = h.new_instance(network_type=network_type)
         instances.append(instance)
         if not no_setup:
+            util.setup_core_dumps(instance)
             util.setup_k8s_snap(instance, tmp_path, snap)
 
     if not disable_k8s_bootstrapping and not no_setup:
