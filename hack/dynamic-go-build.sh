@@ -6,5 +6,5 @@ DIR="$(realpath `dirname "${0}"`)"
 
 go build \
   -tags libsqlite3 \
-  -ldflags '-s -w -extldflags "-Wl,-rpath,$ORIGIN/lib -Wl,-rpath,$ORIGIN/../lib"' \
+  -ldflags '-extldflags "-Wl,-rpath,$ORIGIN/lib -Wl,-rpath,$ORIGIN/../lib"' \
   "${@}"
