@@ -128,11 +128,11 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: base
+          name: base-code.snap
           path: ${{ github.workspace }}/base-code.snap
       - name: Upload head.snap
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: base
+          name: head.snap
           path: ${{ github.workspace }}/head.snap
