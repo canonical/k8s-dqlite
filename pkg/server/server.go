@@ -56,6 +56,13 @@ var expectedFilesDuringInitialization = map[string]struct{}{
 	"tuning.yaml":    {},
 }
 
+const (
+	default_threshold = 512
+	min_threshold     = 384
+	default_trailing  = 1024
+	min_trailing      = 512
+)
+
 // New creates a new instance of Server based on configuration.
 func New(
 	dir string,
@@ -237,6 +244,15 @@ func New(
 
 		if v := tuning.Snapshot; v != nil {
 			logrus.WithFields(logrus.Fields{"threshold": v.Threshold, "trailing": v.Trailing}).Print("Configure dqlite raft snapshot parameters")
+			if v.Trailing < v.Threshold {
+				return nil, fmt.Errorf("trailing snapshot threshold must be less than snapshot threshold")
+			}
+			// ensure that the threshold is at least 384 and trailing is at least 512 to avoid CPU utilization issues.
+			if v.Threshold < min_trailing || v.Trailing < min_trailing {
+				logrus.WithFields(logrus.Fields{"threshold": min_threshold, "trailing": min_trailing}).Print("Adjusting dqlite raft snapshot parameters")
+				v.Threshold = min_threshold
+				v.Trailing = min_trailing
+			}
 			options = append(options, app.WithSnapshotParams(dqlite.SnapshotParams{
 				Threshold: v.Threshold,
 				Trailing:  v.Trailing,
@@ -251,6 +267,11 @@ func New(
 		// these are set in the kine endpoint config below
 		compactInterval = tuning.KineCompactInterval
 		pollInterval = tuning.KinePollInterval
+	} else {
+		options = append(options, app.WithSnapshotParams(dqlite.SnapshotParams{
+			Threshold: default_threshold,
+			Trailing:  default_trailing,
+		}))
 	}
 
 	if diskMode {
