@@ -245,11 +245,11 @@ func New(
 		if v := tuning.Snapshot; v != nil {
 			logrus.WithFields(logrus.Fields{"threshold": v.Threshold, "trailing": v.Trailing}).Print("Configure dqlite raft snapshot parameters")
 			if v.Trailing < v.Threshold {
-				return nil, fmt.Errorf("trailing snapshot threshold must be less than snapshot threshold")
+				return nil, fmt.Errorf("the snapshot's trailing parameter must be less than the threshold parameter")
 			}
 			// ensure that the threshold is at least 384 and trailing is at least 512 to avoid CPU utilization issues.
 			if v.Threshold < min_trailing || v.Trailing < min_trailing {
-				logrus.WithFields(logrus.Fields{"threshold": min_threshold, "trailing": min_trailing}).Print("Adjusting dqlite raft snapshot parameters")
+				logrus.WithFields(logrus.Fields{"threshold": min_threshold, "trailing": min_trailing}).Print("Using dqlite raft minimum snapshot parameters, as provided value(s) are too low")
 				v.Threshold = min_threshold
 				v.Trailing = min_trailing
 			}
