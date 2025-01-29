@@ -57,10 +57,11 @@ var expectedFilesDuringInitialization = map[string]struct{}{
 }
 
 const (
-	default_threshold = 512
-	min_threshold     = 384
-	default_trailing  = 1024
-	min_trailing      = 512
+	defaultThreshold = 512
+	minThreshold     = 384
+	defaultTrailing  = 1024
+	minTrailing      = 512
+	scalingFactor    = 2
 )
 
 // New creates a new instance of Server based on configuration.
@@ -234,6 +235,11 @@ func New(
 	// set watch progress notify interval
 	kineConfig.NotifyInterval = watchProgressNotifyInterval
 	// handle tuning parameters
+	// declare default
+	snapshotParameters := dqlite.SnapshotParams{
+		Threshold: defaultThreshold,
+		Trailing:  defaultTrailing,
+	}
 	if exists, err := fileExists(dir, "tuning.yaml"); err != nil {
 		return nil, fmt.Errorf("failed to check for tuning.yaml: %w", err)
 	} else if exists {
@@ -243,20 +249,21 @@ func New(
 		}
 
 		if v := tuning.Snapshot; v != nil {
-			logrus.WithFields(logrus.Fields{"threshold": v.Threshold, "trailing": v.Trailing}).Print("Configure dqlite raft snapshot parameters")
-			if v.Trailing < v.Threshold {
-				return nil, fmt.Errorf("the snapshot's trailing parameter must be less than the threshold parameter")
+			logrus.WithFields(logrus.Fields{"threshold": v.Threshold, "trailing": v.Trailing}).Print("Initial dqlite raft snapshot parameters before adjustments")
+
+			if v.Trailing < minTrailing && v.Threshold > minThreshold {
+				snapshotParameters.Trailing = v.Threshold * scalingFactor
+				snapshotParameters.Threshold = v.Threshold
+			} else if v.Threshold < minThreshold && v.Trailing > minThreshold {
+				snapshotParameters.Threshold = v.Trailing * 1 / scalingFactor
+				snapshotParameters.Trailing = v.Trailing
+			} else if v.Trailing < minTrailing && v.Threshold < minThreshold {
+				snapshotParameters.Threshold = minThreshold
+				snapshotParameters.Trailing = minTrailing
+			} else {
+				snapshotParameters.Threshold = v.Threshold
+				snapshotParameters.Trailing = v.Trailing
 			}
-			// ensure that the threshold is at least 384 and trailing is at least 512 to avoid CPU utilization issues.
-			if v.Threshold < min_trailing || v.Trailing < min_trailing {
-				logrus.WithFields(logrus.Fields{"threshold": min_threshold, "trailing": min_trailing}).Print("Using dqlite raft minimum snapshot parameters, as provided value(s) are too low")
-				v.Threshold = min_threshold
-				v.Trailing = min_trailing
-			}
-			options = append(options, app.WithSnapshotParams(dqlite.SnapshotParams{
-				Threshold: v.Threshold,
-				Trailing:  v.Trailing,
-			}))
 		}
 
 		if v := tuning.NetworkLatency; v != nil {
@@ -267,12 +274,10 @@ func New(
 		// these are set in the kine endpoint config below
 		compactInterval = tuning.KineCompactInterval
 		pollInterval = tuning.KinePollInterval
-	} else {
-		options = append(options, app.WithSnapshotParams(dqlite.SnapshotParams{
-			Threshold: default_threshold,
-			Trailing:  default_trailing,
-		}))
 	}
+
+	logrus.WithFields(logrus.Fields{"threshold": snapshotParameters.Threshold, "trailing": snapshotParameters.Trailing}).Print("Configure dqlite raft snapshot parameters")
+	options = append(options, app.WithSnapshotParams(snapshotParameters))
 
 	if diskMode {
 		logrus.Print("Enable dqlite disk mode operation")
