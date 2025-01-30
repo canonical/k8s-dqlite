@@ -254,7 +254,7 @@ func New(
 			if v.Trailing < minTrailing && v.Threshold > minThreshold {
 				snapshotParameters.Trailing = v.Threshold * scalingFactor
 				snapshotParameters.Threshold = v.Threshold
-			} else if v.Threshold < minThreshold && v.Trailing > minThreshold {
+			} else if v.Threshold < minThreshold && v.Trailing > minTrailing {
 				snapshotParameters.Threshold = v.Trailing * 1 / scalingFactor
 				snapshotParameters.Trailing = v.Trailing
 			} else if v.Trailing < minTrailing && v.Threshold < minThreshold {
