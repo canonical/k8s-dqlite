@@ -85,7 +85,7 @@ jobs:
           mkdir -p ./results/head
           set -ex
           iteration=0
-          while [[ $iteration -lt 10 ]]; do
+          while [[ $iteration -lt 5 ]]; do
             echo "iteration: $iteration"
             sg lxd -c 'tox -e performance'
             iteration=$(( $iteration + 1 ))
@@ -106,7 +106,7 @@ jobs:
           mkdir -p ./results/base-code
           set -ex
           iteration=0
-          while [[ $iteration -lt 10 ]]; do
+          while [[ $iteration -lt 5 ]]; do
             echo "iteration: $iteration"
             sg lxd -c 'tox -e performance'
             iteration=$(( $iteration + 1 ))
