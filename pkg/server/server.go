@@ -61,7 +61,6 @@ const (
 	minThreshold     = 384
 	defaultTrailing  = 1024
 	minTrailing      = 512
-	scalingFactor    = 2
 )
 
 // New creates a new instance of Server based on configuration.
@@ -251,18 +250,25 @@ func New(
 		if v := tuning.Snapshot; v != nil {
 			logrus.WithFields(logrus.Fields{"threshold": v.Threshold, "trailing": v.Trailing}).Print("Initial dqlite raft snapshot parameters before adjustments")
 
-			if v.Trailing < minTrailing && v.Threshold > minThreshold {
-				snapshotParameters.Trailing = v.Threshold * scalingFactor
-				snapshotParameters.Threshold = v.Threshold
-			} else if v.Threshold < minThreshold && v.Trailing > minTrailing {
-				snapshotParameters.Threshold = v.Trailing * 1 / scalingFactor
-				snapshotParameters.Trailing = v.Trailing
-			} else if v.Trailing < minTrailing && v.Threshold < minThreshold {
-				snapshotParameters.Threshold = minThreshold
+			snapshotParameters.Threshold = v.Threshold
+			snapshotParameters.Trailing = v.Trailing
+
+			if v.Trailing < minTrailing {
 				snapshotParameters.Trailing = minTrailing
-			} else {
-				snapshotParameters.Threshold = v.Threshold
-				snapshotParameters.Trailing = v.Trailing
+				logrus.WithFields(logrus.Fields{"adjustedTrailing": snapshotParameters.Trailing}).Warning("Trailing value is too low, setting to minimum value")
+			}
+			if v.Threshold == 0 {
+				snapshotParameters.Threshold = v.Trailing / 2
+				logrus.WithFields(logrus.Fields{"adjustedThreshold": snapshotParameters.Threshold}).Warning("Threshold value is zero, setting to half of trailing value")
+
+			} else if v.Threshold < minThreshold {
+				snapshotParameters.Threshold = minThreshold
+				logrus.WithFields(logrus.Fields{"adjustedThreshold": snapshotParameters.Threshold}).Warning("Threshold value is too low, setting to minimum value")
+
+			}
+			if v.Threshold > v.Trailing {
+				snapshotParameters.Threshold = v.Trailing
+				logrus.WithFields(logrus.Fields{"adjustedThreshold": snapshotParameters.Threshold}).Warning("Threshold value is higher than trailing value, setting to trailing value")
 			}
 		}
 
