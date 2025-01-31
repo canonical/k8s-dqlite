@@ -258,13 +258,11 @@ func New(
 				logrus.WithFields(logrus.Fields{"adjustedTrailing": snapshotParameters.Trailing}).Warning("Trailing value is too low, setting to minimum value")
 			}
 			if v.Threshold == 0 {
-				snapshotParameters.Threshold = v.Trailing / 2
+				snapshotParameters.Threshold = v.Trailing * 3 / 4
 				logrus.WithFields(logrus.Fields{"adjustedThreshold": snapshotParameters.Threshold}).Warning("Threshold value is zero, setting to half of trailing value")
-
 			} else if v.Threshold < minThreshold {
 				snapshotParameters.Threshold = minThreshold
 				logrus.WithFields(logrus.Fields{"adjustedThreshold": snapshotParameters.Threshold}).Warning("Threshold value is too low, setting to minimum value")
-
 			}
 			if v.Threshold > v.Trailing {
 				snapshotParameters.Threshold = v.Trailing
