@@ -56,6 +56,13 @@ var expectedFilesDuringInitialization = map[string]struct{}{
 	"tuning.yaml":    {},
 }
 
+const (
+	defaultThreshold = 512
+	minThreshold     = 384
+	defaultTrailing  = 1024
+	minTrailing      = 512
+)
+
 // New creates a new instance of Server based on configuration.
 func New(
 	dir string,
@@ -227,6 +234,11 @@ func New(
 	// set watch progress notify interval
 	kineConfig.NotifyInterval = watchProgressNotifyInterval
 	// handle tuning parameters
+	// declare default
+	snapshotParameters := dqlite.SnapshotParams{
+		Threshold: defaultThreshold,
+		Trailing:  defaultTrailing,
+	}
 	if exists, err := fileExists(dir, "tuning.yaml"); err != nil {
 		return nil, fmt.Errorf("failed to check for tuning.yaml: %w", err)
 	} else if exists {
@@ -236,11 +248,26 @@ func New(
 		}
 
 		if v := tuning.Snapshot; v != nil {
-			logrus.WithFields(logrus.Fields{"threshold": v.Threshold, "trailing": v.Trailing}).Print("Configure dqlite raft snapshot parameters")
-			options = append(options, app.WithSnapshotParams(dqlite.SnapshotParams{
-				Threshold: v.Threshold,
-				Trailing:  v.Trailing,
-			}))
+			logrus.WithFields(logrus.Fields{"threshold": v.Threshold, "trailing": v.Trailing}).Print("Initial dqlite raft snapshot parameters before adjustments")
+
+			snapshotParameters.Threshold = v.Threshold
+			snapshotParameters.Trailing = v.Trailing
+
+			if v.Trailing < minTrailing {
+				snapshotParameters.Trailing = minTrailing
+				logrus.WithFields(logrus.Fields{"adjustedTrailing": snapshotParameters.Trailing}).Warning("Trailing value is too low, setting to minimum value")
+			}
+			if v.Threshold == 0 {
+				snapshotParameters.Threshold = v.Trailing * 3 / 4
+				logrus.WithFields(logrus.Fields{"adjustedThreshold": snapshotParameters.Threshold}).Warning("Threshold value is zero, setting to half of trailing value")
+			} else if v.Threshold < minThreshold {
+				snapshotParameters.Threshold = minThreshold
+				logrus.WithFields(logrus.Fields{"adjustedThreshold": snapshotParameters.Threshold}).Warning("Threshold value is too low, setting to minimum value")
+			}
+			if v.Threshold > v.Trailing {
+				snapshotParameters.Threshold = v.Trailing
+				logrus.WithFields(logrus.Fields{"adjustedThreshold": snapshotParameters.Threshold}).Warning("Threshold value is higher than trailing value, setting to trailing value")
+			}
 		}
 
 		if v := tuning.NetworkLatency; v != nil {
@@ -252,6 +279,9 @@ func New(
 		compactInterval = tuning.KineCompactInterval
 		pollInterval = tuning.KinePollInterval
 	}
+
+	logrus.WithFields(logrus.Fields{"threshold": snapshotParameters.Threshold, "trailing": snapshotParameters.Trailing}).Print("Configure dqlite raft snapshot parameters")
+	options = append(options, app.WithSnapshotParams(snapshotParameters))
 
 	if diskMode {
 		logrus.Print("Enable dqlite disk mode operation")
