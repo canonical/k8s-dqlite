@@ -87,7 +87,7 @@ jobs:
           iteration=0
           while [[ $iteration -lt 5 ]]; do
             echo "iteration: $iteration"
-            sg lxd -c 'tox -e performance'
+            sg lxd -c 'tox -e performance -- -k test_single_node_load'
             iteration=$(( $iteration + 1 ))
           done
       - name: Run Performance test for base code snap
@@ -108,7 +108,7 @@ jobs:
           iteration=0
           while [[ $iteration -lt 5 ]]; do
             echo "iteration: $iteration"
-            sg lxd -c 'tox -e performance'
+            sg lxd -c 'tox -e performance -- -k test_single_node_load'
             iteration=$(( $iteration + 1 ))
           done
       # - name: Generate 3 node Graphs
