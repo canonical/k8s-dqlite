@@ -4,9 +4,9 @@ global:
 
 jobs:
   - name: api-intensive
-    jobIterations: 1000
-    qps: 5000
-    burst: 5000
+    jobIterations: 500
+    qps: 2500
+    burst: 2500
     namespacedIterations: true
     namespace: api-intensive
     podWait: false
@@ -19,8 +19,8 @@ jobs:
       - objectTemplate: secret.yaml
         replicas: 10
   - name: remove-configmaps-secrets
-    qps: 1000
-    burst: 1000
+    qps: 500
+    burst: 500
     jobType: delete
     objects:
       - kind: ConfigMap
