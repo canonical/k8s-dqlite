@@ -4,31 +4,23 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/sirupsen/logrus"
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
 	"go.etcd.io/etcd/api/v3/mvccpb"
-	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 var (
 	watchID int64
 )
 
-// explicit interface check
-var _ etcdserverpb.WatchServer = (*KVServerBridge)(nil)
-
 func (s *KVServerBridge) Watch(ws etcdserverpb.Watch_WatchServer) error {
 	w := watcher{
-		server:   ws,
-		backend:  s.limited.backend,
-		watches:  map[int64]func(){},
-		progress: map[int64]chan<- int64{},
+		server:  ws,
+		backend: s.limited.backend,
+		watches: map[int64]func(){},
 	}
 	defer w.Close()
-
-	w.pollProgressNotify(ws.Context(), s.limited.notifyInterval)
 
 	for {
 		msg, err := ws.Recv()
@@ -36,54 +28,25 @@ func (s *KVServerBridge) Watch(ws etcdserverpb.Watch_WatchServer) error {
 			return err
 		}
 
-		if cr := msg.GetCreateRequest(); cr != nil {
-			w.Start(ws.Context(), cr)
-		}
-		if cr := msg.GetCancelRequest(); cr != nil {
-			logrus.Tracef("WATCH CANCEL REQ id=%d", cr.WatchId)
-			w.Cancel(cr.WatchId, nil)
-		}
-		if pr := msg.GetProgressRequest(); pr != nil {
-			w.Progress(ws.Context())
+		if msg.GetCreateRequest() != nil {
+			w.Start(ws.Context(), msg.GetCreateRequest())
+		} else if msg.GetCancelRequest() != nil {
+			logrus.Debugf("WATCH CANCEL REQ id=%d", msg.GetCancelRequest().GetWatchId())
+			w.Cancel(msg.GetCancelRequest().WatchId, nil)
 		}
 	}
-}
-
-// pollProgressNotify periodically sends progress notifications to all watchers.
-func (w *watcher) pollProgressNotify(ctx context.Context, interval time.Duration) {
-	go func() {
-		tick := time.NewTicker(interval)
-		defer tick.Stop()
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-tick.C:
-				if err := w.ProgressIfSynced(ctx); err != nil {
-					logrus.Errorf("Failed to send progress notification: %v", err)
-				}
-			}
-		}
-	}()
 }
 
 type watcher struct {
 	sync.Mutex
 
-	wg       sync.WaitGroup
-	backend  Backend
-	server   etcdserverpb.Watch_WatchServer
-	watches  map[int64]func()
-	progress map[int64]chan<- int64
+	wg      sync.WaitGroup
+	backend Backend
+	server  etcdserverpb.Watch_WatchServer
+	watches map[int64]func()
 }
 
 func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest) {
-	if r.WatchId != clientv3.AutoWatchID {
-		logrus.Errorf("WATCH START id=%d ignoring request with client-provided id", r.WatchId)
-		return
-	}
-
 	w.Lock()
 	defer w.Unlock()
 
@@ -94,15 +57,8 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 	w.wg.Add(1)
 
 	key := string(r.Key)
-	startRevision := r.StartRevision
 
-	var progressCh chan int64
-	if r.ProgressNotify {
-		progressCh = make(chan int64)
-		w.progress[id] = progressCh
-	}
-
-	logrus.Tracef("WATCH START id=%d, key=%s, revision=%d, progressNotify=%v, watchCount=%d", id, key, startRevision, r.ProgressNotify, len(w.watches))
+	logrus.Debugf("WATCH START id=%d, count=%d, key=%s, revision=%d", id, len(w.watches), key, r.StartRevision)
 
 	go func() {
 		defer w.wg.Done()
@@ -115,69 +71,32 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 			return
 		}
 
-		watchCh, err := w.backend.Watch(ctx, key, startRevision)
+		watchCh, err := w.backend.Watch(ctx, key, r.StartRevision)
 		if err != nil {
-			logrus.Errorf("Failed to start watch: %v", err)
 			w.Cancel(id, err)
 			return
 		}
-
-		trace := logrus.IsLevelEnabled(logrus.TraceLevel)
-		outer := true
-		for outer {
-			var reads int
-			var events []*Event
-			var revision int64
-
-			// Wait for events or progress notifications
-			select {
-			case events = <-watchCh:
-				// We received events; batch any additional queued events
-				reads++
-				inner := true
-				for inner {
-					select {
-					case e, ok := <-watchCh:
-						reads++
-						events = append(events, e...)
-						if !ok {
-							// channel is closed, break out of both loops
-							inner = false
-							outer = false
-						}
-					default:
-						// No more events in the queue, we can exit the inner loop
-						inner = false
-					}
-				}
-			case revision = <-progressCh:
-				// Received progress update without events
+		for events := range watchCh {
+			if len(events) == 0 {
+				continue
 			}
 
-			// Determine the highest revision among the collected events
-			if len(events) > 0 {
-				revision = events[len(events)-1].KV.ModRevision
-				if trace {
-					for _, event := range events {
-						logrus.Tracef("WATCH READ id=%d, key=%s, revision=%d", id, event.KV.Key, event.KV.ModRevision)
-					}
+			if logrus.IsLevelEnabled(logrus.DebugLevel) {
+				for _, event := range events {
+					logrus.Debugf("WATCH READ id=%d, key=%s, revision=%d", id, event.KV.Key, event.KV.ModRevision)
 				}
 			}
 
-			// Send response, even if this is a progress-only response and no events occured
-			if revision >= startRevision {
-				wr := &etcdserverpb.WatchResponse{
-					Header:  txnHeader(revision),
-					WatchId: id,
-					Events:  toEvents(events...),
-				}
-				logrus.Tracef("WATCH SEND id=%d, key=%s, revision=%d, events=%d, size=%d, reads=%d", id, key, revision, len(wr.Events), wr.Size(), reads)
-				if err := w.server.Send(wr); err != nil {
-					w.Cancel(id, err)
-				}
+			if err := w.server.Send(&etcdserverpb.WatchResponse{
+				Header:  txnHeader(events[len(events)-1].KV.ModRevision),
+				WatchId: id,
+				Events:  toEvents(events...),
+			}); err != nil {
+				w.Cancel(id, err)
+				continue
 			}
 		}
-
+		w.Cancel(id, nil)
 		logrus.Debugf("WATCH CLOSE id=%d, key=%s", id, key)
 	}()
 }
@@ -207,109 +126,33 @@ func toEvent(event *Event) *mvccpb.Event {
 
 func (w *watcher) Cancel(watchID int64, err error) {
 	w.Lock()
-	if progressCh, ok := w.progress[watchID]; ok {
-		close(progressCh)
-		delete(w.progress, watchID)
-	}
 	if cancel, ok := w.watches[watchID]; ok {
 		cancel()
 		delete(w.watches, watchID)
 	}
 	w.Unlock()
 
-	revision := int64(0)
-	compactRev := int64(0)
 	reason := ""
 	if err != nil {
 		reason = err.Error()
-		if err == ErrCompacted {
-			// the requested start revision is compacted.  Pass the current and and compact
-			// revision to the client via the cancel response, along with the correct error message.
-			compactRev, revision, err = w.backend.GetCompactRevision(w.server.Context())
-			if err != nil {
-				logrus.Errorf("Failed to get compact and current revision for cancel response: %v", err)
-			}
-		}
 	}
-	logrus.Tracef("WATCH CANCEL id=%d, reason=%s, compactRev=%d", watchID, reason, compactRev)
-
+	logrus.Debugf("WATCH CANCEL id=%d reason=%s", watchID, reason)
 	serr := w.server.Send(&etcdserverpb.WatchResponse{
-		Header:          txnHeader(revision),
-		Canceled:        true,
-		CancelReason:    reason,
-		WatchId:         watchID,
-		CompactRevision: compactRev,
+		Header:       &etcdserverpb.ResponseHeader{},
+		Canceled:     true,
+		CancelReason: "watch closed",
+		WatchId:      watchID,
 	})
-	if serr != nil && err != nil && !clientv3.IsConnCanceled(serr) {
+	if serr != nil && err != nil {
 		logrus.Errorf("WATCH Failed to send cancel response for watchID %d: %v", watchID, serr)
 	}
 }
 
 func (w *watcher) Close() {
-	logrus.Tracef("WATCH SERVER CLOSE")
 	w.Lock()
-	for id, progressCh := range w.progress {
-		close(progressCh)
-		delete(w.progress, id)
-	}
-	for id, cancel := range w.watches {
-		cancel()
-		delete(w.watches, id)
+	for _, v := range w.watches {
+		v()
 	}
 	w.Unlock()
 	w.wg.Wait()
-}
-
-// Progress sends a progress report if all watchers are synced.
-// Ref: https://github.com/etcd-io/etcd/blob/v3.5.11/server/mvcc/watchable_store.go#L500-L504
-func (w *watcher) Progress(ctx context.Context) {
-	w.Lock()
-	defer w.Unlock()
-
-	logrus.Tracef("WATCH REQUEST PROGRESS")
-
-	// All synced watchers will be blocked in the outer loop and able to receive on the progress channel.
-	// If any cannot be sent to, then it is not synced and has pending events to be sent.
-	// Send revision 0, as we don't actually want the watchers to send a progress response if they do receive.
-	for id, progressCh := range w.progress {
-		select {
-		case progressCh <- 0:
-		default:
-			logrus.Tracef("WATCH SEND PROGRESS FAILED NOT SYNCED id=%d ", id)
-			return
-		}
-	}
-
-	// If all watchers are synced, send a broadcast progress notification with the latest revision.
-	id := int64(clientv3.InvalidWatchID)
-	rev, err := w.backend.CurrentRevision(ctx)
-	if err != nil {
-		logrus.Errorf("Failed to get current revision for ProgressNotify: %v", err)
-		return
-	}
-
-	logrus.Tracef("WATCH SEND PROGRESS id=%d, revision=%d", id, rev)
-	go w.server.Send(&etcdserverpb.WatchResponse{Header: txnHeader(rev), WatchId: id})
-}
-
-// ProgressIfSynced sends a progress report on any channels that are synced and blocked on the outer loop
-func (w *watcher) ProgressIfSynced(ctx context.Context) error {
-	logrus.Tracef("WATCH PROGRESS TICK")
-	revision, err := w.backend.CurrentRevision(ctx)
-	if err != nil {
-		logrus.Errorf("Failed to get current revision for ProgressNotify: %v", err)
-		return err
-	}
-
-	w.Lock()
-	defer w.Unlock()
-
-	// Send revision to all synced channels
-	for _, progressCh := range w.progress {
-		select {
-		case progressCh <- revision:
-		default:
-		}
-	}
-	return nil
 }

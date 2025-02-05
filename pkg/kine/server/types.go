@@ -7,6 +7,7 @@ import (
 )
 
 var (
+	ErrKeyExists     = rpctypes.ErrGRPCDuplicateKey
 	ErrCompacted     = rpctypes.ErrGRPCCompacted
 	ErrGRPCUnhealthy = rpctypes.ErrGRPCUnhealthy
 )
@@ -21,8 +22,6 @@ type Backend interface {
 	Update(ctx context.Context, key string, value []byte, revision, lease int64) (int64, bool, error)
 	Watch(ctx context.Context, key string, revision int64) (<-chan []*Event, error)
 	DbSize(ctx context.Context) (int64, error)
-	CurrentRevision(ctx context.Context) (int64, error)
-	GetCompactRevision(ctx context.Context) (int64, int64, error)
 	DoCompact(ctx context.Context) error
 	Close() error
 }

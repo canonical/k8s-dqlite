@@ -76,8 +76,6 @@ func New(
 	lowAvailableStorageAction string,
 	connectionPoolConfig generic.ConnectionPoolConfig,
 	watchQueryTimeout time.Duration,
-	watchProgressNotifyInterval time.Duration,
-
 ) (*Server, error) {
 	var (
 		options         []app.Option
@@ -231,8 +229,6 @@ func New(
 	}
 	// set datastore connection pool options
 	kineConfig.ConnectionPoolConfig = connectionPoolConfig
-	// set watch progress notify interval
-	kineConfig.NotifyInterval = watchProgressNotifyInterval
 	// handle tuning parameters
 	// declare default
 	snapshotParameters := dqlite.SnapshotParams{

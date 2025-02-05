@@ -138,9 +138,8 @@ func startSqlite(_ context.Context, tb testing.TB, dir string) (*endpoint.Config
 	}
 
 	return &endpoint.Config{
-		Listener:       fmt.Sprintf("unix://%s/kine.sock", dir),
-		Endpoint:       fmt.Sprintf("sqlite://%s", dbPath),
-		NotifyInterval: 5 * time.Second,
+		Listener: fmt.Sprintf("unix://%s/kine.sock", dir),
+		Endpoint: fmt.Sprintf("sqlite://%s", dbPath),
 	}, db
 }
 
@@ -165,9 +164,8 @@ func startDqlite(ctx context.Context, tb testing.TB, dir string, listener *instr
 	}
 
 	return &endpoint.Config{
-		Listener:       fmt.Sprintf("unix://%s/kine.sock", dir),
-		Endpoint:       fmt.Sprintf("dqlite://k8s?driver-name=%s", app.Driver()),
-		NotifyInterval: 5 * time.Second,
+		Listener: fmt.Sprintf("unix://%s/kine.sock", dir),
+		Endpoint: fmt.Sprintf("dqlite://k8s?driver-name=%s", app.Driver()),
 	}, db
 }
 

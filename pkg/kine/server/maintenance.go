@@ -9,10 +9,6 @@ import (
 
 var _ etcdserverpb.MaintenanceServer = (*KVServerBridge)(nil)
 
-// The emulated etcd version is returned on a call to the status endpoint. The version 3.5.13, indicates support for the watch progress notifications.
-// See: https://github.com/kubernetes/kubernetes/blob/beb696c2c9467dbc44cbaf35c5a4a3daf0321db3/staging/src/k8s.io/apiserver/pkg/storage/feature/feature_support_checker.go#L157
-const emulatedEtcdVersion = "3.5.13"
-
 func (s *KVServerBridge) Alarm(context.Context, *etcdserverpb.AlarmRequest) (*etcdserverpb.AlarmResponse, error) {
 	return nil, fmt.Errorf("alarm is not supported")
 }
@@ -23,9 +19,8 @@ func (s *KVServerBridge) Status(ctx context.Context, r *etcdserverpb.StatusReque
 		return nil, err
 	}
 	return &etcdserverpb.StatusResponse{
-		Header:  &etcdserverpb.ResponseHeader{},
-		DbSize:  size,
-		Version: emulatedEtcdVersion,
+		Header: &etcdserverpb.ResponseHeader{},
+		DbSize: size,
 	}, nil
 }
 

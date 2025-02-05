@@ -32,7 +32,6 @@ The following configuration options are available listed in a table format:
 | ~~`--admission-control-policy-limit`~~ | `REMOVED` | - |
 | ~~`--admission-control-only-for-write-queries`~~ | `REMOVED` | - |
 | `--watch-query-timeout` | Timeout for querying events in the watch poll loop | `20s` |
-| `--watch-progress-notify-interval` | Interval between periodic watch progress notifications. Default is 5s to ensure support for watch progress notifications. | `5s` |
 
 ## Observability
 

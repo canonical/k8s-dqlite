@@ -39,9 +39,8 @@ var (
 		watchAvailableStorageMinBytes uint64
 		lowAvailableStorageAction     string
 
-		etcdMode                    bool
-		watchQueryTimeout           time.Duration
-		watchProgressNotifyInterval time.Duration
+		etcdMode          bool
+		watchQueryTimeout time.Duration
 	}
 
 	rootCmd = &cobra.Command{
@@ -107,7 +106,6 @@ var (
 				rootCmdOpts.lowAvailableStorageAction,
 				rootCmdOpts.connectionPoolConfig,
 				rootCmdOpts.watchQueryTimeout,
-				rootCmdOpts.watchProgressNotifyInterval,
 			)
 			if err != nil {
 				logrus.WithError(err).Fatal("Failed to create server")
@@ -183,7 +181,6 @@ func init() {
 	rootCmd.Flags().Uint64Var(&rootCmdOpts.watchAvailableStorageMinBytes, "watch-storage-available-size-min-bytes", 10*1024*1024, "Minimum required available disk size (in bytes) to continue operation. If available disk space gets below this threshold, then the --low-available-storage-action is performed")
 	rootCmd.Flags().StringVar(&rootCmdOpts.lowAvailableStorageAction, "low-available-storage-action", "none", "Action to perform in case the available storage is low. One of (none|handover|terminate). none means no action is performed. handover means the dqlite node will handover its leadership role, if any. terminate means this dqlite node will shutdown")
 	rootCmd.Flags().DurationVar(&rootCmdOpts.watchQueryTimeout, "watch-query-timeout", 20*time.Second, "Timeout for querying events in the watch poll loop. If timeout is reached, the poll loop will be re-triggered. The minimum value is 5 seconds.")
-	rootCmd.Flags().DurationVar(&rootCmdOpts.watchProgressNotifyInterval, "watch-progress-notify-interval", 5*time.Second, "Interval between periodic watch progress notifications. Default is 5s to ensure support for watch progress notifications.")
 
 	rootCmd.AddCommand(&cobra.Command{
 		Use:  "version",
