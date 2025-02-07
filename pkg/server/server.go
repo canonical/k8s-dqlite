@@ -150,7 +150,7 @@ func New(
 		info.Address = update.Address
 
 		// reconfigure dqlite membership
-		if err := dqlite.ReconfigureMembership(dir, []dqlite.NodeInfo{info}); err != nil {
+		if err := dqlite.ReconfigureMembershipExt(dir, []dqlite.NodeInfo{info}); err != nil {
 			return nil, fmt.Errorf("failed to reconfigure dqlite membership for new address: %w", err)
 		}
 
