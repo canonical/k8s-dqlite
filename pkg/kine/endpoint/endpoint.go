@@ -99,11 +99,11 @@ func createListener(listen string) (_ net.Listener, err error) {
 }
 
 func networkAndAddress(str string) (string, string) {
-	before, after, found := strings.Cut(str, "://")
+	network, address, found := strings.Cut(str, "://")
 	if found {
-		return before, after
+		return network, address
 	}
-	return "", before
+	return "", str
 }
 
 func ListenAndReturnBackend(ctx context.Context, config Config) (ETCDConfig, server.Backend, error) {
