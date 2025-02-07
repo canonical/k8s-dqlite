@@ -30,7 +30,7 @@ type DriverOptions struct {
 }
 
 func NewDriver(ctx context.Context, options *DriverOptions) (*Driver, error) {
-	logrus.Printf("New kine for dqlite")
+	logrus.Printf("New driver for dqlite")
 
 	drv, err := sqlite.NewDriver(ctx, &sqlite.DriverOptions{
 		DB:         options.DB,
