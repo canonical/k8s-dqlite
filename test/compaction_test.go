@@ -10,7 +10,7 @@ import (
 )
 
 func TestCompaction(t *testing.T) {
-	for _, backendType := range []string{ /*SQLiteBackend,*/ DQLiteBackend} {
+	for _, backendType := range []string{SQLiteBackend, DQLiteBackend} {
 		t.Run(backendType, func(t *testing.T) {
 			t.Run("SmallDatabaseDeleteEntry", func(t *testing.T) {
 				g := NewWithT(t)
