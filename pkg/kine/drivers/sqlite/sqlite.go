@@ -4,68 +4,24 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"net/url"
-	"os"
-	"strings"
 	"time"
 
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/generic"
-	"github.com/canonical/k8s-dqlite/pkg/kine/server"
-	"github.com/canonical/k8s-dqlite/pkg/kine/sqllog"
 	"github.com/mattn/go-sqlite3"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
-type opts struct {
-	dsn        string
-	driverName string // If not empty, use a pre-registered dqlite driver
+func NewDriver(ctx context.Context, driverName, dataSourceName string, connectionPoolConfig *generic.ConnectionPoolConfig) (*generic.Generic, error) {
+	const retryAttempts = 300
 
-	compactInterval   time.Duration
-	pollInterval      time.Duration
-	watchQueryTimeout time.Duration
-}
-
-func New(ctx context.Context, dataSourceName string, connectionPoolConfig *generic.ConnectionPoolConfig) (server.Backend, error) {
-	backend, _, err := NewVariant(ctx, "sqlite3", dataSourceName, connectionPoolConfig)
+	driver, err := generic.Open(ctx, driverName, dataSourceName, connectionPoolConfig)
 	if err != nil {
 		return nil, err
 	}
-
-	return backend, err
-}
-
-func NewVariant(ctx context.Context, driverName, dataSourceName string, connectionPoolConfig *generic.ConnectionPoolConfig) (server.Backend, *generic.Generic, error) {
-	const retryAttempts = 300
-
-	opts, err := parseOpts(dataSourceName)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	if driverName == "" {
-		// Check if driver name is set via query parameters
-		if opts.driverName == "" {
-			return nil, nil, fmt.Errorf("required option 'driver-name' not set in connection string")
-		}
-		driverName = opts.driverName
-	}
-	logrus.Printf("DriverName is %s.", driverName)
-
-	if opts.dsn == "" {
-		if err := os.MkdirAll("./db", 0700); err != nil {
-			return nil, nil, err
-		}
-		opts.dsn = "./db/state.db?_journal=WAL&_synchronous=FULL&_foreign_keys=1"
-	}
-
-	dialect, err := generic.Open(ctx, driverName, opts.dsn, connectionPoolConfig)
-	if err != nil {
-		return nil, nil, err
-	}
 	for i := 0; i < retryAttempts; i++ {
 		err = func() error {
-			conn, err := dialect.DB.Conn(ctx)
+			conn, err := driver.DB.Conn(ctx)
 			if err != nil {
 				return err
 			}
@@ -78,18 +34,14 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string, connecti
 		logrus.Errorf("failed to setup db: %v", err)
 		select {
 		case <-ctx.Done():
-			return nil, nil, ctx.Err()
+			return nil, ctx.Err()
 		case <-time.After(time.Second):
 		}
 		time.Sleep(time.Second)
 	}
 
-	dialect.CompactInterval = opts.compactInterval
-	dialect.PollInterval = opts.pollInterval
-	dialect.WatchQueryTimeout = opts.watchQueryTimeout
-
 	if driverName == "sqlite3" {
-		dialect.Retry = func(err error) bool {
+		driver.Retry = func(err error) bool {
 			if err, ok := err.(sqlite3.Error); ok {
 				return err.Code == sqlite3.ErrBusy
 			}
@@ -97,7 +49,7 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string, connecti
 		}
 	}
 
-	return sqllog.New(dialect), dialect, nil
+	return driver, nil
 }
 
 // setup performs table setup, which may include creation of the Kine table if
@@ -165,60 +117,4 @@ func migrate(ctx context.Context, txn *sql.Tx) error {
 	}
 
 	return nil
-}
-
-func parseOpts(dsn string) (opts, error) {
-	result := opts{
-		dsn: dsn,
-	}
-
-	parts := strings.SplitN(dsn, "?", 2)
-	if len(parts) == 1 {
-		return result, nil
-	}
-
-	values, err := url.ParseQuery(parts[1])
-	if err != nil {
-		return result, err
-	}
-
-	for k, vs := range values {
-		if len(vs) == 0 {
-			continue
-		}
-
-		switch k {
-		case "driver-name":
-			result.driverName = vs[0]
-		case "compact-interval":
-			d, err := time.ParseDuration(vs[0])
-			if err != nil {
-				return opts{}, fmt.Errorf("failed to parse compact-interval duration value %q: %w", vs[0], err)
-			}
-			result.compactInterval = d
-		case "poll-interval":
-			d, err := time.ParseDuration(vs[0])
-			if err != nil {
-				return opts{}, fmt.Errorf("failed to parse poll-interval duration value %q: %w", vs[0], err)
-			}
-			result.pollInterval = d
-		case "watch-query-timeout":
-			d, err := time.ParseDuration(vs[0])
-			if err != nil {
-				return opts{}, fmt.Errorf("failed to parse watch-query-timeout duration value %q: %w", vs[0], err)
-			}
-			result.watchQueryTimeout = d
-		default:
-			continue
-		}
-		delete(values, k)
-	}
-
-	if len(values) == 0 {
-		result.dsn = parts[0]
-	} else {
-		result.dsn = fmt.Sprintf("%s?%s", parts[0], values.Encode())
-	}
-
-	return result, nil
 }
