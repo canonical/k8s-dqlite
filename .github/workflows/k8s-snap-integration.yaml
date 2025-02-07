@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   build:
-    name: K8s-snap Integration Test
+    name: K8s-snap Integration Test on ${{ matrix.os }}
     runs-on: self-hosted-linux-amd64-jammy-large
     strategy:
       matrix:
