@@ -27,7 +27,7 @@ jobs:
       - name: Install Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.21"
+          go-version-file: go.mod
 
       - name: go mod download
         run: go mod download
@@ -59,7 +59,7 @@ jobs:
       - name: Install Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.21"
+          go-version-file: go.mod
 
       - name: go mod download
         run: go mod download
@@ -81,7 +81,7 @@ jobs:
       - name: Install Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.21"
+          go-version-file: go.mod
 
       - name: go mod download
         run: |
@@ -179,7 +179,7 @@ jobs:
       - name: Install Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.21"
+          go-version-file: go.mod
 
       - name: Build static binaries
         run: |
