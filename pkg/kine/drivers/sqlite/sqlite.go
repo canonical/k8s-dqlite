@@ -12,7 +12,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func New(ctx context.Context, driverName, dataSourceName string, connectionPoolConfig *generic.ConnectionPoolConfig) (*generic.Generic, error) {
+func NewDriver(ctx context.Context, driverName, dataSourceName string, connectionPoolConfig *generic.ConnectionPoolConfig) (*generic.Generic, error) {
 	const retryAttempts = 300
 
 	driver, err := generic.Open(ctx, driverName, dataSourceName, connectionPoolConfig)

@@ -23,10 +23,10 @@ func init() {
 	}
 }
 
-func New(ctx context.Context, driverName, datasourceName string, connectionPoolConfig *generic.ConnectionPoolConfig) (sqllog.Driver, error) {
+func NewDriver(ctx context.Context, driverName, datasourceName string, connectionPoolConfig *generic.ConnectionPoolConfig) (sqllog.Driver, error) {
 	logrus.Printf("New kine for dqlite")
 
-	driver_, err := sqlite.New(ctx, driverName, datasourceName, connectionPoolConfig)
+	driver_, err := sqlite.NewDriver(ctx, driverName, datasourceName, connectionPoolConfig)
 	if err != nil {
 		return nil, errors.Wrap(err, "sqlite client")
 	}

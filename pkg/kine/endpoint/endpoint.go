@@ -182,9 +182,9 @@ func getKineStorageBackend(ctx context.Context, config Config) (server.Backend, 
 			}
 			dataSourceName = "./db/state.db?_journal=WAL&_synchronous=FULL&_foreign_keys=1"
 		}
-		driver, err = sqlite.New(ctx, "sqlite3", dataSourceName, &config.ConnectionPoolConfig)
+		driver, err = sqlite.NewDriver(ctx, "sqlite3", dataSourceName, &config.ConnectionPoolConfig)
 	case DQLiteBackend:
-		driver, err = dqlite.New(ctx, options.DriverName, options.DataSourceName, &config.ConnectionPoolConfig)
+		driver, err = dqlite.NewDriver(ctx, options.DriverName, options.DataSourceName, &config.ConnectionPoolConfig)
 	default:
 		return nil, fmt.Errorf("backend type %s is not defined", options.BackendType)
 	}
