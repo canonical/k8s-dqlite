@@ -19,12 +19,6 @@ jobs:
     steps:
       - name: Checking out repo
         uses: actions/checkout@v4
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-      - name: Install tox
-        run: pip install tox
       - name: Install Go
         uses: actions/setup-go@v5
         with:
@@ -56,6 +50,12 @@ jobs:
         os: ["ubuntu:20.04", "ubuntu:22.04", "ubuntu:24.04"]
         arch: ["arm64", "amd64"]
     steps:
+      - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.10"
+      - name: Install tox
+        run: pip install tox
       - name: Running
         env:
           TEST_SNAP: ${{ github.workspace }}/k8s-updated.snap
