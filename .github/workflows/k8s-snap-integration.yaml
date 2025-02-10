@@ -26,8 +26,6 @@ jobs:
       - name: Download latest k8s-snap
         run: |
           sudo snap download k8s --channel=latest/edge --basename k8s
-      - name: Install lxd
-        uses: canonical/k8s-snap/.github/actions/install-lxd@main
       - name: Build k8s-dqlite
         run: |
           make static
@@ -56,6 +54,8 @@ jobs:
           python-version: "3.10"
       - name: Install tox
         run: pip install tox
+      - name: Install lxd
+        uses: canonical/k8s-snap/.github/actions/install-lxd@main
       - name: Running
         env:
           TEST_SNAP: ${{ github.workspace }}/k8s-updated.snap
