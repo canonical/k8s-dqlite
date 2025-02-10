@@ -39,6 +39,24 @@ def collect_metrics(instances: List[harness.Instance]):
             background=True,
         )
         process_dict[instance.id] = subprocess
+
+        pprof_seconds = config.PROFILE_DURATION
+        util.stubbornly(retries=5, delay_s=3).on(instance).exec(
+            ["snap", "install", "go", "--classic"]
+        )
+        instance.exec(
+            [
+                "go",
+                "tool",
+                "pprof",
+                "-top",
+                f"http://localhost:4000/debug/pprof/profile?seconds={pprof_seconds}",
+                ">",
+                f"/root/{instance.id}_cpu_profile.txt"
+            ],
+            background=True,
+        )
+
     return process_dict
 
 
