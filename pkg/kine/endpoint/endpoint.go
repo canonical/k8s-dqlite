@@ -32,13 +32,13 @@ type Server interface {
 	etcdserverpb.MaintenanceServer
 }
 
-type EndpointOptions struct {
+type EndpointConfig struct {
 	ListenAddress string
 
 	Server Server
 }
 
-func Listen(ctx context.Context, options *EndpointOptions) (*ETCDConfig, error) {
+func Listen(ctx context.Context, config *EndpointConfig) (*ETCDConfig, error) {
 	grpcServer := grpc.NewServer(
 		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
 			MinTime:             embed.DefaultGRPCKeepAliveMinTime,
@@ -49,9 +49,9 @@ func Listen(ctx context.Context, options *EndpointOptions) (*ETCDConfig, error) 
 			Timeout: embed.DefaultGRPCKeepAliveTimeout,
 		}),
 	)
-	registerServer(grpcServer, options.Server)
+	registerServer(grpcServer, config.Server)
 
-	listenAddress := options.ListenAddress
+	listenAddress := config.ListenAddress
 	if listenAddress == "" {
 		listenAddress = KineSocket
 	}

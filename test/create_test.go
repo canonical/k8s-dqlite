@@ -19,7 +19,7 @@ func TestCreate(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			kine := newKineServer(ctx, t, &kineOptions{backendType: backendType})
+			kine := newKineServer(ctx, t, &kineConfig{backendType: backendType})
 
 			createKey(ctx, g, kine.client, "testKey", "testValue")
 
@@ -45,7 +45,7 @@ func BenchmarkCreate(b *testing.B) {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
 
-				kine := newKineServer(ctx, b, &kineOptions{backendType: backendType})
+				kine := newKineServer(ctx, b, &kineConfig{backendType: backendType})
 				wg := &sync.WaitGroup{}
 				run := func(start int) {
 					defer wg.Done()

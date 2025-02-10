@@ -18,7 +18,7 @@ func TestCompaction(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
 
-				kine := newKineServer(ctx, t, &kineOptions{
+				kine := newKineServer(ctx, t, &kineConfig{
 					backendType: backendType,
 					setup: func(ctx context.Context, tx *sql.Tx) error {
 						if _, err := insertMany(ctx, tx, "key", 100, 2); err != nil {
@@ -51,7 +51,7 @@ func TestCompaction(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
 
-				kine := newKineServer(ctx, t, &kineOptions{
+				kine := newKineServer(ctx, t, &kineConfig{
 					backendType: backendType,
 					setup: func(ctx context.Context, tx *sql.Tx) error {
 						if _, err := insertMany(ctx, tx, "key", 100, 10_000); err != nil {
@@ -97,7 +97,7 @@ func BenchmarkCompaction(b *testing.B) {
 			b.StopTimer()
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			kine := newKineServer(ctx, b, &kineOptions{
+			kine := newKineServer(ctx, b, &kineConfig{
 				backendType: backendType,
 				setup: func(ctx context.Context, tx *sql.Tx) error {
 					// Make sure there are enough rows deleted to have

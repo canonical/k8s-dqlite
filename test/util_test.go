@@ -38,7 +38,7 @@ type kineServer struct {
 	dqliteListener *instrument.Listener
 }
 
-type kineOptions struct {
+type kineConfig struct {
 	// backendType is the type of the kine backend. It can be either
 	// SQLiteBackend or DQLiteBackend.
 	backendType string
@@ -50,7 +50,7 @@ type kineOptions struct {
 }
 
 // newKineServer spins up a new instance of kine. In case of an error, tb.Fatal is called.
-func newKineServer(ctx context.Context, tb testing.TB, options *kineOptions) *kineServer {
+func newKineServer(ctx context.Context, tb testing.TB, config *kineConfig) *kineServer {
 	dir := tb.TempDir()
 
 	if err := instrument.StartSQLiteMonitoring(); err != nil {
@@ -61,7 +61,7 @@ func newKineServer(ctx context.Context, tb testing.TB, options *kineOptions) *ki
 	var driver sqllog.Driver
 	var db *sql.DB
 	var dqliteListener *instrument.Listener
-	switch options.backendType {
+	switch config.backendType {
 	case SQLiteBackend:
 		driver, db = startSqlite(ctx, tb, dir)
 	case DQLiteBackend:
@@ -77,15 +77,15 @@ func newKineServer(ctx context.Context, tb testing.TB, options *kineOptions) *ki
 		})
 		driver, db = startDqlite(ctx, tb, dir, dqliteListener)
 	default:
-		tb.Fatalf("Testing %s backend not supported", options.backendType)
+		tb.Fatalf("Testing %s backend not supported", config.backendType)
 	}
 
-	if options.setup != nil {
+	if config.setup != nil {
 		tx, err := db.BeginTx(ctx, nil)
 		if err != nil {
 			tb.Fatal(err)
 		}
-		if err := options.setup(ctx, tx); err != nil {
+		if err := config.setup(ctx, tx); err != nil {
 			rollbackErr := tx.Rollback()
 			tb.Fatal(errors.Join(err, rollbackErr))
 		}
@@ -94,7 +94,7 @@ func newKineServer(ctx context.Context, tb testing.TB, options *kineOptions) *ki
 		}
 	}
 
-	backend := sqllog.New(&sqllog.SQLLogOptions{
+	backend := sqllog.New(&sqllog.SQLLogConfig{
 		Driver:            driver,
 		CompactInterval:   5 * time.Minute,
 		PollInterval:      1 * time.Second,
@@ -114,7 +114,7 @@ func newKineServer(ctx context.Context, tb testing.TB, options *kineOptions) *ki
 		Path:   path.Join(dir, "kine.sock"),
 	}).String()
 
-	_, err := endpoint.Listen(ctx, &endpoint.EndpointOptions{
+	_, err := endpoint.Listen(ctx, &endpoint.EndpointConfig{
 		ListenAddress: listenUrl,
 		Server:        server.New(backend, 5*time.Second),
 	})

@@ -419,7 +419,7 @@ func (s *Server) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to create dqlite driver: %w", err)
 	}
 
-	backend := sqllog.New(&sqllog.SQLLogOptions{
+	backend := sqllog.New(&sqllog.SQLLogConfig{
 		Driver:            driver,
 		CompactInterval:   s.serverConfig.CompactInterval,
 		PollInterval:      s.serverConfig.PollInterval,
@@ -432,7 +432,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	s.backend = backend
 
-	_, err = endpoint.Listen(ctx, &endpoint.EndpointOptions{
+	_, err = endpoint.Listen(ctx, &endpoint.EndpointConfig{
 		ListenAddress: s.serverConfig.ListenAddress,
 		Server:        server.New(backend, s.serverConfig.NotifyInterval),
 	})

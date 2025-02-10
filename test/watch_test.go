@@ -29,7 +29,7 @@ func TestWatch(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			kine := newKineServer(ctx, t, &kineOptions{backendType: backendType})
+			kine := newKineServer(ctx, t, &kineConfig{backendType: backendType})
 
 			// start watching for events on key
 			const watchedPrefix = "watched/"

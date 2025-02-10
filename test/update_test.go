@@ -17,7 +17,7 @@ func TestUpdate(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			kine := newKineServer(ctx, t, &kineOptions{backendType: backendType})
+			kine := newKineServer(ctx, t, &kineConfig{backendType: backendType})
 
 			t.Run("UpdateExisting", func(t *testing.T) {
 				g := NewWithT(t)
@@ -114,7 +114,7 @@ func BenchmarkUpdate(b *testing.B) {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
 
-				kine := newKineServer(ctx, b, &kineOptions{backendType: backendType})
+				kine := newKineServer(ctx, b, &kineConfig{backendType: backendType})
 				wg := &sync.WaitGroup{}
 				run := func(start int) {
 					defer wg.Done()
