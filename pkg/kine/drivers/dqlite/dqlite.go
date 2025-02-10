@@ -24,16 +24,16 @@ func init() {
 
 type Driver = sqlite.Driver
 
-type DriverOptions struct {
+type DriverConfig struct {
 	DB      database.Interface
 	ErrCode func(error) string
 }
 
-func NewDriver(ctx context.Context, options *DriverOptions) (*Driver, error) {
+func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
 	logrus.Printf("New driver for dqlite")
 
-	drv, err := sqlite.NewDriver(ctx, &sqlite.DriverOptions{
-		DB:         options.DB,
+	drv, err := sqlite.NewDriver(ctx, &sqlite.DriverConfig{
+		DB:         config.DB,
 		LockWrites: true,
 		Retry:      dqliteRetry,
 	})
@@ -41,7 +41,7 @@ func NewDriver(ctx context.Context, options *DriverOptions) (*Driver, error) {
 		return nil, err
 	}
 
-	if err := migrate(ctx, options.DB); err != nil {
+	if err := migrate(ctx, config.DB); err != nil {
 		return nil, errors.Wrap(err, "failed to migrate DB from sqlite")
 	}
 

@@ -148,7 +148,7 @@ func startSqlite(ctx context.Context, tb testing.TB, dir string) (*sqlite.Driver
 		tb.Fatal(err)
 	}
 
-	driver, err := sqlite.NewDriver(ctx, &sqlite.DriverOptions{
+	driver, err := sqlite.NewDriver(ctx, &sqlite.DriverConfig{
 		DB: database.NewPrepared(db),
 	})
 	if err != nil {
@@ -182,7 +182,7 @@ func startDqlite(ctx context.Context, tb testing.TB, dir string, listener *instr
 		tb.Fatal(err)
 	}
 
-	driver, err := dqlite.NewDriver(ctx, &dqlite.DriverOptions{
+	driver, err := dqlite.NewDriver(ctx, &dqlite.DriverConfig{
 		DB: database.NewPrepared(db),
 	})
 	if err != nil {

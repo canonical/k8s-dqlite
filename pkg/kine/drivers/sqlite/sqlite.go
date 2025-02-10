@@ -12,20 +12,20 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func NewDriver(ctx context.Context, options *DriverOptions) (*Driver, error) {
+func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
 	const retryAttempts = 300
 
-	if options == nil {
+	if config == nil {
 		return nil, errors.New("options cannot be nil")
 	}
-	if options.DB == nil {
+	if config.DB == nil {
 		return nil, errors.New("db cannot be nil")
 	}
-	if options.ErrCode == nil {
-		options.ErrCode = error.Error
+	if config.ErrCode == nil {
+		config.ErrCode = error.Error
 	}
-	if options.Retry == nil {
-		options.Retry = func(err error) bool {
+	if config.Retry == nil {
+		config.Retry = func(err error) bool {
 			if err, ok := err.(sqlite3.Error); ok {
 				return err.Code == sqlite3.ErrBusy
 			}
@@ -34,7 +34,7 @@ func NewDriver(ctx context.Context, options *DriverOptions) (*Driver, error) {
 	}
 
 	for i := 0; i < retryAttempts; i++ {
-		err := setup(ctx, options.DB)
+		err := setup(ctx, config.DB)
 		if err == nil {
 			break
 		}
@@ -47,7 +47,7 @@ func NewDriver(ctx context.Context, options *DriverOptions) (*Driver, error) {
 	}
 
 	return &Driver{
-		options: options,
+		config: config,
 	}, nil
 }
 

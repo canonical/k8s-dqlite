@@ -249,10 +249,10 @@ func (s Stripped) String() string {
 type Driver struct {
 	mu sync.Mutex
 
-	options *DriverOptions
+	config *DriverConfig
 }
 
-type DriverOptions struct {
+type DriverConfig struct {
 	DB         database.Interface
 	LockWrites bool
 	Retry      func(error) bool
@@ -260,7 +260,7 @@ type DriverOptions struct {
 }
 
 func (d *Driver) Close() error {
-	return d.options.DB.Close()
+	return d.config.DB.Close()
 }
 
 func getPrefixRange(prefix string) (start, end string) {
@@ -299,11 +299,11 @@ func (d *Driver) query(ctx context.Context, txName, query string, args ...interf
 		} else {
 			logrus.Debugf("QUERY (try: %d) %v : %s", retryCount, args, Stripped(query))
 		}
-		rows, err = d.options.DB.QueryContext(ctx, query, args...)
+		rows, err = d.config.DB.QueryContext(ctx, query, args...)
 		if err == nil {
 			break
 		}
-		if !d.options.Retry(err) {
+		if !d.config.Retry(err) {
 			break
 		}
 	}
@@ -323,7 +323,7 @@ func (d *Driver) execute(ctx context.Context, txName, query string, args ...inte
 		attribute.String("tx_name", txName),
 	)
 
-	if d.options.LockWrites {
+	if d.config.LockWrites {
 		d.mu.Lock()
 		defer d.mu.Unlock()
 		span.AddEvent("acquired write lock")
@@ -343,11 +343,11 @@ func (d *Driver) execute(ctx context.Context, txName, query string, args ...inte
 		} else {
 			logrus.Tracef("EXEC (try: %d) %v : %s", retryCount, args, Stripped(query))
 		}
-		result, err = d.options.DB.ExecContext(ctx, query, args...)
+		result, err = d.config.DB.ExecContext(ctx, query, args...)
 		if err == nil {
 			break
 		}
-		if !d.options.Retry(err) {
+		if !d.config.Retry(err) {
 			break
 		}
 	}
@@ -484,7 +484,7 @@ func (d *Driver) Compact(ctx context.Context, revision int64) (err error) {
 
 	for retryCount := 0; retryCount < maxRetries; retryCount++ {
 		err = d.tryCompact(ctx, compactStart, revision)
-		if err == nil || !d.options.Retry(err) {
+		if err == nil || !d.config.Retry(err) {
 			break
 		}
 	}
@@ -500,7 +500,7 @@ func (d *Driver) tryCompact(ctx context.Context, start, end int64) (err error) {
 	span.SetAttributes(attribute.Int64("start", start), attribute.Int64("end", end))
 	compactBatchCnt.Add(ctx, 1)
 
-	tx, err := d.options.DB.BeginTx(ctx, nil)
+	tx, err := d.config.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}

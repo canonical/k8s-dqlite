@@ -413,7 +413,7 @@ func (s *Server) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
 
-	driver, err := dqliteDriver.NewDriver(ctx, &dqliteDriver.DriverOptions{
+	driver, err := dqliteDriver.NewDriver(ctx, &dqliteDriver.DriverConfig{
 		DB: database.NewPrepared(db),
 	})
 	if err != nil {
