@@ -15,6 +15,10 @@ env:
   TARGET_SHA: ${{ github.sha }}
   BENCH_COUNT: 7
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   code-quality:
     name: Code Quality
