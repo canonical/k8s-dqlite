@@ -330,13 +330,20 @@ def get_join_token(
 def get_default_cp_join_cfg() -> str:
     return """
 extra-node-k8s-dqlite-args:
-    --profiling: true
+  --profiling: true
+  --profiling-dir: /root
 """
 
 
 # Join an existing cluster.
-def join_cluster(instance: harness.Instance, join_token: str, join_cfg: Optional[str] = ""):
-    instance.exec(["k8s", "join-cluster", join_token])
+def join_cluster(
+    instance: harness.Instance, join_token: str, join_cfg: Optional[str] = ""
+):
+    if join_cfg:
+        instance.exec(["k8s", "join-cluster", join_token, "--file", "-"],
+                      input=str.encode(join_cfg))
+    else:
+        instance.exec(["k8s", "join-cluster", join_token])
 
 
 def tracks_least_risk(track: str, arch: str) -> str:

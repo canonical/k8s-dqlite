@@ -43,9 +43,6 @@ KUBE_BURNER_URL = (
 # Global kube-burner invocation timeout.
 KUBE_BURNER_TIMEOUT = os.getenv("TEST_KUBE_BURNER_TIMEOUT") or "10m"
 
-# How long to collect pprof profile data (seconds).
-PROFILE_DURATION = os.getenv("TEST_PROFILE_DURATION") or "360"
-
 # FLAVOR is the flavour to use for running the performance tests.
 FLAVOR = os.getenv("TEST_FLAVOR") or ""
 

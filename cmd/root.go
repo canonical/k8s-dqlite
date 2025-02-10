@@ -7,6 +7,8 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"runtime/pprof"
 	"time"
 
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/generic"
@@ -25,6 +27,7 @@ var (
 		debug                  bool
 		profiling              bool
 		profilingAddress       string
+		profilingDir           string
 		diskMode               bool
 		clientSessionCacheSize uint
 		minTLSVersion          string
@@ -60,6 +63,19 @@ var (
 					logrus.WithField("address", rootCmdOpts.profilingAddress).Print("Enable pprof endpoint")
 					http.ListenAndServe(rootCmdOpts.profilingAddress, nil)
 				}()
+
+				if rootCmdOpts.profilingDir != "" {
+					f, err := os.Create(filepath.Join(rootCmdOpts.profilingDir, "cpu_profile.raw"))
+					if err != nil {
+						logrus.WithError(err).Fatal("Failed to create cpu profiling file.")
+					}
+					defer f.Close()
+					err = pprof.StartCPUProfile(f)
+					if err != nil {
+						logrus.WithError(err).Fatal("Failed to setup cpu profiling.")
+					}
+					defer pprof.StopCPUProfile()
+				}
 			}
 
 			var otelShutdown func(context.Context) error
@@ -168,6 +184,7 @@ func init() {
 	rootCmd.Flags().BoolVar(&rootCmdOpts.debug, "debug", false, "debug logs")
 	rootCmd.Flags().BoolVar(&rootCmdOpts.profiling, "profiling", false, "enable debug pprof endpoint")
 	rootCmd.Flags().StringVar(&rootCmdOpts.profilingAddress, "profiling-listen", "127.0.0.1:4000", "listen address for pprof endpoint")
+	rootCmd.Flags().StringVar(&rootCmdOpts.profilingDir, "profiling-dir", "", "directory to use for profiling data")
 	rootCmd.Flags().BoolVar(&rootCmdOpts.diskMode, "disk-mode", false, "(experimental) run dqlite store in disk mode")
 	rootCmd.Flags().UintVar(&rootCmdOpts.clientSessionCacheSize, "tls-client-session-cache-size", 0, "ClientCacheSession size for dial TLS config")
 	rootCmd.Flags().StringVar(&rootCmdOpts.minTLSVersion, "min-tls-version", "tls12", "Minimum TLS version for dqlite endpoint (tls10|tls11|tls12|tls13). Default is tls12")
