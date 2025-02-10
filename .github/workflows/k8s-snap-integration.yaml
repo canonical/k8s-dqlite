@@ -51,9 +51,9 @@ jobs:
         arch: ["arm64", "amd64"]
     steps:
       - name: Setup Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.10"
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
       - name: Install tox
         run: pip install tox
       - name: Running
