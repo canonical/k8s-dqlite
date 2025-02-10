@@ -15,3 +15,5 @@ cluster-config:
     enabled: true
   metrics-server:
     enabled: true
+extra-node-k8s-dqlite-args:
+  --profiling: true

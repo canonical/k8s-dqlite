@@ -18,8 +18,10 @@ def test_three_node_load(instances: List[harness.Instance]):
 
     assert join_token != join_token_2
 
-    util.join_cluster(joining_node, join_token)
-    util.join_cluster(joining_node_2, join_token_2)
+    cp_join_cfg = util.get_default_cp_join_cfg()
+
+    util.join_cluster(joining_node, join_token, cp_join_cfg)
+    util.join_cluster(joining_node_2, join_token_2, cp_join_cfg)
 
     util.wait_until_k8s_ready(cluster_node, instances)
     nodes = util.ready_nodes(cluster_node)
