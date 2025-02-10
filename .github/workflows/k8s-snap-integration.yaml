@@ -14,11 +14,12 @@ concurrency:
 
 jobs:
   build:
-    name: K8s-snap Integration Test on ${{ matrix.os }}
-    runs-on: self-hosted-linux-amd64-jammy-large
+    name: K8s-snap Integration Test on ${{ matrix.os }} ${{ matrix.arch }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'self-hosted-linux-arm64-jammy-large' || 'self-hosted-linux-amd64-jammy-large' }}
     strategy:
       matrix:
         os: [ubuntu:20.04, ubuntu:22.04, ubuntu:24.04]
+        arch: [arm64, amd64]
     steps:
       - name: Checking out repo
         uses: actions/checkout@v4
