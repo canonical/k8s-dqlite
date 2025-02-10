@@ -16,7 +16,7 @@ func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
 	const retryAttempts = 300
 
 	if config == nil {
-		return nil, errors.New("options cannot be nil")
+		return nil, errors.New("config cannot be nil")
 	}
 	if config.DB == nil {
 		return nil, errors.New("db cannot be nil")

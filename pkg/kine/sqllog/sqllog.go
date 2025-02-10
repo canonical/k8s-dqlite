@@ -64,7 +64,7 @@ type Driver interface {
 type SQLLog struct {
 	mu sync.Mutex
 
-	options *SQLLogOptions
+	config *SQLLogConfig
 
 	stop    func()
 	started bool
@@ -74,7 +74,7 @@ type SQLLog struct {
 	wg          sync.WaitGroup
 }
 
-type SQLLogOptions struct {
+type SQLLogConfig struct {
 	// Driver is the SQL driver to use to query the database.
 	Driver Driver
 
@@ -88,10 +88,10 @@ type SQLLogOptions struct {
 	WatchQueryTimeout time.Duration
 }
 
-func New(options *SQLLogOptions) *SQLLog {
+func New(config *SQLLogConfig) *SQLLog {
 	return &SQLLog{
-		options: options,
-		notify:  make(chan int64, 1024),
+		config: config,
+		notify: make(chan int64, 1024),
 	}
 }
 
@@ -142,13 +142,13 @@ func (s *SQLLog) Stop() error {
 
 func (s *SQLLog) Close() error {
 	stopErr := s.Stop()
-	closeErr := s.options.Driver.Close()
+	closeErr := s.config.Driver.Close()
 
 	return errors.Join(stopErr, closeErr)
 }
 
 func (s *SQLLog) compactStart(ctx context.Context) error {
-	rows, err := s.options.Driver.AfterPrefix(ctx, "compact_rev_key", 0, 0)
+	rows, err := s.config.Driver.AfterPrefix(ctx, "compact_rev_key", 0, 0)
 	if err != nil {
 		return err
 	}
@@ -179,7 +179,7 @@ func (s *SQLLog) compactStart(ctx context.Context) error {
 		if event.KV.ModRevision == maxID {
 			continue
 		}
-		if err := s.options.Driver.DeleteRevision(ctx, event.KV.ModRevision); err != nil {
+		if err := s.config.Driver.DeleteRevision(ctx, event.KV.ModRevision); err != nil {
 			return err
 		}
 	}
@@ -206,7 +206,7 @@ func (s *SQLLog) DoCompact(ctx context.Context) (err error) {
 	// small batches. Given that this logic runs every second,
 	// on regime it should take usually just a couple batches
 	// to keep the pace.
-	start, target, err := s.options.Driver.GetCompactRevision(ctx)
+	start, target, err := s.config.Driver.GetCompactRevision(ctx)
 	if err != nil {
 		return err
 	}
@@ -222,7 +222,7 @@ func (s *SQLLog) DoCompact(ctx context.Context) (err error) {
 		if batchRevision > target {
 			batchRevision = target
 		}
-		if err := s.options.Driver.Compact(ctx, batchRevision); err != nil {
+		if err := s.config.Driver.Compact(ctx, batchRevision); err != nil {
 			return err
 		}
 		start = batchRevision
@@ -231,11 +231,11 @@ func (s *SQLLog) DoCompact(ctx context.Context) (err error) {
 }
 
 func (s *SQLLog) CurrentRevision(ctx context.Context) (int64, error) {
-	return s.options.Driver.CurrentRevision(ctx)
+	return s.config.Driver.CurrentRevision(ctx)
 }
 
 func (s *SQLLog) GetCompactRevision(ctx context.Context) (int64, int64, error) {
-	return s.options.Driver.GetCompactRevision(ctx)
+	return s.config.Driver.GetCompactRevision(ctx)
 }
 
 func (s *SQLLog) After(ctx context.Context, prefix string, revision, limit int64) (int64, []*server.Event, error) {
@@ -251,7 +251,7 @@ func (s *SQLLog) After(ctx context.Context, prefix string, revision, limit int64
 		attribute.Int64("limit", limit),
 	)
 
-	compactRevision, currentRevision, err := s.options.Driver.GetCompactRevision(ctx)
+	compactRevision, currentRevision, err := s.config.Driver.GetCompactRevision(ctx)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -261,7 +261,7 @@ func (s *SQLLog) After(ctx context.Context, prefix string, revision, limit int64
 		return currentRevision, nil, server.ErrCompacted
 	}
 
-	rows, err := s.options.Driver.AfterPrefix(ctx, prefix, revision, limit)
+	rows, err := s.config.Driver.AfterPrefix(ctx, prefix, revision, limit)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -288,7 +288,7 @@ func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revis
 		attribute.Int64("revision", revision),
 	)
 
-	compactRevision, currentRevision, err := s.options.Driver.GetCompactRevision(ctx)
+	compactRevision, currentRevision, err := s.config.Driver.GetCompactRevision(ctx)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -309,7 +309,7 @@ func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revis
 		startKey = ""
 	}
 
-	rows, err := s.options.Driver.List(ctx, prefix, startKey, limit, revision)
+	rows, err := s.config.Driver.List(ctx, prefix, startKey, limit, revision)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -336,13 +336,13 @@ func (s *SQLLog) ttl(ctx context.Context) {
 	go func() {
 		defer s.wg.Done()
 
-		startRevision, err := s.options.Driver.CurrentRevision(ctx)
+		startRevision, err := s.config.Driver.CurrentRevision(ctx)
 		if err != nil {
 			logrus.Errorf("failed to read old events for ttl: %v", err)
 			return
 		}
 
-		rows, err := s.options.Driver.ListTTL(ctx, startRevision)
+		rows, err := s.config.Driver.ListTTL(ctx, startRevision)
 		if err != nil {
 			logrus.Errorf("failed to read old events for ttl: %v", err)
 			return
@@ -458,7 +458,7 @@ func (s *SQLLog) startWatch(ctx context.Context) (chan []*server.Event, error) {
 		return nil, err
 	}
 
-	pollStart, _, err := s.options.Driver.GetCompactRevision(ctx)
+	pollStart, _, err := s.config.Driver.GetCompactRevision(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -471,7 +471,7 @@ func (s *SQLLog) startWatch(ctx context.Context) (chan []*server.Event, error) {
 	go func() {
 		defer s.wg.Done()
 
-		t := time.NewTicker(s.options.CompactInterval)
+		t := time.NewTicker(s.config.CompactInterval)
 
 		for {
 			select {
@@ -501,7 +501,7 @@ func (s *SQLLog) poll(ctx context.Context, result chan []*server.Event, pollStar
 		waitForMore = true
 	)
 
-	wait := time.NewTicker(s.options.PollInterval)
+	wait := time.NewTicker(s.config.PollInterval)
 	defer wait.Stop()
 	defer close(result)
 
@@ -518,10 +518,10 @@ func (s *SQLLog) poll(ctx context.Context, result chan []*server.Event, pollStar
 			}
 		}
 		waitForMore = true
-		watchCtx, cancel := context.WithTimeout(ctx, s.options.WatchQueryTimeout)
+		watchCtx, cancel := context.WithTimeout(ctx, s.config.WatchQueryTimeout)
 		defer cancel()
 
-		rows, err := s.options.Driver.After(watchCtx, last, pollBatchSize)
+		rows, err := s.config.Driver.After(watchCtx, last, pollBatchSize)
 		if err != nil {
 			if !errors.Is(err, context.DeadlineExceeded) {
 				logrus.Errorf("fail to list latest changes: %v", err)
@@ -565,7 +565,7 @@ func (s *SQLLog) poll(ctx context.Context, result chan []*server.Event, pollStar
 					s.notifyWatcherPoll(next)
 					break
 				} else {
-					if err := s.options.Driver.Fill(ctx, next); err == nil {
+					if err := s.config.Driver.Fill(ctx, next); err == nil {
 						logrus.Debugf("FILL, revision=%d, err=%v", next, err)
 						s.notifyWatcherPoll(next)
 					} else {
@@ -582,7 +582,7 @@ func (s *SQLLog) poll(ctx context.Context, result chan []*server.Event, pollStar
 			// the same time we write to the channel.
 			saveLast = true
 			rev = event.KV.ModRevision
-			if s.options.Driver.IsFill(event.KV.Key) {
+			if s.config.Driver.IsFill(event.KV.Key) {
 				logrus.Debugf("NOT TRIGGER FILL %s, revision=%d, delete=%v", event.KV.Key, event.KV.ModRevision, event.Delete)
 			} else {
 				sequential = append(sequential, event)
@@ -616,7 +616,7 @@ func (s *SQLLog) Count(ctx context.Context, prefix, startKey string, revision in
 		attribute.Int64("revision", revision),
 	)
 
-	compactRevision, currentRevision, err := s.options.Driver.GetCompactRevision(ctx)
+	compactRevision, currentRevision, err := s.config.Driver.GetCompactRevision(ctx)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -625,7 +625,7 @@ func (s *SQLLog) Count(ctx context.Context, prefix, startKey string, revision in
 	} else if revision < compactRevision {
 		return currentRevision, 0, server.ErrCompacted
 	}
-	count, err := s.options.Driver.Count(ctx, prefix, startKey, revision)
+	count, err := s.config.Driver.Count(ctx, prefix, startKey, revision)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -633,7 +633,7 @@ func (s *SQLLog) Count(ctx context.Context, prefix, startKey string, revision in
 }
 
 func (s *SQLLog) Create(ctx context.Context, key string, value []byte, lease int64) (int64, bool, error) {
-	rev, created, err := s.options.Driver.Create(ctx, key, value, lease)
+	rev, created, err := s.config.Driver.Create(ctx, key, value, lease)
 	if err != nil {
 		return 0, false, err
 	}
@@ -644,7 +644,7 @@ func (s *SQLLog) Create(ctx context.Context, key string, value []byte, lease int
 }
 
 func (s *SQLLog) Delete(ctx context.Context, key string, revision int64) (rev int64, deleted bool, err error) {
-	rev, deleted, err = s.options.Driver.Delete(ctx, key, revision)
+	rev, deleted, err = s.config.Driver.Delete(ctx, key, revision)
 	if err != nil {
 		return 0, false, err
 	}
@@ -655,7 +655,7 @@ func (s *SQLLog) Delete(ctx context.Context, key string, revision int64) (rev in
 }
 
 func (s *SQLLog) Update(ctx context.Context, key string, value []byte, prevRev, lease int64) (rev int64, updated bool, err error) {
-	rev, updated, err = s.options.Driver.Update(ctx, key, value, prevRev, lease)
+	rev, updated, err = s.config.Driver.Update(ctx, key, value, prevRev, lease)
 	if err != nil {
 		return 0, false, err
 	}
@@ -679,7 +679,7 @@ func (s *SQLLog) DbSize(ctx context.Context) (int64, error) {
 		span.RecordError(err)
 		span.End()
 	}()
-	size, err := s.options.Driver.GetSize(ctx)
+	size, err := s.config.Driver.GetSize(ctx)
 	span.SetAttributes(attribute.Int64("size", size))
 	return size, err
 }
