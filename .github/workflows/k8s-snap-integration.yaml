@@ -39,6 +39,12 @@ jobs:
       - name: Repack Snap
         run: |
           sudo mksquashfs snap-unpack-dir k8s-updated.snap -noappend -comp lzo -no-fragments
+      - name: Upload Snap
+        uses: actions/upload-artifact@v4
+        with:
+          name: k8s-updated.snap
+          path: ${{ github.workspace }}/k8s-updated.snap
+
   integration-test:
     name: K8s-snap Integration Test on ${{ matrix.os }} ${{ matrix.arch }}
     runs-on: ${{ matrix.arch == 'arm64' && 'self-hosted-linux-arm64-jammy-large' || 'self-hosted-linux-amd64-jammy-large' }}
@@ -48,6 +54,11 @@ jobs:
         os: ["ubuntu:20.04", "ubuntu:22.04", "ubuntu:24.04"]
         arch: ["arm64", "amd64"]
     steps:
+      - name: Download snap
+        uses: actions/download-artifact@v4
+        with:
+          name: k8s-updated.snap
+          path: ${{ github.workspace }}
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -60,7 +71,7 @@ jobs:
         env:
           TEST_SNAP: ${{ github.workspace }}/k8s-updated.snap
           TEST_SUBSTRATE: lxd
-          TEST_LXD_IMAGE: ${{ matrix.os}}
+          TEST_LXD_IMAGE: ${{ matrix.os }}
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
         run: |
           git clone https://github.com/canonical/k8s-snap.git      
