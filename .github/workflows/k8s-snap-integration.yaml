@@ -13,13 +13,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    name: K8s-snap Integration Test on ${{ matrix.os }} ${{ matrix.arch }}
-    runs-on: ${{ matrix.arch == 'arm64' && 'self-hosted-linux-arm64-jammy-large' || 'self-hosted-linux-amd64-jammy-large' }}
-    strategy:
-      matrix:
-        os: ["ubuntu:20.04", "ubuntu:22.04", "ubuntu:24.04"]
-        arch: ["arm64", "amd64"]
+  build-snap:
+    name: Build K8s-snap Integration Test
+    runs-on: ubuntu-latest
     steps:
       - name: Checking out repo
         uses: actions/checkout@v4
@@ -51,6 +47,15 @@ jobs:
       - name: Repack Snap
         run: |
           sudo mksquashfs snap-unpack-dir k8s-updated.snap -noappend -comp lzo -no-fragments
+  integration-test:
+    name: K8s-snap Integration Test on ${{ matrix.os }} ${{ matrix.arch }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'self-hosted-linux-arm64-jammy-large' || 'self-hosted-linux-amd64-jammy-large' }}
+    needs: build-snap
+    strategy:
+      matrix:
+        os: ["ubuntu:20.04", "ubuntu:22.04", "ubuntu:24.04"]
+        arch: ["arm64", "amd64"]
+    steps:
       - name: Running
         env:
           TEST_SNAP: ${{ github.workspace }}/k8s-updated.snap
