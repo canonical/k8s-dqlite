@@ -406,7 +406,7 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	logrus.WithFields(logrus.Fields{"id": s.app.ID(), "address": s.app.Address()}).Print("Started dqlite")
 
-	logrus.WithField("config", s.serverConfig).Debug("Starting kine")
+	logrus.WithField("config", s.serverConfig).Debug("Starting k8s-dqlite server")
 
 	db, err := s.robustOpenDb(ctx)
 	if err != nil {
@@ -443,7 +443,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	go s.watchAvailableStorageSize(ctx)
 
-	logrus.WithField("address", s.serverConfig.ListenAddress).Print("Started kine")
+	logrus.WithField("address", s.serverConfig.ListenAddress).Print("Started k8s-dqlite server")
 	return nil
 }
 
