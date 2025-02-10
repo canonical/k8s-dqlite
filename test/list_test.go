@@ -6,14 +6,13 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/canonical/k8s-dqlite/pkg/kine/endpoint"
 	. "github.com/onsi/gomega"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 // TestList is the unit test for List operation.
 func TestList(t *testing.T) {
-	for _, backendType := range []string{endpoint.SQLiteBackend, endpoint.DQLiteBackend} {
+	for _, backendType := range []string{SQLiteBackend, DQLiteBackend} {
 		t.Run(backendType, func(t *testing.T) {
 			g := NewWithT(t)
 
@@ -191,7 +190,7 @@ func BenchmarkList(b *testing.B) {
 		}
 		return nil
 	}
-	backends := []string{endpoint.SQLiteBackend, endpoint.DQLiteBackend}
+	backends := []string{SQLiteBackend, DQLiteBackend}
 	for _, backendType := range backends {
 		payloads := []struct {
 			name string

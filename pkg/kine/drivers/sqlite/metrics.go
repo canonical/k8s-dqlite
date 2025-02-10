@@ -1,4 +1,4 @@
-package generic
+package sqlite
 
 import (
 	"time"
@@ -41,14 +41,6 @@ func recordOpResult(txName string, err error, startTime time.Time) {
 	resultLabel := errorToResultLabel(err)
 	metricsOpLatency.WithLabelValues(txName, resultLabel).Observe(float64(time.Since(startTime) / time.Second))
 	metricsOpResult.WithLabelValues(txName, resultLabel).Inc()
-}
-
-func incCurrentOps(txName string) {
-	metricsCurrentOps.WithLabelValues(txName).Inc()
-}
-
-func decCurrentOps(txName string) {
-	metricsCurrentOps.WithLabelValues(txName).Dec()
 }
 
 func init() {

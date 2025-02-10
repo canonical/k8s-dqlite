@@ -5,13 +5,12 @@ import (
 	"database/sql"
 	"testing"
 
-	"github.com/canonical/k8s-dqlite/pkg/kine/endpoint"
 	"github.com/canonical/k8s-dqlite/pkg/kine/sqllog"
 	. "github.com/onsi/gomega"
 )
 
 func TestCompaction(t *testing.T) {
-	for _, backendType := range []string{endpoint.SQLiteBackend, endpoint.DQLiteBackend} {
+	for _, backendType := range []string{SQLiteBackend, DQLiteBackend} {
 		t.Run(backendType, func(t *testing.T) {
 			t.Run("SmallDatabaseDeleteEntry", func(t *testing.T) {
 				g := NewWithT(t)
@@ -93,7 +92,7 @@ func TestCompaction(t *testing.T) {
 }
 
 func BenchmarkCompaction(b *testing.B) {
-	for _, backendType := range []string{endpoint.SQLiteBackend, endpoint.DQLiteBackend} {
+	for _, backendType := range []string{SQLiteBackend, DQLiteBackend} {
 		b.Run(backendType, func(b *testing.B) {
 			b.StopTimer()
 			ctx, cancel := context.WithCancel(context.Background())
