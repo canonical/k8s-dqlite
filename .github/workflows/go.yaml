@@ -27,7 +27,7 @@ jobs:
       - name: Install Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.21"
+          go-version-file: go.mod
 
       - name: go mod download
         run: go mod download
@@ -59,7 +59,7 @@ jobs:
       - name: Install Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.21"
+          go-version-file: go.mod
 
       - name: go mod download
         run: go mod download
@@ -81,7 +81,7 @@ jobs:
       - name: Install Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.21"
+          go-version-file: go.mod
 
       - name: go mod download
         run: |
@@ -179,11 +179,11 @@ jobs:
       - name: Install Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.21"
+          go-version-file: go.mod
 
       - name: Build static binaries
         run: |
-          make -j static
+          make static
 
           ./bin/static/k8s-dqlite --help
           ./bin/static/k8s-dqlite migrator --help
@@ -191,7 +191,7 @@ jobs:
 
       - name: Build shared binaries
         run: |
-          make -j dynamic
+          make dynamic
 
           ./bin/dynamic/k8s-dqlite --help
           ./bin/dynamic/k8s-dqlite migrator --help

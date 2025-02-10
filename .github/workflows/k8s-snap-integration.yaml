@@ -29,7 +29,7 @@ jobs:
       - name: Install Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.21"
+          go-version-file: go.mod
       - name: Download latest k8s-snap
         run: |
           sudo snap download k8s --channel=latest/edge --basename k8s
