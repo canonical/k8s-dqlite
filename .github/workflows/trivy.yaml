@@ -3,7 +3,6 @@ name: Trivy
 on:
   schedule:
     - cron: '0 10 * * *'
-  pull_request: # TODO rm me
 
 permissions:
   contents: read
