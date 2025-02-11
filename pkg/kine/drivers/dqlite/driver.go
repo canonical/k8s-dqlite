@@ -3,10 +3,12 @@ package dqlite
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"os"
 	"strings"
 
 	"github.com/canonical/go-dqlite/v2"
+	"github.com/canonical/go-dqlite/v2/app"
 	"github.com/canonical/go-dqlite/v2/driver"
 	"github.com/canonical/k8s-dqlite/pkg/database"
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/sqlite"
@@ -29,14 +31,18 @@ type DriverConfig struct {
 	ErrCode func(error) string
 }
 
-func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
+func NewDriver(ctx context.Context, config *DriverConfig, goDqliteApp *app.App) (*Driver, error) {
 	logrus.Printf("New driver for dqlite")
 
 	drv, err := sqlite.NewDriver(ctx, &sqlite.DriverConfig{
 		DB:         config.DB,
 		LockWrites: true,
 		Retry:      dqliteRetry,
+		CompactAllowed: func(ctx context.Context) (bool, error) {
+			return compactAllowed(ctx, goDqliteApp)
+		},
 	})
+
 	if err != nil {
 		return nil, err
 	}
@@ -77,6 +83,39 @@ func dqliteRetry(err error) bool {
 	}
 
 	return false
+}
+
+func compactAllowed(ctx context.Context, goDqliteApp *app.App) (bool, error) {
+	if goDqliteApp == nil {
+		logrus.Printf(
+			"WARNING: go-dqlite app unspecified, can't determine if this node is a leader. " +
+				"Allowing compaction to proceed.")
+		return true, nil
+	}
+	leader, err := isLocalNodeLeader(ctx, goDqliteApp)
+	if err != nil {
+		logrus.Printf("Failed to determine if the local node is a leader, suppressing error and allowing the compaction to proceed. Error: %v.", err)
+		return true, nil
+	}
+	if !leader {
+		logrus.Printf("Not a dqlite leader, compaction not allowed.")
+	}
+	return leader, nil
+}
+
+func isLocalNodeLeader(ctx context.Context, goDqliteApp *app.App) (bool, error) {
+	client, err := goDqliteApp.Client(ctx)
+	if err != nil {
+		return false, fmt.Errorf("couldn't obtain dqlite client: %w", err)
+	}
+	defer client.Close()
+
+	leader, err := client.Leader(ctx)
+	if err != nil {
+		return false, fmt.Errorf("couldn't obtain dqlite leader info: %w", err)
+	}
+
+	return goDqliteApp.ID() == leader.ID, nil
 }
 
 // FIXME this might be very slow.
