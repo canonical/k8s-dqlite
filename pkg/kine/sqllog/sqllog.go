@@ -520,6 +520,9 @@ func (s *SQLLog) poll(ctx context.Context, result chan []*server.Event, pollStar
 		waitForMore = true
 		events, err := s.getLatestEvents(ctx, last)
 		if err != nil {
+			if !errors.Is(err, context.DeadlineExceeded) {
+				logrus.Errorf("fail to get latest events: %v", err)
+			}
 			continue
 		}
 
@@ -593,15 +596,11 @@ func (s *SQLLog) getLatestEvents(ctx context.Context, last int64) ([]*server.Eve
 
 	rows, err := s.config.Driver.After(watchCtx, last, pollBatchSize)
 	if err != nil {
-		if !errors.Is(err, context.DeadlineExceeded) {
-			logrus.Errorf("fail to list latest changes: %v", err)
-		}
 		return nil, err
 	}
 
 	events, err := ScanAll(rows, scanEvent)
 	if err != nil {
-		logrus.Errorf("fail to convert rows changes: %v", err)
 		return nil, err
 	}
 	return events, nil
