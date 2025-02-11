@@ -56,7 +56,7 @@ func (l *LimitedServer) delete(ctx context.Context, key string, revision int64) 
 			},
 		}
 	} else {
-		rev, kv, err := l.backend.List(ctx, key, "", 1, rev)
+		rev, kv, err := l.backend.List(ctx, []byte(key), []byte(""), 1, rev)
 		if err != nil {
 			return nil, err
 		}

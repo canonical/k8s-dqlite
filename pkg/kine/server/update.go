@@ -66,7 +66,7 @@ func (l *LimitedServer) update(ctx context.Context, rev int64, key string, value
 			},
 		}
 	} else {
-		rev, kv, err := l.backend.List(ctx, key, "", 1, rev)
+		rev, kv, err := l.backend.List(ctx, []byte(key), []byte{}, 1, rev)
 		if err != nil {
 			return nil, err
 		}

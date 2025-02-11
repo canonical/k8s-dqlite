@@ -43,9 +43,9 @@ func init() {
 }
 
 type Driver interface {
-	List(ctx context.Context, prefix, startKey string, limit, revision int64) (*sql.Rows, error)
+	List(ctx context.Context, key, end []byte, limit, revision int64) (*sql.Rows, error)
 	ListTTL(ctx context.Context, revision int64) (*sql.Rows, error)
-	Count(ctx context.Context, prefix, startKey string, revision int64) (int64, error)
+	Count(ctx context.Context, key, end []byte, revision int64) (int64, error)
 	CurrentRevision(ctx context.Context) (int64, error)
 	AfterPrefix(ctx context.Context, prefix string, rev, limit int64) (*sql.Rows, error)
 	After(ctx context.Context, rev, limit int64) (*sql.Rows, error)
@@ -273,7 +273,7 @@ func (s *SQLLog) After(ctx context.Context, prefix string, revision, limit int64
 	return currentRevision, result, err
 }
 
-func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revision int64) (int64, []*server.KeyValue, error) {
+func (s *SQLLog) List(ctx context.Context, key, end []byte, limit, revision int64) (int64, []*server.KeyValue, error) {
 	var err error
 
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.List", otelName))
@@ -282,8 +282,8 @@ func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revis
 		span.End()
 	}()
 	span.SetAttributes(
-		attribute.String("prefix", prefix),
-		attribute.String("startKey", startKey),
+		attribute.String("key", string(key)),
+		attribute.String("end", string(end)),
 		attribute.Int64("limit", limit),
 		attribute.Int64("revision", revision),
 	)
@@ -298,18 +298,7 @@ func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revis
 		return currentRevision, nil, server.ErrCompacted
 	}
 
-	// It's assumed that when there is a start key that that key exists.
-	if strings.HasSuffix(prefix, "/") {
-		// In the situation of a list start the startKey will not exist so set to ""
-		if prefix == startKey {
-			startKey = ""
-		}
-	} else {
-		// Also if this isn't a list there is no reason to pass startKey
-		startKey = ""
-	}
-
-	rows, err := s.config.Driver.List(ctx, prefix, startKey, limit, revision)
+	rows, err := s.config.Driver.List(ctx, key, end, limit, revision)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -610,7 +599,7 @@ func canSkipRevision(rev, skip int64, skipTime time.Time) bool {
 	return rev == skip && time.Since(skipTime) > time.Second
 }
 
-func (s *SQLLog) Count(ctx context.Context, prefix, startKey string, revision int64) (int64, int64, error) {
+func (s *SQLLog) Count(ctx context.Context, key, end []byte, revision int64) (int64, int64, error) {
 	var err error
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Count", otelName))
 	defer func() {
@@ -618,8 +607,8 @@ func (s *SQLLog) Count(ctx context.Context, prefix, startKey string, revision in
 		span.End()
 	}()
 	span.SetAttributes(
-		attribute.String("prefix", prefix),
-		attribute.String("startKey", startKey),
+		attribute.String("key", string(key)),
+		attribute.String("end", string(end)),
 		attribute.Int64("revision", revision),
 	)
 
@@ -632,7 +621,7 @@ func (s *SQLLog) Count(ctx context.Context, prefix, startKey string, revision in
 	} else if revision < compactRevision {
 		return currentRevision, 0, server.ErrCompacted
 	}
-	count, err := s.config.Driver.Count(ctx, prefix, startKey, revision)
+	count, err := s.config.Driver.Count(ctx, key, end, revision)
 	if err != nil {
 		return 0, 0, err
 	}

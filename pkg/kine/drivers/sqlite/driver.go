@@ -95,7 +95,7 @@ var (
 			SELECT MAX(mkv.id) as id
 			FROM kine AS mkv
 			WHERE
-				mkv.name >= ? AND mkv.name < ?
+				mkv.name >= CAST(? AS TEXT) AND mkv.name < CAST(? AS TEXT)
 				AND mkv.id <= ?
 			GROUP BY mkv.name
 		) AS maxkv
@@ -120,7 +120,7 @@ var (
 			SELECT MAX(mkv.id) as id
 			FROM kine AS mkv
 			WHERE
-				mkv.name >= ? AND mkv.name < ?
+				mkv.name >= CAST(? AS TEXT) AND mkv.name < CAST(? AS TEXT)
 				AND mkv.id <= ?
 			GROUP BY mkv.name
 		) AS maxkv
@@ -130,7 +130,7 @@ var (
 	afterSQLPrefix = `
 		SELECT id, name, created, deleted, create_revision, prev_revision, lease, value, old_value
 		FROM kine
-		WHERE name >= ? AND name < ?
+		WHERE name >= CAST(? AS TEXT) AND name < CAST(? AS TEXT)
 			AND id > ?
 		ORDER BY id ASC`
 
@@ -466,12 +466,11 @@ func (d *Driver) execute(ctx context.Context, txName, query string, args ...inte
 	return result, err
 }
 
-func (d *Driver) Count(ctx context.Context, prefix, startKey string, revision int64) (int64, error) {
-	start, end := getPrefixRange(prefix)
-	if startKey != "" {
-		start = startKey + "\x01"
+func (d *Driver) Count(ctx context.Context, key, end []byte, revision int64) (int64, error) {
+	if len(end) == 0 {
+		end = append(key, 1)
 	}
-	rows, err := d.query(ctx, "count_revision", countRevisionSQL, start, end, revision)
+	rows, err := d.query(ctx, "count_revision", countRevisionSQL, key, end, revision)
 	if err != nil {
 		return 0, err
 	}
@@ -704,17 +703,16 @@ func (d *Driver) DeleteRevision(ctx context.Context, revision int64) error {
 	return err
 }
 
-func (d *Driver) List(ctx context.Context, prefix, startKey string, limit, revision int64) (*sql.Rows, error) {
-	start, end := getPrefixRange(prefix)
-	if startKey != "" {
-		start = startKey + "\x01"
+func (d *Driver) List(ctx context.Context, key, end []byte, limit, revision int64) (*sql.Rows, error) {
+	if len(end) == 0 {
+		end = append(key, 1)
 	}
 	sql := listSQL
 	if limit > 0 {
 		sql = fmt.Sprintf("%s LIMIT ?", sql)
-		return d.query(ctx, "list_revision_start_sql_limit", sql, start, end, revision, limit)
+		return d.query(ctx, "list_revision_start_sql_limit", sql, key, end, revision, limit)
 	}
-	return d.query(ctx, "list_revision_start_sql", sql, start, end, revision)
+	return d.query(ctx, "list_revision_start_sql", sql, key, end, revision)
 }
 
 func (d *Driver) ListTTL(ctx context.Context, revision int64) (*sql.Rows, error) {
@@ -754,6 +752,7 @@ func (d *Driver) CurrentRevision(ctx context.Context) (int64, error) {
 
 func (d *Driver) AfterPrefix(ctx context.Context, prefix string, rev, limit int64) (*sql.Rows, error) {
 	start, end := getPrefixRange(prefix)
+	// TODO: should we replace the prefix param with a range?
 	sql := afterSQLPrefix
 	if limit > 0 {
 		sql = fmt.Sprintf("%s LIMIT ?", sql)
