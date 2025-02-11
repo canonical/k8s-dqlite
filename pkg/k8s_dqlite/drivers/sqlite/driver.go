@@ -9,6 +9,8 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/Rican7/retry/backoff"
+	"github.com/Rican7/retry/strategy"
 	"github.com/canonical/k8s-dqlite/pkg/database"
 	"github.com/mattn/go-sqlite3"
 	"github.com/pkg/errors"
@@ -229,7 +231,7 @@ var (
 		FROM pragma_page_count(), pragma_page_size(), pragma_freelist_count()`
 )
 
-const maxRetries = 500
+const maxRetries = 20
 
 type Stripped string
 
@@ -393,6 +395,7 @@ func (d *Driver) query(ctx context.Context, txName, query string, args ...interf
 		}
 		recordOpResult(txName, err, start)
 	}()
+	wait := strategy.Backoff(backoff.Linear(100 + time.Millisecond))
 	for ; retryCount < maxRetries; retryCount++ {
 		if retryCount == 0 {
 			logrus.Tracef("QUERY (try: %d) %v : %s", retryCount, args, Stripped(query))
@@ -406,6 +409,7 @@ func (d *Driver) query(ctx context.Context, txName, query string, args ...interf
 		if !d.config.Retry(err) {
 			break
 		}
+		wait(uint(retryCount))
 	}
 
 	recordTxResult(txName, err)
@@ -431,6 +435,7 @@ func (d *Driver) execute(ctx context.Context, txName, query string, args ...inte
 		}
 		recordOpResult(txName, err, start)
 	}()
+	wait := strategy.Backoff(backoff.Linear(100 + time.Millisecond))
 	for ; retryCount < maxRetries; retryCount++ {
 		if retryCount > 2 {
 			logrus.Debugf("EXEC (try: %d) %v : %s", retryCount, args, Stripped(query))
@@ -444,6 +449,7 @@ func (d *Driver) execute(ctx context.Context, txName, query string, args ...inte
 		if !d.config.Retry(err) {
 			break
 		}
+		wait(uint(retryCount))
 	}
 
 	recordTxResult(txName, err)
@@ -575,11 +581,13 @@ func (d *Driver) Compact(ctx context.Context, revision int64) (err error) {
 		revision = currentRevision
 	}
 
+	wait := strategy.Backoff(backoff.Linear(100 + time.Millisecond))
 	for retryCount := 0; retryCount < maxRetries; retryCount++ {
 		err = d.tryCompact(ctx, compactStart, revision)
 		if err == nil || !d.config.Retry(err) {
 			break
 		}
+		wait(uint(retryCount))
 	}
 	return err
 }
