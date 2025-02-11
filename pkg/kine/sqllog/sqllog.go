@@ -518,20 +518,11 @@ func (s *SQLLog) poll(ctx context.Context, result chan []*server.Event, pollStar
 			}
 		}
 		waitForMore = true
-		watchCtx, cancel := context.WithTimeout(ctx, s.config.WatchQueryTimeout)
-		defer cancel()
-
-		rows, err := s.config.Driver.After(watchCtx, last, pollBatchSize)
+		events, err := s.getLatestEvents(ctx, last)
 		if err != nil {
 			if !errors.Is(err, context.DeadlineExceeded) {
-				logrus.Errorf("fail to list latest changes: %v", err)
+				logrus.Errorf("fail to get latest events: %v", err)
 			}
-			continue
-		}
-
-		events, err := ScanAll(rows, scanEvent)
-		if err != nil {
-			logrus.Errorf("fail to convert rows changes: %v", err)
 			continue
 		}
 
@@ -597,6 +588,22 @@ func (s *SQLLog) poll(ctx context.Context, result chan []*server.Event, pollStar
 			}
 		}
 	}
+}
+
+func (s *SQLLog) getLatestEvents(ctx context.Context, last int64) ([]*server.Event, error) {
+	watchCtx, cancel := context.WithTimeout(ctx, s.config.WatchQueryTimeout)
+	defer cancel()
+
+	rows, err := s.config.Driver.After(watchCtx, last, pollBatchSize)
+	if err != nil {
+		return nil, err
+	}
+
+	events, err := ScanAll(rows, scanEvent)
+	if err != nil {
+		return nil, err
+	}
+	return events, nil
 }
 
 func canSkipRevision(rev, skip int64, skipTime time.Time) bool {
