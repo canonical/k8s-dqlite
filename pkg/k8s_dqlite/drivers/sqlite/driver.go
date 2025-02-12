@@ -395,7 +395,7 @@ func (d *Driver) query(ctx context.Context, txName, query string, args ...interf
 		}
 		recordOpResult(txName, err, start)
 	}()
-	wait := strategy.Backoff(backoff.Linear(100 + time.Millisecond))
+	wait := strategy.Backoff(backoff.Linear(10 * time.Millisecond))
 	for ; retryCount < maxRetries; retryCount++ {
 		if retryCount == 0 {
 			logrus.Tracef("QUERY (try: %d) %v : %s", retryCount, args, Stripped(query))
@@ -435,7 +435,7 @@ func (d *Driver) execute(ctx context.Context, txName, query string, args ...inte
 		}
 		recordOpResult(txName, err, start)
 	}()
-	wait := strategy.Backoff(backoff.Linear(100 + time.Millisecond))
+	wait := strategy.Backoff(backoff.Linear(10 * time.Millisecond))
 	for ; retryCount < maxRetries; retryCount++ {
 		if retryCount > 2 {
 			logrus.Debugf("EXEC (try: %d) %v : %s", retryCount, args, Stripped(query))
@@ -581,7 +581,7 @@ func (d *Driver) Compact(ctx context.Context, revision int64) (err error) {
 		revision = currentRevision
 	}
 
-	wait := strategy.Backoff(backoff.Linear(100 + time.Millisecond))
+	wait := strategy.Backoff(backoff.Linear(10 * time.Millisecond))
 	for retryCount := 0; retryCount < maxRetries; retryCount++ {
 		err = d.tryCompact(ctx, compactStart, revision)
 		if err == nil || !d.config.Retry(err) {
