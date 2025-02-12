@@ -15,6 +15,9 @@ env:
   TARGET_SHA: ${{ github.sha }}
   BENCH_COUNT: 7
 
+permissions:
+  contents: read
+
 jobs:
   code-quality:
     name: Code Quality
@@ -69,7 +72,6 @@ jobs:
 
   benchmarks:
     permissions:
-      contents: read # for actions/checkout to fetch code
       pull-requests: write # for marocchino/sticky-pull-request-comment to create or update PR comment
     name: Run Benchmarks
     runs-on: ubuntu-latest
