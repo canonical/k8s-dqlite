@@ -404,6 +404,9 @@ func (d *Driver) query(ctx context.Context, txName, query string, args ...interf
 		}
 		rows, err = d.config.DB.QueryContext(ctx, query, args...)
 		if err == nil {
+			if retryCount != 0 {
+				logrus.Printf("query retries: %d, duration: %v", retryCount, time.Now().Sub(start))
+			}
 			break
 		}
 		if !d.config.Retry(err) {
@@ -444,6 +447,9 @@ func (d *Driver) execute(ctx context.Context, txName, query string, args ...inte
 		}
 		result, err = d.config.DB.ExecContext(ctx, query, args...)
 		if err == nil {
+			if retryCount != 0 {
+				logrus.Printf("execute retries: %d, duration: %v", retryCount, time.Now().Sub(start))
+			}
 			break
 		}
 		if !d.config.Retry(err) {
@@ -581,10 +587,14 @@ func (d *Driver) Compact(ctx context.Context, revision int64) (err error) {
 		revision = currentRevision
 	}
 
+	start := time.Now()
 	wait := strategy.Backoff(backoff.Linear(10 * time.Millisecond))
 	for retryCount := 0; retryCount < maxRetries; retryCount++ {
 		err = d.tryCompact(ctx, compactStart, revision)
 		if err == nil || !d.config.Retry(err) {
+			if retryCount != 0 {
+				logrus.Printf("compact retries: %d, duration: %v", retryCount, time.Now().Sub(start))
+			}
 			break
 		}
 		wait(uint(retryCount))
