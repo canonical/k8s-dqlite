@@ -79,7 +79,7 @@ jobs:
       - name: Install Dqlite
         run: |
           sudo add-apt-repository -y ppa:dqlite/dev 
-          sudo apt install libdqlite-dev
+          sudo apt install libdqlite-dev libraft-dev
 
       - name: Run benchmarks
         run: |
