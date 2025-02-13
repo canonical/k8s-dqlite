@@ -38,8 +38,8 @@ func NewDriver(ctx context.Context, config *DriverConfig, goDqliteApp *app.App) 
 		DB:         config.DB,
 		LockWrites: true,
 		Retry:      dqliteRetry,
-		CompactAllowed: func(ctx context.Context) (bool, error) {
-			return compactAllowed(ctx, goDqliteApp)
+		IsLeader: func(ctx context.Context) (bool, error) {
+			return isLocalNodeLeader(ctx, goDqliteApp)
 		},
 	})
 
@@ -85,25 +85,12 @@ func dqliteRetry(err error) bool {
 	return false
 }
 
-func compactAllowed(ctx context.Context, goDqliteApp *app.App) (bool, error) {
-	if goDqliteApp == nil {
-		logrus.Printf(
-			"WARNING: go-dqlite app unspecified, can't determine if this node is a leader. " +
-				"Allowing compaction to proceed.")
-		return true, nil
-	}
-	leader, err := isLocalNodeLeader(ctx, goDqliteApp)
-	if err != nil {
-		logrus.Printf("Failed to determine if the local node is a leader, suppressing error and allowing the compaction to proceed. Error: %v.", err)
-		return true, nil
-	}
-	if !leader {
-		logrus.Printf("Not a dqlite leader, compaction not allowed.")
-	}
-	return leader, nil
-}
-
 func isLocalNodeLeader(ctx context.Context, goDqliteApp *app.App) (bool, error) {
+	if goDqliteApp == nil {
+		err := fmt.Errorf("go-dqlite app unspecified, can't determine if this node is a leader")
+		return false, err
+	}
+
 	client, err := goDqliteApp.Client(ctx)
 	if err != nil {
 		return false, fmt.Errorf("couldn't obtain dqlite client: %w", err)

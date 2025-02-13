@@ -59,6 +59,7 @@ type Driver interface {
 	IsFill(key string) bool
 	GetSize(ctx context.Context) (int64, error)
 	Close() error
+	IsLeader(ctx context.Context) (bool, error)
 }
 
 type SQLLog struct {

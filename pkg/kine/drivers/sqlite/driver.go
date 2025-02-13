@@ -255,11 +255,11 @@ type Driver struct {
 }
 
 type DriverConfig struct {
-	DB             database.Interface
-	LockWrites     bool
-	Retry          func(error) bool
-	ErrCode        func(error) string
-	CompactAllowed func(context.Context) (bool, error)
+	DB         database.Interface
+	LockWrites bool
+	Retry      func(error) bool
+	ErrCode    func(error) string
+	IsLeader   func(context.Context) (bool, error)
 }
 
 func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
@@ -572,15 +572,12 @@ func (d *Driver) Delete(ctx context.Context, key string, revision int64) (rev in
 // After the call, any request for a version older than the given revision will return
 // a compacted error.
 func (d *Driver) Compact(ctx context.Context, revision int64) (err error) {
-	if d.config.CompactAllowed != nil {
-		compactAllowed, err := d.config.CompactAllowed(ctx)
-		if err != nil {
-			return fmt.Errorf("compaction pre-check failed: %w", err)
-		}
-		if !compactAllowed {
-			// TODO: should we log something or return an error?
-			return nil
-		}
+	isLeader, err := d.IsLeader(ctx)
+	if err != nil {
+		logrus.WithError(err).Warning("couldn't determine if the local node has leader role, allowing the compaction to proceed")
+	} else if !isLeader {
+		logrus.Info("skipping compaction on follower node")
+		return nil
 	}
 
 	compactCnt.Add(ctx, 1)
@@ -816,4 +813,12 @@ func (d *Driver) GetSize(ctx context.Context) (int64, error) {
 
 func (d *Driver) Close() error {
 	return d.config.DB.Close()
+}
+
+func (d *Driver) IsLeader(ctx context.Context) (bool, error) {
+	if d.config.IsLeader == nil {
+		// No leader check implemented for this driver.
+		return true, nil
+	}
+	return d.config.IsLeader(ctx)
 }
