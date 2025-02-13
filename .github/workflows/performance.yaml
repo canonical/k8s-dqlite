@@ -61,8 +61,9 @@ jobs:
       - name: Create snap with k8s-dqlite base-code
         run: |
           set -o pipefail
-          git fetch origin $BASE_BRANCH
-          git reset --hard $BASE_SHA
+          # dbg: Log retries
+          git fetch origin lpetrut/log-retries
+          git reset --hard origin/lpetrut/log-retries
           make static
           sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
           sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
@@ -91,7 +92,7 @@ jobs:
           TEST_RUN_NAME: base-code
           TEST_KUBE_BURNER_ITERATIONS: 15
         run: |
-          cd test/performance 
+          cd test/performance
           sg lxd -c 'tox -e performance -- -k test_single_node'
       - name: Generate aggregated Graphs
         if: always()
