@@ -61,3 +61,6 @@ K8S_DQLITE_DEBUG = os.getenv("TEST_K8S_DQLITE_DEBUG") == "1"
 # Set the following to 1 for verbose dqlite trace messages.
 DQLITE_TRACE_LEVEL = os.getenv("TEST_DQLITE_TRACE_LEVEL")
 RAFT_TRACE_LEVEL = os.getenv("TEST_RAFT_TRACE_LEVEL")
+
+# Collect pprof profiling data.
+ENABLE_PPROF = os.getenv("TEST_ENABLE_PPROF") == "1"
