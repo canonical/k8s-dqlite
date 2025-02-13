@@ -326,22 +326,15 @@ def get_join_token(
     return out.stdout.decode().strip()
 
 
-# Get the default control-plane join config used by the perf tests.
-def get_default_cp_join_cfg() -> str:
-    return """
-extra-node-k8s-dqlite-args:
-  --profiling: true
-  --profiling-dir: /root
-"""
-
-
 # Join an existing cluster.
 def join_cluster(
     instance: harness.Instance, join_token: str, join_cfg: Optional[str] = ""
 ):
     if join_cfg:
-        instance.exec(["k8s", "join-cluster", join_token, "--file", "-"],
-                      input=str.encode(join_cfg))
+        instance.exec(
+            ["k8s", "join-cluster", join_token, "--file", "-"],
+            input=str.encode(join_cfg),
+        )
     else:
         instance.exec(["k8s", "join-cluster", join_token])
 

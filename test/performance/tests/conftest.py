@@ -173,13 +173,13 @@ def instances(
     if not disable_k8s_bootstrapping and not no_setup:
         first_node, *_ = instances
 
-        if not bootstrap_config:
-            bootstrap_config = (config.MANIFESTS_DIR / "bootstrap-all.yaml").read_text()
-
-        first_node.exec(
-            ["k8s", "bootstrap", "--file", "-"],
-            input=str.encode(bootstrap_config),
-        )
+        if bootstrap_config is not None:
+            first_node.exec(
+                ["k8s", "bootstrap", "--file", "-"],
+                input=str.encode(bootstrap_config),
+            )
+        else:
+            first_node.exec(["k8s", "bootstrap"])
 
     yield instances
 
@@ -214,9 +214,13 @@ def session_instance(
     snap = next(snap_versions(request))
     util.setup_k8s_snap(instance, tmp_path, snap)
 
-    bootstrap_config_path = "/root/bootstrap-all.yaml"
+    bootstrap_config_path = "/root/bootstrap.yaml"
+    if config.ENABLE_PROFILING:
+        bootstrap_template = "bootstrap-profiling.yaml"
+    else:
+        bootstrap_template = "bootstrap-session.yaml"
     instance.send_file(
-        (config.MANIFESTS_DIR / "bootstrap-all.yaml").as_posix(),
+        (config.MANIFESTS_DIR / bootstrap_template).as_posix(),
         bootstrap_config_path,
     )
 

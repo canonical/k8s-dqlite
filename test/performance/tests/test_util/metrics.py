@@ -54,34 +54,35 @@ def pull_metrics(instances: List[harness.Instance], test_name: str):
             out_file,
         )
 
-        # Stop k8s-dqlite, triggering a pprof data dump. Don't start it back
-        # until we've processed the data, otherwise it's going to override the file.
-        instance.exec(["snap", "stop", "k8s.k8s-dqlite"])
-        try:
-            # Pull pprof data. We could also run "go tool pprof" on the host machine
-            # but then we wouldn't have access to the binary symbols.
-            instance.exec(["snap", "install", "go", "--classic"])
-            # Parse the cpu profile, sorting by cumulative time.
-            instance.exec(
-                [
-                    "go",
-                    "tool",
-                    "pprof",
-                    "-top",
-                    "-cum",
-                    "/root/cpu_profile.raw",
-                    ">",
+        if config.ENABLE_PROFILING:
+            # Stop k8s-dqlite, triggering a pprof data dump. Don't start it back
+            # until we've processed the data, otherwise it's going to override the file.
+            instance.exec(["snap", "stop", "k8s.k8s-dqlite"])
+            try:
+                # Pull pprof data. We could also run "go tool pprof" on the host machine
+                # but then we wouldn't have access to the binary symbols.
+                instance.exec(["snap", "install", "go", "--classic"])
+                # Parse the cpu profile, sorting by cumulative time.
+                instance.exec(
+                    [
+                        "go",
+                        "tool",
+                        "pprof",
+                        "-top",
+                        "-cum",
+                        "/root/cpu_profile.raw",
+                        ">",
+                        f"/root/{instance.id}_cpu_profile.txt",
+                    ],
+                )
+                out_file = f"{config.METRICS_DIR}/{config.RUN_NAME}-{i}-of{len(instances)}-{test_name}-cpu-profile.txt"
+                instance.pull_file(
                     f"/root/{instance.id}_cpu_profile.txt",
-                ],
-            )
-            out_file = f"{config.METRICS_DIR}/{config.RUN_NAME}-{i}-of{len(instances)}-{test_name}-cpu-profile.txt"
-            instance.pull_file(
-                f"/root/{instance.id}_cpu_profile.txt",
-                out_file,
-            )
-        except Exception as ex:
-            LOG.exception("failed to retrieve pprof data")
-        instance.exec(["snap", "start", "k8s.k8s-dqlite"])
+                    out_file,
+                )
+            except Exception:
+                LOG.exception("failed to retrieve pprof data")
+            instance.exec(["snap", "start", "k8s.k8s-dqlite"])
 
 
 def configure_kube_burner(instance: harness.Instance):
