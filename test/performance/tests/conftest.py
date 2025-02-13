@@ -187,15 +187,18 @@ def instances(
         LOG.warning("Skipping clean-up of instances, delete them on your own")
         return
 
-    # Cleanup after each test.
-    # We cannot execute _harness_clean() here as this would also
-    # remove the session_instance. The harness ensures that everything is cleaned up
-    # at the end of the test session.
+    # Collect all the reports before initiating the cleanup so that we won't
+    # affect the state of the observed cluster.
     for instance in instances:
         if config.INSPECTION_REPORTS_DIR is not None:
             LOG.debug("Generating inspection reports for test instances")
             _generate_inspection_report(h, instance.id)
 
+    # Cleanup after each test.
+    # We cannot execute _harness_clean() here as this would also
+    # remove the session_instance. The harness ensures that everything is cleaned up
+    # at the end of the test session.
+    for instance in instances:
         h.delete_instance(instance.id)
 
 
