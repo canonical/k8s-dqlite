@@ -4,8 +4,13 @@ on:
   pull_request:
     branches: [master, default]
 
+permissions:
+  contents: read
+
 jobs:
   cla-check:
+    permissions:
+      pull-requests: write
     runs-on: ubuntu-latest
     steps:
       - name: Check if CLA signed
