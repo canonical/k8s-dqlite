@@ -4,7 +4,8 @@ on:
   schedule:
     - cron: '0 10 * * *'
 
-permissions: {}
+permissions:
+  contents: read
 
 jobs:
   list-branches-to-scan:
