@@ -8,7 +8,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
-func isDelete(txn *etcdserverpb.TxnRequest) (int64,  []byte, bool) {
+func isDelete(txn *etcdserverpb.TxnRequest) (int64, []byte, bool) {
 	if len(txn.Compare) == 1 &&
 		txn.Compare[0].Target == etcdserverpb.Compare_MOD &&
 		txn.Compare[0].Result == etcdserverpb.Compare_EQUAL &&
