@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/canonical/go-dqlite/v2/app"
+	"github.com/canonical/go-dqlite/v3/app"
 	"github.com/canonical/k8s-dqlite/pkg/database"
 	"github.com/canonical/k8s-dqlite/pkg/instrument"
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/dqlite"

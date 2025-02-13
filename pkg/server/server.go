@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/canonical/go-dqlite/v2"
-	"github.com/canonical/go-dqlite/v2/app"
-	"github.com/canonical/go-dqlite/v2/client"
+	"github.com/canonical/go-dqlite/v3"
+	"github.com/canonical/go-dqlite/v3/app"
+	"github.com/canonical/go-dqlite/v3/client"
 	"github.com/canonical/k8s-dqlite/pkg/database"
 	dqliteDriver "github.com/canonical/k8s-dqlite/pkg/kine/drivers/dqlite"
 	"github.com/canonical/k8s-dqlite/pkg/kine/endpoint"
