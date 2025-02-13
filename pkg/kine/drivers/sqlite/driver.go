@@ -466,11 +466,11 @@ func (d *Driver) execute(ctx context.Context, txName, query string, args ...inte
 	return result, err
 }
 
-func (d *Driver) Count(ctx context.Context, key, end []byte, revision int64) (int64, error) {
-	if len(end) == 0 {
-		end = append(key, 1)
+func (d *Driver) Count(ctx context.Context, key, rangeEnd []byte, revision int64) (int64, error) {
+	if len(rangeEnd) == 0 {
+		rangeEnd = append(key, 1)
 	}
-	rows, err := d.query(ctx, "count_revision", countRevisionSQL, key, end, revision)
+	rows, err := d.query(ctx, "count_revision", countRevisionSQL, key, rangeEnd, revision)
 	if err != nil {
 		return 0, err
 	}
@@ -703,16 +703,16 @@ func (d *Driver) DeleteRevision(ctx context.Context, revision int64) error {
 	return err
 }
 
-func (d *Driver) List(ctx context.Context, key, end []byte, limit, revision int64) (*sql.Rows, error) {
-	if len(end) == 0 {
-		end = append(key, 1)
+func (d *Driver) List(ctx context.Context, key, rangeEnd []byte, limit, revision int64) (*sql.Rows, error) {
+	if len(rangeEnd) == 0 {
+		rangeEnd = append(key, 1)
 	}
 	sql := listSQL
 	if limit > 0 {
 		sql = fmt.Sprintf("%s LIMIT ?", sql)
-		return d.query(ctx, "list_revision_start_sql_limit", sql, key, end, revision, limit)
+		return d.query(ctx, "list_revision_start_sql_limit", sql, key, rangeEnd, revision, limit)
 	}
-	return d.query(ctx, "list_revision_start_sql", sql, key, end, revision)
+	return d.query(ctx, "list_revision_start_sql", sql, key, rangeEnd, revision)
 }
 
 func (d *Driver) ListTTL(ctx context.Context, revision int64) (*sql.Rows, error) {
