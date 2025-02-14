@@ -17,11 +17,13 @@ func (l *LimitedServer) get(ctx context.Context, r *etcdserverpb.RangeRequest) (
 		span.End()
 	}()
 
-	span.SetAttributes(
-		attribute.String("key", string(r.Key)),
-		attribute.Int64("limit", r.Limit),
-		attribute.Int64("revision", r.Revision),
-	)
+	if span.IsRecording() {
+		span.SetAttributes(
+			attribute.String("key", string(r.Key)),
+			attribute.Int64("limit", r.Limit),
+			attribute.Int64("revision", r.Revision),
+		)
+	}
 
 	rev, kv, err := l.backend.List(ctx, r.Key, []byte{}, 1, r.Revision)
 	if err != nil {

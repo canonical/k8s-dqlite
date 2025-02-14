@@ -19,11 +19,13 @@ func (l *LimitedServer) list(ctx context.Context, r *etcdserverpb.RangeRequest) 
 	}()
 
 	revision := r.Revision
-	span.SetAttributes(
-		attribute.String("key", string(r.Key)),
-		attribute.String("rangeEnd", string(r.RangeEnd)),
-		attribute.Int64("revision", r.Revision),
-	)
+	if span.IsRecording() {
+		span.SetAttributes(
+			attribute.String("key", string(r.Key)),
+			attribute.String("rangeEnd", string(r.RangeEnd)),
+			attribute.Int64("revision", r.Revision),
+		)
+	}
 	if len(r.RangeEnd) == 0 {
 		return nil, fmt.Errorf("invalid range end length of 0")
 	}
