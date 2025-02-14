@@ -14,6 +14,8 @@ MANIFESTS_DIR = DIR / ".." / ".." / "templates"
 
 METRICS_DIR = os.getenv("TEST_METRICS_DIR") or DIR / ".." / ".." / "results"
 
+METRICS_PARSE_SCRIPT = DIR / ".." / ".." / "parse-performance-metrics.R"
+
 RUN_NAME = os.getenv("TEST_RUN_NAME") or "k8s"
 
 # INSPECTION_REPORTS_DIR is the directory where inspection reports are stored.
@@ -61,3 +63,6 @@ K8S_DQLITE_DEBUG = os.getenv("TEST_K8S_DQLITE_DEBUG") == "1"
 # Set the following to 1 for verbose dqlite trace messages.
 DQLITE_TRACE_LEVEL = os.getenv("TEST_DQLITE_TRACE_LEVEL")
 RAFT_TRACE_LEVEL = os.getenv("TEST_RAFT_TRACE_LEVEL")
+
+# Enable pprof profiling.
+ENABLE_PROFILING = os.getenv("TEST_ENABLE_PROFILING", "1") == "1"

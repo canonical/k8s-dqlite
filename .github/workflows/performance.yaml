@@ -93,20 +93,19 @@ jobs:
           cd test/performance 
           mkdir -p ./results/base-code
           sg lxd -c 'tox -e performance'
-      - name: Generate 3 node Graphs
+      - name: Generate aggregated Graphs
         if: always()
         run: |
           cd test/performance
-          sudo Rscript parse-performance-metrics.R -p ./results/head -o ./results/head -f *three-node.log
-          sudo Rscript parse-performance-metrics.R -p ./results/base-code -o ./results/base-code -f *three-node.log
-      - name: Generate single node Graphs
-        if: always()
-        run: |
-          cd test/performance
-          mkdir -p ./results/single-node
-          cp ./results/head/*single-node.log ./results/single-node
-          cp ./results/base-code/*single-node.log ./results/single-node
-          sudo Rscript parse-performance-metrics.R -p ./results/single-node -o ./results/single-node -f *single-node.log
+          mkdir -p ./results/aggregated-results/single-node
+          cp ./results/head/single-node/metrics.log \
+             ./results/aggregated-results/single-node/head-metrics.log
+          cp ./results/base/single-node/metrics.log \
+             ./results/aggregated-results/single-node/base-metrics.log
+          sudo Rscript parse-performance-metrics.R \
+            -p ./results/aggregated-results/single-node/ \
+            -o ./results/aggregated-results/single-node/ \
+            -f *metrics.log
       - name: Upload performance result
         uses: actions/upload-artifact@v4
         if: always()

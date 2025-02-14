@@ -1,0 +1,3 @@
+extra-node-k8s-dqlite-args:
+  --profiling: true
+  --profiling-dir: /root
