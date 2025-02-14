@@ -24,7 +24,26 @@ func init() {
 	}
 }
 
-type Driver = sqlite.Driver
+type Driver struct {
+	*sqlite.Driver
+
+	goDqliteApp *app.App
+}
+
+func (d *Driver) Compact(ctx context.Context, revision int64) (err error) {
+	// Skip the compaction if we're not the leader.
+	//
+	// WARNING: overridden methods will not be visible from the embedded
+	// (sqlite) driver.
+	isLeader, err := isLocalNodeLeader(ctx, d.goDqliteApp)
+	if err != nil {
+		logrus.WithError(err).Warning("couldn't determine if the local node has leader role, allowing the compaction to proceed")
+	} else if !isLeader {
+		logrus.Info("skipping compaction on follower node")
+		return nil
+	}
+	return d.Driver.Compact(ctx, revision)
+}
 
 type DriverConfig struct {
 	DB      database.Interface
@@ -38,9 +57,6 @@ func NewDriver(ctx context.Context, config *DriverConfig, goDqliteApp *app.App) 
 		DB:         config.DB,
 		LockWrites: true,
 		Retry:      dqliteRetry,
-		IsLeader: func(ctx context.Context) (bool, error) {
-			return isLocalNodeLeader(ctx, goDqliteApp)
-		},
 	})
 
 	if err != nil {
@@ -51,7 +67,7 @@ func NewDriver(ctx context.Context, config *DriverConfig, goDqliteApp *app.App) 
 		return nil, errors.Wrap(err, "failed to migrate DB from sqlite")
 	}
 
-	return drv, nil
+	return &Driver{drv, goDqliteApp}, nil
 }
 
 func dqliteRetry(err error) bool {
