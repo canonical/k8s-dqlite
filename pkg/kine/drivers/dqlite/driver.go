@@ -58,7 +58,6 @@ func NewDriver(ctx context.Context, config *DriverConfig, goDqliteApp *app.App) 
 		LockWrites: true,
 		Retry:      dqliteRetry,
 	})
-
 	if err != nil {
 		return nil, err
 	}
