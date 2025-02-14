@@ -45,14 +45,39 @@ def collect_metrics(instances: List[harness.Instance]):
     return process_dict
 
 
+def generate_graphs(test_metrics_dir: str):
+    """Generate plots based on the resource usage metrics."""
+    cmd = [
+        "sudo",
+        "Rscript",
+        config.METRICS_PARSE_SCRIPT.as_posix(),
+        "-p",
+        test_metrics_dir,
+        "-o",
+        test_metrics_dir,
+        "-f",
+        "*metrics.log",
+    ]
+    util.run(cmd)
+
+
 def pull_metrics(instances: List[harness.Instance], test_name: str):
     """Pulls metrics file from each instance to the local machine."""
     for i, instance in enumerate(instances, start=1):
-        out_file = f"{config.METRICS_DIR}/{config.RUN_NAME}-{i}-of{len(instances)}-{test_name}.log"
+        out_dir = os.path.join(config.METRICS_DIR, config.RUN_NAME, test_name)
+        os.makedirs(out_dir, exist_ok=True)
+
+        file_prefix = ""
+        if len(instances) > 1:
+            file_prefix = f"{i}-of-{len(instances)}-"
+        out_file = os.path.join(out_dir, f"{file_prefix}metrics.log")
+
         instance.pull_file(
             f"/root/{instance.id}_metrics.log",
             out_file,
         )
+
+        generate_graphs(out_dir)
 
         if config.ENABLE_PROFILING:
             # Stop k8s-dqlite, triggering a pprof data dump. Don't start it back
@@ -75,7 +100,7 @@ def pull_metrics(instances: List[harness.Instance], test_name: str):
                         f"/root/{instance.id}_cpu_profile.txt",
                     ],
                 )
-                out_file = f"{config.METRICS_DIR}/{config.RUN_NAME}-{i}-of{len(instances)}-{test_name}-cpu-profile.txt"
+                out_file = os.path.join(out_dir, f"{file_prefix}cpu-profile.txt")
                 instance.pull_file(
                     f"/root/{instance.id}_cpu_profile.txt",
                     out_file,

@@ -14,6 +14,8 @@ MANIFESTS_DIR = DIR / ".." / ".." / "templates"
 
 METRICS_DIR = os.getenv("TEST_METRICS_DIR") or DIR / ".." / ".." / "results"
 
+METRICS_PARSE_SCRIPT = DIR / ".." / ".." / "parse-performance-metrics.R"
+
 RUN_NAME = os.getenv("TEST_RUN_NAME") or "k8s"
 
 # INSPECTION_REPORTS_DIR is the directory where inspection reports are stored.
