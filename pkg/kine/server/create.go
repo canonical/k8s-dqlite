@@ -29,10 +29,12 @@ func (l *LimitedServer) create(ctx context.Context, put *etcdserverpb.PutRequest
 		span.RecordError(err)
 		span.End()
 	}()
-	span.SetAttributes(
-		attribute.String("key", string(put.Key)),
-		attribute.Int64("lease", put.Lease),
-	)
+	if span.IsRecording() {
+		span.SetAttributes(
+			attribute.String("key", string(put.Key)),
+			attribute.Int64("lease", put.Lease),
+		)
+	}
 
 	if put.IgnoreLease {
 		return nil, unsupported("ignoreLease")
@@ -42,7 +44,7 @@ func (l *LimitedServer) create(ctx context.Context, put *etcdserverpb.PutRequest
 		return nil, unsupported("prevKv")
 	}
 
-	rev, created, err := l.backend.Create(ctx, string(put.Key), put.Value, put.Lease)
+	rev, created, err := l.backend.Create(ctx, put.Key, put.Value, put.Lease)
 	if err != nil {
 		return nil, err
 	}

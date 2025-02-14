@@ -33,17 +33,19 @@ func (l *LimitedServer) update(ctx context.Context, rev int64, key, value []byte
 		span.RecordError(err)
 		span.End()
 	}()
-	span.SetAttributes(
-		attribute.String("key", string(key)),
-		attribute.Int64("lease", lease),
-		attribute.Int64("revision", rev),
-	)
+	if span.IsRecording() {
+		span.SetAttributes(
+			attribute.String("key", string(key)),
+			attribute.Int64("lease", lease),
+			attribute.Int64("revision", rev),
+		)
+	}
 
 	var succeeded bool
 	if rev == 0 {
-		rev, succeeded, err = l.backend.Create(ctx, string(key), value, lease)
+		rev, succeeded, err = l.backend.Create(ctx, key, value, lease)
 	} else {
-		rev, succeeded, err = l.backend.Update(ctx, string(key), value, rev, lease)
+		rev, succeeded, err = l.backend.Update(ctx, key, value, rev, lease)
 	}
 	if err != nil {
 		return nil, err

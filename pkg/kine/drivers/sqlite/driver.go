@@ -177,14 +177,14 @@ var (
 			lease,
 			NULL AS value,
 			value AS old_value
-		FROM kine WHERE id = (SELECT MAX(id) FROM kine WHERE name = ?)
+		FROM kine WHERE id = (SELECT MAX(id) FROM kine WHERE name = CAST(? AS TEXT))
 			AND deleted = 0
 			AND id = ?`
 
 	createSQL = `
 		INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
 		SELECT 
-			? AS name,
+			CAST(? AS TEXT) AS name,
 			1 AS created,
 			0 AS deleted,
 			0 AS create_revision, 
@@ -195,14 +195,14 @@ var (
 		FROM (
 			SELECT MAX(id) AS id, deleted
 			FROM kine
-			WHERE name = ?
+			WHERE name = CAST(? AS TEXT)
 		) maxkv
 		WHERE maxkv.deleted = 1 OR id IS NULL`
 
 	updateSQL = `
 		INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
 		SELECT 
-			? AS name,
+			CAST(? AS TEXT) AS name,
 			0 AS created,
 			0 AS deleted,
 			CASE 
@@ -213,7 +213,7 @@ var (
 			? AS lease,
 			? AS value,
 			value AS old_value
-		FROM kine WHERE id = (SELECT MAX(id) FROM kine WHERE name = ?)
+		FROM kine WHERE id = (SELECT MAX(id) FROM kine WHERE name = CAST(? AS TEXT))
 			AND deleted = 0
 			AND id = ?`
 
@@ -490,7 +490,7 @@ func (d *Driver) Count(ctx context.Context, key, rangeEnd []byte, revision int64
 	return id, err
 }
 
-func (d *Driver) Create(ctx context.Context, key string, value []byte, ttl int64) (rev int64, succeeded bool, err error) {
+func (d *Driver) Create(ctx context.Context, key, value []byte, ttl int64) (rev int64, succeeded bool, err error) {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Create", otelName))
 
 	defer func() {
@@ -498,10 +498,12 @@ func (d *Driver) Create(ctx context.Context, key string, value []byte, ttl int64
 		span.SetAttributes(attribute.Int64("revision", rev))
 		span.End()
 	}()
-	span.SetAttributes(
-		attribute.String("key", key),
-		attribute.Int64("ttl", ttl),
-	)
+	if span.IsRecording() {
+		span.SetAttributes(
+			attribute.String("key", string(key)),
+			attribute.Int64("ttl", ttl),
+		)
+	}
 	createCnt.Add(ctx, 1)
 
 	result, err := d.execute(ctx, "create_sql", createSQL, key, ttl, value, key)
@@ -518,7 +520,7 @@ func (d *Driver) Create(ctx context.Context, key string, value []byte, ttl int64
 	return rev, true, err
 }
 
-func (d *Driver) Update(ctx context.Context, key string, value []byte, preRev, ttl int64) (rev int64, updated bool, err error) {
+func (d *Driver) Update(ctx context.Context, key, value []byte, preRev, ttl int64) (rev int64, updated bool, err error) {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Update", otelName))
 	defer func() {
 		span.RecordError(err)
@@ -540,7 +542,7 @@ func (d *Driver) Update(ctx context.Context, key string, value []byte, preRev, t
 	return rev, true, err
 }
 
-func (d *Driver) Delete(ctx context.Context, key string, revision int64) (rev int64, deleted bool, err error) {
+func (d *Driver) Delete(ctx context.Context, key []byte, revision int64) (rev int64, deleted bool, err error) {
 	deleteCnt.Add(ctx, 1)
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Delete", otelName))
 	defer func() {
@@ -549,7 +551,9 @@ func (d *Driver) Delete(ctx context.Context, key string, revision int64) (rev in
 		span.SetAttributes(attribute.Bool("deleted", deleted))
 		span.End()
 	}()
-	span.SetAttributes(attribute.String("key", key))
+	if span.IsRecording() {
+		span.SetAttributes(attribute.String("key", string(key)))
+	}
 
 	result, err := d.execute(ctx, "delete_sql", deleteSQL, key, revision)
 	if err != nil {
@@ -776,8 +780,8 @@ func (d *Driver) Fill(ctx context.Context, revision int64) error {
 	return err
 }
 
-func (d *Driver) IsFill(key string) bool {
-	return strings.HasPrefix(key, "gap-")
+func (d *Driver) IsFill(key []byte) bool {
+	return strings.HasPrefix(string(key), "gap-")
 }
 
 func (d *Driver) GetSize(ctx context.Context) (int64, error) {

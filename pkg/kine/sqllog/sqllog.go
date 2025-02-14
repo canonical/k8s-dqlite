@@ -49,14 +49,14 @@ type Driver interface {
 	CurrentRevision(ctx context.Context) (int64, error)
 	AfterPrefix(ctx context.Context, prefix string, rev, limit int64) (*sql.Rows, error)
 	After(ctx context.Context, rev, limit int64) (*sql.Rows, error)
-	Create(ctx context.Context, key string, value []byte, lease int64) (int64, bool, error)
-	Update(ctx context.Context, key string, value []byte, prevRev, lease int64) (int64, bool, error)
-	Delete(ctx context.Context, key string, revision int64) (int64, bool, error)
+	Create(ctx context.Context, key []byte, value []byte, lease int64) (int64, bool, error)
+	Update(ctx context.Context, key []byte, value []byte, prevRev, lease int64) (int64, bool, error)
+	Delete(ctx context.Context, key []byte, revision int64) (int64, bool, error)
 	DeleteRevision(ctx context.Context, revision int64) error
 	GetCompactRevision(ctx context.Context) (int64, int64, error)
 	Compact(ctx context.Context, revision int64) error
 	Fill(ctx context.Context, revision int64) error
-	IsFill(key string) bool
+	IsFill(key []byte) bool
 	GetSize(ctx context.Context) (int64, error)
 	Close() error
 }
@@ -103,7 +103,7 @@ func (s *SQLLog) Start(startCtx context.Context) error {
 		return nil
 	}
 
-	_, _, err := s.Create(startCtx, "/registry/health", []byte(`{"health":"true"}`), 0)
+	_, _, err := s.Create(startCtx, []byte("/registry/health"), []byte(`{"health":"true"}`), 0)
 	if err != nil {
 		return err
 	}
@@ -159,7 +159,7 @@ func (s *SQLLog) compactStart(ctx context.Context) error {
 	}
 
 	if len(events) == 0 {
-		_, _, err := s.Create(ctx, "compact_rev_key", []byte(""), 0)
+		_, _, err := s.Create(ctx, []byte("compact_rev_key"), []byte(""), 0)
 		return err
 	} else if len(events) == 1 {
 		return nil
@@ -312,7 +312,7 @@ func (s *SQLLog) List(ctx context.Context, key, rangeEnd []byte, limit, revision
 }
 
 func (s *SQLLog) ttl(ctx context.Context) {
-	run := func(ctx context.Context, key string, revision int64, timeout time.Duration) {
+	run := func(ctx context.Context, key []byte, revision int64, timeout time.Duration) {
 		select {
 		case <-ctx.Done():
 			return
@@ -338,7 +338,7 @@ func (s *SQLLog) ttl(ctx context.Context) {
 		}
 
 		var (
-			key             string
+			key             []byte
 			revision, lease int64
 		)
 		for rows.Next() {
@@ -349,7 +349,7 @@ func (s *SQLLog) ttl(ctx context.Context) {
 			go run(ctx, key, revision, time.Duration(lease)*time.Second)
 		}
 
-		watchCh, err := s.Watch(ctx, "/", startRevision)
+		watchCh, err := s.Watch(ctx, []byte("/"), startRevision)
 		if err != nil {
 			logrus.Errorf("failed to watch events for ttl: %v", err)
 			return
@@ -358,20 +358,22 @@ func (s *SQLLog) ttl(ctx context.Context) {
 		for events := range watchCh {
 			for _, event := range events {
 				if event.KV.Lease > 0 {
-					go run(ctx, event.KV.Key, event.KV.ModRevision, time.Duration(event.KV.Lease)*time.Second)
+					go run(ctx, []byte(event.KV.Key), event.KV.ModRevision, time.Duration(event.KV.Lease)*time.Second)
 				}
 			}
 		}
 	}()
 }
 
-func (s *SQLLog) Watch(ctx context.Context, key string, startRevision int64) (<-chan []*server.Event, error) {
+func (s *SQLLog) Watch(ctx context.Context, key []byte, startRevision int64) (<-chan []*server.Event, error) {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Watch", otelName))
 	defer span.End()
-	span.SetAttributes(
-		attribute.String("key", key),
-		attribute.Int64("startRevision", startRevision),
-	)
+	if span.IsRecording() {
+		span.SetAttributes(
+			attribute.String("key", string(key)),
+			attribute.Int64("startRevision", startRevision),
+		)
+	}
 
 	// starting watching right away so we don't miss anything
 	ctx, cancel := context.WithCancel(ctx)
@@ -385,7 +387,8 @@ func (s *SQLLog) Watch(ctx context.Context, key string, startRevision int64) (<-
 		startRevision = startRevision - 1
 	}
 
-	initialRevision, initialEvents, err := s.After(ctx, key, startRevision, 0)
+	// TODO: use range instead of string prefix
+	initialRevision, initialEvents, err := s.After(ctx, string(key), startRevision, 0)
 	if err != nil {
 		if !errors.Is(err, context.Canceled) {
 			span.RecordError(err)
@@ -415,7 +418,7 @@ func (s *SQLLog) Watch(ctx context.Context, key string, startRevision int64) (<-
 
 		// Filter for events that update/create/delete the given key
 		for events := range values {
-			filtered := filterEvents(events, key, initialRevision)
+			filtered := filterEvents(events, string(key), initialRevision)
 			if len(filtered) > 0 {
 				res <- filtered
 			}
@@ -562,7 +565,7 @@ func (s *SQLLog) poll(ctx context.Context, result chan []*server.Event, pollStar
 			// the same time we write to the channel.
 			saveLast = true
 			rev = event.KV.ModRevision
-			if s.config.Driver.IsFill(event.KV.Key) {
+			if s.config.Driver.IsFill([]byte(event.KV.Key)) {
 				logrus.Debugf("NOT TRIGGER FILL %s, revision=%d, delete=%v", event.KV.Key, event.KV.ModRevision, event.Delete)
 			} else {
 				sequential = append(sequential, event)
@@ -628,7 +631,7 @@ func (s *SQLLog) Count(ctx context.Context, key, rangeEnd []byte, revision int64
 	return currentRevision, count, nil
 }
 
-func (s *SQLLog) Create(ctx context.Context, key string, value []byte, lease int64) (int64, bool, error) {
+func (s *SQLLog) Create(ctx context.Context, key, value []byte, lease int64) (int64, bool, error) {
 	rev, created, err := s.config.Driver.Create(ctx, key, value, lease)
 	if err != nil {
 		return 0, false, err
@@ -639,7 +642,7 @@ func (s *SQLLog) Create(ctx context.Context, key string, value []byte, lease int
 	return rev, created, nil
 }
 
-func (s *SQLLog) Delete(ctx context.Context, key string, revision int64) (rev int64, deleted bool, err error) {
+func (s *SQLLog) Delete(ctx context.Context, key []byte, revision int64) (rev int64, deleted bool, err error) {
 	rev, deleted, err = s.config.Driver.Delete(ctx, key, revision)
 	if err != nil {
 		return 0, false, err
@@ -650,7 +653,7 @@ func (s *SQLLog) Delete(ctx context.Context, key string, revision int64) (rev in
 	return rev, deleted, nil
 }
 
-func (s *SQLLog) Update(ctx context.Context, key string, value []byte, prevRev, lease int64) (rev int64, updated bool, err error) {
+func (s *SQLLog) Update(ctx context.Context, key []byte, value []byte, prevRev, lease int64) (rev int64, updated bool, err error) {
 	rev, updated, err = s.config.Driver.Update(ctx, key, value, prevRev, lease)
 	if err != nil {
 		return 0, false, err
