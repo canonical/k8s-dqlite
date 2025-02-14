@@ -468,7 +468,7 @@ func (d *Driver) execute(ctx context.Context, txName, query string, args ...inte
 
 func (d *Driver) Count(ctx context.Context, key, rangeEnd []byte, revision int64) (int64, error) {
 	if len(rangeEnd) == 0 {
-		rangeEnd = append(key, 1)
+		rangeEnd = append(key, 0)
 	}
 	rows, err := d.query(ctx, "count_revision", countRevisionSQL, key, rangeEnd, revision)
 	if err != nil {
@@ -705,7 +705,7 @@ func (d *Driver) DeleteRevision(ctx context.Context, revision int64) error {
 
 func (d *Driver) List(ctx context.Context, key, rangeEnd []byte, limit, revision int64) (*sql.Rows, error) {
 	if len(rangeEnd) == 0 {
-		rangeEnd = append(key, 1)
+		rangeEnd = append(key, 0)
 	}
 	sql := listSQL
 	if limit > 0 {
