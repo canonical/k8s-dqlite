@@ -25,7 +25,7 @@ func (l *LimitedServer) get(ctx context.Context, r *etcdserverpb.RangeRequest) (
 		)
 	}
 
-	rev, kv, err := l.backend.List(ctx, r.Key, []byte{}, 1, r.Revision)
+	rev, kv, err := l.backend.List(ctx, r.Key, nil, 1, r.Revision)
 	if err != nil {
 		return nil, err
 	}

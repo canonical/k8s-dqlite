@@ -18,7 +18,7 @@ func isDelete(txn *etcdserverpb.TxnRequest) (int64, []byte, bool) {
 		txn.Success[0].GetRequestDeleteRange() != nil {
 		return txn.Compare[0].GetModRevision(), txn.Success[0].GetRequestDeleteRange().Key, true
 	}
-	return 0, []byte{}, false
+	return 0, nil, false
 }
 
 func (l *LimitedServer) delete(ctx context.Context, key []byte, revision int64) (_ *etcdserverpb.TxnResponse, err error) {
@@ -56,7 +56,7 @@ func (l *LimitedServer) delete(ctx context.Context, key []byte, revision int64) 
 			},
 		}
 	} else {
-		rev, kv, err := l.backend.List(ctx, key, []byte{}, 1, rev)
+		rev, kv, err := l.backend.List(ctx, key, nil, 1, rev)
 		if err != nil {
 			return nil, err
 		}
