@@ -37,7 +37,7 @@ func (d *Driver) Compact(ctx context.Context, revision int64) (err error) {
 	// (sqlite) driver.
 	isLeader, err := isLocalNodeLeader(ctx, d.goDqliteApp)
 	if err != nil {
-		logrus.WithError(err).Warning("couldn't determine if the local node has leader role, allowing the compaction to proceed")
+		logrus.WithError(err).Warning("Couldn't determine whether the local node is the leader, allowing the compaction to proceed")
 	} else if !isLeader {
 		logrus.Info("skipping compaction on follower node")
 		return nil
