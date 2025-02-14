@@ -47,7 +47,7 @@ type Driver interface {
 	ListTTL(ctx context.Context, revision int64) (*sql.Rows, error)
 	Count(ctx context.Context, key, rangeEnd []byte, revision int64) (int64, error)
 	CurrentRevision(ctx context.Context) (int64, error)
-	AfterPrefix(ctx context.Context, prefix string, rev, limit int64) (*sql.Rows, error)
+	AfterPrefix(ctx context.Context, key, rangeEnd []byte, rev, limit int64) (*sql.Rows, error)
 	After(ctx context.Context, rev, limit int64) (*sql.Rows, error)
 	Create(ctx context.Context, key []byte, value []byte, lease int64) (int64, bool, error)
 	Update(ctx context.Context, key []byte, value []byte, prevRev, lease int64) (int64, bool, error)
@@ -148,7 +148,7 @@ func (s *SQLLog) Close() error {
 }
 
 func (s *SQLLog) compactStart(ctx context.Context) error {
-	rows, err := s.config.Driver.AfterPrefix(ctx, "compact_rev_key", 0, 0)
+	rows, err := s.config.Driver.AfterPrefix(ctx, []byte("compact_rev_key"), nil, 0, 0)
 	if err != nil {
 		return err
 	}
@@ -238,18 +238,20 @@ func (s *SQLLog) GetCompactRevision(ctx context.Context) (int64, int64, error) {
 	return s.config.Driver.GetCompactRevision(ctx)
 }
 
-func (s *SQLLog) After(ctx context.Context, prefix string, revision, limit int64) (int64, []*server.Event, error) {
+func (s *SQLLog) After(ctx context.Context, key []byte, revision, limit int64) (int64, []*server.Event, error) {
 	var err error
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.After", otelName))
 	defer func() {
 		span.RecordError(err)
 		span.End()
 	}()
-	span.SetAttributes(
-		attribute.String("prefix", prefix),
-		attribute.Int64("revision", revision),
-		attribute.Int64("limit", limit),
-	)
+	if span.IsRecording() {
+		span.SetAttributes(
+			attribute.String("key", string(key)),
+			attribute.Int64("revision", revision),
+			attribute.Int64("limit", limit),
+		)
+	}
 
 	compactRevision, currentRevision, err := s.config.Driver.GetCompactRevision(ctx)
 	if err != nil {
@@ -261,7 +263,7 @@ func (s *SQLLog) After(ctx context.Context, prefix string, revision, limit int64
 		return currentRevision, nil, server.ErrCompacted
 	}
 
-	rows, err := s.config.Driver.AfterPrefix(ctx, prefix, revision, limit)
+	rows, err := s.config.Driver.AfterPrefix(ctx, key, nil, revision, limit)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -387,8 +389,7 @@ func (s *SQLLog) Watch(ctx context.Context, key []byte, startRevision int64) (<-
 		startRevision = startRevision - 1
 	}
 
-	// TODO: use range instead of string prefix
-	initialRevision, initialEvents, err := s.After(ctx, string(key), startRevision, 0)
+	initialRevision, initialEvents, err := s.After(ctx, key, startRevision, 0)
 	if err != nil {
 		if !errors.Is(err, context.Canceled) {
 			span.RecordError(err)

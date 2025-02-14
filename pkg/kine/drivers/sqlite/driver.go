@@ -373,18 +373,6 @@ func migrate(ctx context.Context, txn *sql.Tx) error {
 	return nil
 }
 
-func getPrefixRange(prefix string) (start, end string) {
-	start = prefix
-	if strings.HasSuffix(prefix, "/") {
-		end = prefix[0:len(prefix)-1] + "0"
-	} else {
-		// we are using only readable characters
-		end = prefix + "\x01"
-	}
-
-	return start, end
-}
-
 func (d *Driver) query(ctx context.Context, txName, query string, args ...interface{}) (rows *sql.Rows, err error) {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.query", otelName))
 	defer func() {
@@ -754,15 +742,16 @@ func (d *Driver) CurrentRevision(ctx context.Context) (int64, error) {
 	return id, nil
 }
 
-func (d *Driver) AfterPrefix(ctx context.Context, prefix string, rev, limit int64) (*sql.Rows, error) {
-	start, end := getPrefixRange(prefix)
-	// TODO: should we replace the prefix param with a range?
+func (d *Driver) AfterPrefix(ctx context.Context, key, rangeEnd []byte, rev, limit int64) (*sql.Rows, error) {
+	if len(rangeEnd) == 0 {
+		rangeEnd = append(key, 0)
+	}
 	sql := afterSQLPrefix
 	if limit > 0 {
 		sql = fmt.Sprintf("%s LIMIT ?", sql)
-		return d.query(ctx, "after_sql_prefix_limit", sql, start, end, rev, limit)
+		return d.query(ctx, "after_sql_prefix_limit", sql, key, rangeEnd, rev, limit)
 	}
-	return d.query(ctx, "after_sql_prefix", sql, start, end, rev)
+	return d.query(ctx, "after_sql_prefix", sql, key, rangeEnd, rev)
 }
 
 func (d *Driver) After(ctx context.Context, rev, limit int64) (*sql.Rows, error) {
