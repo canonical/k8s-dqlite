@@ -90,7 +90,7 @@ def run_kube_burner(
 
     raised_exc = None
     for iteration in range(iterations):
-        LOG.info("Staring kube-burner iteration %s of %s.", iteration, iterations)
+        LOG.info("Starting kube-burner iteration %s of %s.", iteration, iterations)
         try:
             instance.exec(
                 [
