@@ -18,31 +18,24 @@ func (l *LimitedServer) list(ctx context.Context, r *etcdserverpb.RangeRequest) 
 		span.End()
 	}()
 
+	revision := r.Revision
 	span.SetAttributes(
 		attribute.String("key", string(r.Key)),
 		attribute.String("rangeEnd", string(r.RangeEnd)),
+		attribute.Int64("revision", r.Revision),
 	)
 	if len(r.RangeEnd) == 0 {
 		return nil, fmt.Errorf("invalid range end length of 0")
 	}
 
-	start := r.Key
-	end := r.RangeEnd
-	revision := r.Revision
-	span.SetAttributes(
-		attribute.String("start", string(start)),
-		attribute.String("end", string(end)),
-		attribute.Int64("revision", revision),
-	)
-
 	if r.CountOnly {
-		rev, count, err := l.backend.Count(ctx, start, end, revision)
+		rev, count, err := l.backend.Count(ctx, r.Key, r.RangeEnd, revision)
 		if err != nil {
 			return nil, err
 		}
 		span.SetAttributes(attribute.Int64("count", count))
 
-		logrus.Tracef("LIST COUNT key=%s, end=%s, revision=%d, currentRev=%d count=%d", r.Key, r.RangeEnd, revision, rev, count)
+		logrus.Tracef("LIST COUNT key=%s, r.RangeEnd=%s, revision=%d, currentRev=%d count=%d", r.Key, r.RangeEnd, revision, rev, count)
 		return &RangeResponse{
 			Header: txnHeader(rev),
 			Count:  count,
@@ -55,7 +48,7 @@ func (l *LimitedServer) list(ctx context.Context, r *etcdserverpb.RangeRequest) 
 	}
 	span.SetAttributes(attribute.Int64("limit", limit))
 
-	rev, kvs, err := l.backend.List(ctx, start, end, limit, revision)
+	rev, kvs, err := l.backend.List(ctx, r.Key, r.RangeEnd, limit, revision)
 	if err != nil {
 		return nil, err
 	}
@@ -77,13 +70,13 @@ func (l *LimitedServer) list(ctx context.Context, r *etcdserverpb.RangeRequest) 
 		}
 
 		// count the actual number of results if there are more items in the db.
-		rev, resp.Count, err = l.backend.Count(ctx, start, end, revision)
+		rev, resp.Count, err = l.backend.Count(ctx, r.Key, r.RangeEnd, revision)
 		if err != nil {
 			return nil, err
 		}
 
 		span.SetAttributes(attribute.Int64("count", resp.Count))
-		logrus.Tracef("LIST COUNT key=%s, end=%s, revision=%d, currentRev=%d count=%d", r.Key, r.RangeEnd, revision, rev, resp.Count)
+		logrus.Tracef("LIST COUNT key=%s, r.RangeEnd=%s, revision=%d, currentRev=%d count=%d", r.Key, r.RangeEnd, revision, rev, resp.Count)
 		resp.Header = txnHeader(rev)
 	}
 
