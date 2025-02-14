@@ -42,7 +42,7 @@ KUBE_BURNER_URL = (
 # Global kube-burner invocation timeout.
 KUBE_BURNER_TIMEOUT = os.getenv("TEST_KUBE_BURNER_TIMEOUT") or "10m"
 # The number of kube-burner invocations.
-KUBE_BURNER_ITERATIONS = int(os.getenv("TEST_KUBE_BURNER_ITERATIONS") or 1)
+KUBE_BURNER_ITERATIONS = int(os.getenv("TEST_KUBE_BURNER_ITERATIONS") or 15)
 
 # FLAVOR is the flavour to use for running the performance tests.
 FLAVOR = os.getenv("TEST_FLAVOR") or ""
