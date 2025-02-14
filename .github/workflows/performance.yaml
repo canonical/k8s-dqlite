@@ -77,6 +77,7 @@ jobs:
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
           TEST_METRICS_DIR: ${{ github.workspace }}/test/performance/results/head
           TEST_RUN_NAME: head
+          TEST_KUBE_BURNER_ITERATIONS: 15
         run: |
           cd test/performance
           mkdir -p ./results/head
@@ -89,6 +90,7 @@ jobs:
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
           TEST_METRICS_DIR: ${{ github.workspace }}/test/performance/results/base-code
           TEST_RUN_NAME: base-code
+          TEST_KUBE_BURNER_ITERATIONS: 15
         run: |
           cd test/performance 
           mkdir -p ./results/base-code
@@ -114,12 +116,12 @@ jobs:
           name: performance-results
           path: ${{ github.workspace }}/test/performance/results
       - name: Prepare inspection reports
-        if: failure()
+        if: always()
         run: |
           tar -czvf inspection-reports.tar.gz -C ${{ github.workspace }} inspection-reports
           echo "artifact_name=inspection-reports" | sed 's/:/-/g' >> $GITHUB_ENV
       - name: Upload inspection report artifact
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.artifact_name }}
