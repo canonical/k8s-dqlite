@@ -136,17 +136,34 @@ def configure_kube_burner(instance: harness.Instance):
     )
 
 
-def run_kube_burner(instance: harness.Instance):
+def run_kube_burner(
+    instance: harness.Instance, iterations: int = config.KUBE_BURNER_ITERATIONS
+):
     """Copies kubeconfig and runs kube-burner on the instance."""
     instance.exec(["mkdir", "-p", "/root/.kube"])
     instance.exec(["k8s", "config", ">", "/root/.kube/config"])
-    instance.exec(
-        [
-            "/root/kube-burner",
-            "init",
-            "--timeout",
-            config.KUBE_BURNER_TIMEOUT,
-            "-c",
-            "/root/api-intensive.yaml",
-        ]
-    )
+
+    raised_exc = None
+    for iteration in range(iterations):
+        LOG.info("Starting kube-burner iteration %s of %s.", iteration, iterations)
+        try:
+            instance.exec(
+                [
+                    "/root/kube-burner",
+                    "init",
+                    "--timeout",
+                    config.KUBE_BURNER_TIMEOUT,
+                    "-c",
+                    "/root/api-intensive.yaml",
+                ]
+            )
+        except Exception as ex:
+            # We'll continue the loop even after encountering failures
+            # in order to determine if this is a transient failure or if the
+            # dqlite service was completely compromised (e.g. deadlock or crash).
+            LOG.exception("kube-burner job failed, continuing...")
+            raised_exc = ex
+
+    # Raise encountered exceptions, if any.
+    if raised_exc:
+        raise raised_exc
