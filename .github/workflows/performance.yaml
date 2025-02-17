@@ -75,12 +75,11 @@ jobs:
           TEST_SUBSTRATE: lxd
           TEST_LXD_IMAGE: ubuntu:22.04
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
-          TEST_METRICS_DIR: ${{ github.workspace }}/test/performance/results/head
+          TEST_METRICS_DIR: ${{ github.workspace }}/test/performance/results
           TEST_RUN_NAME: head
           TEST_KUBE_BURNER_ITERATIONS: 15
         run: |
           cd test/performance
-          mkdir -p ./results/head
           sg lxd -c 'tox -e performance'
       - name: Run Performance test for base code snap
         env:
@@ -88,12 +87,11 @@ jobs:
           TEST_SUBSTRATE: lxd
           TEST_LXD_IMAGE: ubuntu:22.04
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
-          TEST_METRICS_DIR: ${{ github.workspace }}/test/performance/results/base-code
+          TEST_METRICS_DIR: ${{ github.workspace }}/test/performance/results
           TEST_RUN_NAME: base-code
           TEST_KUBE_BURNER_ITERATIONS: 15
         run: |
-          cd test/performance 
-          mkdir -p ./results/base-code
+          cd test/performance
           sg lxd -c 'tox -e performance'
       - name: Generate aggregated Graphs
         if: always()
@@ -102,7 +100,7 @@ jobs:
           mkdir -p ./results/aggregated-results/single-node
           cp ./results/head/single-node/metrics.log \
              ./results/aggregated-results/single-node/head-metrics.log
-          cp ./results/base/single-node/metrics.log \
+          cp ./results/base-code/single-node/metrics.log \
              ./results/aggregated-results/single-node/base-metrics.log
           sudo Rscript parse-performance-metrics.R \
             -p ./results/aggregated-results/single-node/ \
