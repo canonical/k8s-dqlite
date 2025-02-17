@@ -79,6 +79,9 @@ func init() {
 	}
 }
 
+// Certain parameters such as keys or range limits are represented as byte slices,
+// for which reason we need casts: CAST(? AS TEXT). Note that this should be a
+// no-op for sqlite.
 var (
 	revSQL = `
 		SELECT MAX(rkv.id) AS id
