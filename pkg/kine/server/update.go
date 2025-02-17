@@ -33,13 +33,11 @@ func (l *LimitedServer) update(ctx context.Context, rev int64, key, value []byte
 		span.RecordError(err)
 		span.End()
 	}()
-	if span.IsRecording() {
-		span.SetAttributes(
-			attribute.String("key", string(key)),
-			attribute.Int64("lease", lease),
-			attribute.Int64("revision", rev),
-		)
-	}
+	span.SetAttributes(
+		attribute.String("key", string(key)),
+		attribute.Int64("lease", lease),
+		attribute.Int64("revision", rev),
+	)
 
 	var succeeded bool
 	if rev == 0 {

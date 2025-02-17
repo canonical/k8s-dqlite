@@ -29,12 +29,10 @@ func (l *LimitedServer) create(ctx context.Context, put *etcdserverpb.PutRequest
 		span.RecordError(err)
 		span.End()
 	}()
-	if span.IsRecording() {
-		span.SetAttributes(
-			attribute.String("key", string(put.Key)),
-			attribute.Int64("lease", put.Lease),
-		)
-	}
+	span.SetAttributes(
+		attribute.String("key", string(put.Key)),
+		attribute.Int64("lease", put.Lease),
+	)
 
 	if put.IgnoreLease {
 		return nil, unsupported("ignoreLease")

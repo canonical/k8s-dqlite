@@ -28,12 +28,10 @@ func (l *LimitedServer) delete(ctx context.Context, key []byte, revision int64) 
 		span.RecordError(err)
 		span.End()
 	}()
-	if span.IsRecording() {
-		span.SetAttributes(
-			attribute.String("key", string(key)),
-			attribute.Int64("revision", revision),
-		)
-	}
+	span.SetAttributes(
+		attribute.String("key", string(key)),
+		attribute.Int64("revision", revision),
+	)
 
 	rev, deleted, err := l.backend.Delete(ctx, key, revision)
 	if err != nil {

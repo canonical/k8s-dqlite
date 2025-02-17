@@ -245,13 +245,11 @@ func (s *SQLLog) After(ctx context.Context, key, rangeEnd []byte, revision, limi
 		span.RecordError(err)
 		span.End()
 	}()
-	if span.IsRecording() {
-		span.SetAttributes(
-			attribute.String("key", string(key)),
-			attribute.Int64("revision", revision),
-			attribute.Int64("limit", limit),
-		)
-	}
+	span.SetAttributes(
+		attribute.String("key", string(key)),
+		attribute.Int64("revision", revision),
+		attribute.Int64("limit", limit),
+	)
 
 	compactRevision, currentRevision, err := s.config.Driver.GetCompactRevision(ctx)
 	if err != nil {
@@ -370,13 +368,11 @@ func (s *SQLLog) ttl(ctx context.Context) {
 func (s *SQLLog) Watch(ctx context.Context, key, rangeEnd []byte, startRevision int64) (<-chan []*server.Event, error) {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Watch", otelName))
 	defer span.End()
-	if span.IsRecording() {
-		span.SetAttributes(
-			attribute.String("key", string(key)),
-			attribute.String("rangeEnd", string(rangeEnd)),
-			attribute.Int64("startRevision", startRevision),
-		)
-	}
+	span.SetAttributes(
+		attribute.String("key", string(key)),
+		attribute.String("rangeEnd", string(rangeEnd)),
+		attribute.Int64("startRevision", startRevision),
+	)
 
 	// starting watching right away so we don't miss anything
 	ctx, cancel := context.WithCancel(ctx)

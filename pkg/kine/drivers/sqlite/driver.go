@@ -489,12 +489,10 @@ func (d *Driver) Create(ctx context.Context, key, value []byte, ttl int64) (rev 
 		span.SetAttributes(attribute.Int64("revision", rev))
 		span.End()
 	}()
-	if span.IsRecording() {
-		span.SetAttributes(
-			attribute.String("key", string(key)),
-			attribute.Int64("ttl", ttl),
-		)
-	}
+	span.SetAttributes(
+		attribute.String("key", string(key)),
+		attribute.Int64("ttl", ttl),
+	)
 	createCnt.Add(ctx, 1)
 
 	result, err := d.execute(ctx, "create_sql", createSQL, key, ttl, value, key)
@@ -542,9 +540,7 @@ func (d *Driver) Delete(ctx context.Context, key []byte, revision int64) (rev in
 		span.SetAttributes(attribute.Bool("deleted", deleted))
 		span.End()
 	}()
-	if span.IsRecording() {
-		span.SetAttributes(attribute.String("key", string(key)))
-	}
+	span.SetAttributes(attribute.String("key", string(key)))
 
 	result, err := d.execute(ctx, "delete_sql", deleteSQL, key, revision)
 	if err != nil {
