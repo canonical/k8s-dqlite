@@ -9,8 +9,6 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/Rican7/retry/backoff"
-	"github.com/Rican7/retry/strategy"
 	"github.com/canonical/k8s-dqlite/pkg/database"
 	"github.com/mattn/go-sqlite3"
 	"github.com/pkg/errors"
@@ -23,6 +21,10 @@ import (
 
 const (
 	otelName = "sqlite"
+
+	retryLinearBackoff    = 10 * time.Millisecond
+	maxRetryBackoff       = 100 * time.Millisecond
+	maxRetryTotalDuration = 5 * time.Second
 )
 
 var (
@@ -231,8 +233,6 @@ var (
 		FROM pragma_page_count(), pragma_page_size(), pragma_freelist_count()`
 )
 
-const maxRetries = 20
-
 type Stripped string
 
 func (s Stripped) String() string {
@@ -263,6 +263,11 @@ type DriverConfig struct {
 	DB      database.Interface
 	Retry   func(error) bool
 	ErrCode func(error) string
+}
+
+func wait(iteration uint) {
+	sleepInterval := min(time.Duration(iteration)*retryLinearBackoff, maxRetryBackoff)
+	time.Sleep(sleepInterval)
 }
 
 func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
@@ -395,8 +400,7 @@ func (d *Driver) query(ctx context.Context, txName, query string, args ...interf
 		}
 		recordOpResult(txName, err, start)
 	}()
-	wait := strategy.Backoff(backoff.Linear(10 * time.Millisecond))
-	for ; retryCount < maxRetries; retryCount++ {
+	for ; time.Now().Sub(start) < maxRetryTotalDuration; retryCount++ {
 		if retryCount == 0 {
 			logrus.Tracef("QUERY (try: %d) %v : %s", retryCount, args, Stripped(query))
 		} else {
@@ -438,8 +442,7 @@ func (d *Driver) execute(ctx context.Context, txName, query string, args ...inte
 		}
 		recordOpResult(txName, err, start)
 	}()
-	wait := strategy.Backoff(backoff.Linear(10 * time.Millisecond))
-	for ; retryCount < maxRetries; retryCount++ {
+	for ; time.Now().Sub(start) < maxRetryTotalDuration; retryCount++ {
 		if retryCount > 2 {
 			logrus.Debugf("EXEC (try: %d) %v : %s", retryCount, args, Stripped(query))
 		} else {
@@ -588,8 +591,7 @@ func (d *Driver) Compact(ctx context.Context, revision int64) (err error) {
 	}
 
 	start := time.Now()
-	wait := strategy.Backoff(backoff.Linear(10 * time.Millisecond))
-	for retryCount := 0; retryCount < maxRetries; retryCount++ {
+	for retryCount := 0; time.Now().Sub(start) < maxRetryTotalDuration; retryCount++ {
 		err = d.tryCompact(ctx, compactStart, revision)
 		if err == nil || !d.config.Retry(err) {
 			if retryCount != 0 {
