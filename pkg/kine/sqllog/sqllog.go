@@ -159,7 +159,7 @@ func (s *SQLLog) compactStart(ctx context.Context) error {
 	}
 
 	if len(events) == 0 {
-		_, _, err := s.Create(ctx, []byte("compact_rev_key"), []byte(""), 0)
+		_, _, err := s.Create(ctx, []byte("compact_rev_key"), nil, 0)
 		return err
 	} else if len(events) == 1 {
 		return nil
@@ -238,7 +238,7 @@ func (s *SQLLog) GetCompactRevision(ctx context.Context) (int64, int64, error) {
 	return s.config.Driver.GetCompactRevision(ctx)
 }
 
-func (s *SQLLog) After(ctx context.Context, key []byte, revision, limit int64) (int64, []*server.Event, error) {
+func (s *SQLLog) After(ctx context.Context, key, rangeEnd []byte, revision, limit int64) (int64, []*server.Event, error) {
 	var err error
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.After", otelName))
 	defer func() {
@@ -263,7 +263,7 @@ func (s *SQLLog) After(ctx context.Context, key []byte, revision, limit int64) (
 		return currentRevision, nil, server.ErrCompacted
 	}
 
-	rows, err := s.config.Driver.AfterPrefix(ctx, key, nil, revision, limit)
+	rows, err := s.config.Driver.AfterPrefix(ctx, key, rangeEnd, revision, limit)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -351,7 +351,7 @@ func (s *SQLLog) ttl(ctx context.Context) {
 			go run(ctx, key, revision, time.Duration(lease)*time.Second)
 		}
 
-		watchCh, err := s.Watch(ctx, []byte("/"), startRevision)
+		watchCh, err := s.Watch(ctx, []byte("/"), []byte("0"), startRevision)
 		if err != nil {
 			logrus.Errorf("failed to watch events for ttl: %v", err)
 			return
@@ -367,12 +367,13 @@ func (s *SQLLog) ttl(ctx context.Context) {
 	}()
 }
 
-func (s *SQLLog) Watch(ctx context.Context, key []byte, startRevision int64) (<-chan []*server.Event, error) {
+func (s *SQLLog) Watch(ctx context.Context, key, rangeEnd []byte, startRevision int64) (<-chan []*server.Event, error) {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Watch", otelName))
 	defer span.End()
 	if span.IsRecording() {
 		span.SetAttributes(
 			attribute.String("key", string(key)),
+			attribute.String("rangeEnd", string(rangeEnd)),
 			attribute.Int64("startRevision", startRevision),
 		)
 	}
@@ -389,7 +390,7 @@ func (s *SQLLog) Watch(ctx context.Context, key []byte, startRevision int64) (<-
 		startRevision = startRevision - 1
 	}
 
-	initialRevision, initialEvents, err := s.After(ctx, key, startRevision, 0)
+	initialRevision, initialEvents, err := s.After(ctx, key, rangeEnd, startRevision, 0)
 	if err != nil {
 		if !errors.Is(err, context.Canceled) {
 			span.RecordError(err)
