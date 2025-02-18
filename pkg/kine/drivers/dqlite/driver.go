@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/canonical/go-dqlite/v2"
 	"github.com/canonical/go-dqlite/v2/app"
@@ -36,18 +35,14 @@ func (d *Driver) Compact(ctx context.Context, revision int64) (err error) {
 	//
 	// WARNING: overridden methods will not be visible from the embedded
 	// (sqlite) driver.
-	start := time.Now()
 	isLeader, err := isLocalNodeLeader(ctx, d.goDqliteApp)
-	logrus.Printf(">>> compact isLocalNodeLeader duration : %v", time.Now().Sub(start))
 	if err != nil {
 		logrus.WithError(err).Warning("Couldn't determine whether the local node is the leader, allowing the compaction to proceed")
 	} else if !isLeader {
 		logrus.Info("skipping compaction on follower node")
 		return nil
 	}
-	err = d.Driver.Compact(ctx, revision)
-	logrus.Printf(">>> compact total duration : %v", time.Now().Sub(start))
-	return err
+	return d.Driver.Compact(ctx, revision)
 }
 
 type DriverConfig struct {
