@@ -42,7 +42,7 @@ func (l *LimitedServer) create(ctx context.Context, put *etcdserverpb.PutRequest
 		return nil, unsupported("prevKv")
 	}
 
-	rev, created, err := l.backend.Create(ctx, string(put.Key), put.Value, put.Lease)
+	rev, created, err := l.backend.Create(ctx, put.Key, put.Value, put.Lease)
 	if err != nil {
 		return nil, err
 	}

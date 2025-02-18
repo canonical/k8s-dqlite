@@ -115,7 +115,7 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 			return
 		}
 
-		watchCh, err := w.backend.Watch(ctx, key, startRevision)
+		watchCh, err := w.backend.Watch(ctx, r.Key, r.RangeEnd, startRevision)
 		if err != nil {
 			logrus.Errorf("Failed to start watch: %v", err)
 			w.Cancel(id, err)

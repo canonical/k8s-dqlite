@@ -79,6 +79,9 @@ func init() {
 	}
 }
 
+// Certain parameters such as keys or range limits are represented as byte slices,
+// for which reason we need casts: CAST(? AS TEXT). Note that this should be a
+// no-op for sqlite.
 var (
 	revSQL = `
 		SELECT MAX(rkv.id) AS id
@@ -95,7 +98,7 @@ var (
 			SELECT MAX(mkv.id) as id
 			FROM kine AS mkv
 			WHERE
-				mkv.name >= ? AND mkv.name < ?
+				mkv.name >= CAST(? AS TEXT) AND mkv.name < CAST(? AS TEXT)
 				AND mkv.id <= ?
 			GROUP BY mkv.name
 		) AS maxkv
@@ -120,7 +123,7 @@ var (
 			SELECT MAX(mkv.id) as id
 			FROM kine AS mkv
 			WHERE
-				mkv.name >= ? AND mkv.name < ?
+				mkv.name >= CAST(? AS TEXT) AND mkv.name < CAST(? AS TEXT)
 				AND mkv.id <= ?
 			GROUP BY mkv.name
 		) AS maxkv
@@ -130,7 +133,7 @@ var (
 	afterSQLPrefix = `
 		SELECT id, name, created, deleted, create_revision, prev_revision, lease, value, old_value
 		FROM kine
-		WHERE name >= ? AND name < ?
+		WHERE name >= CAST(? AS TEXT) AND name < CAST(? AS TEXT)
 			AND id > ?
 		ORDER BY id ASC`
 
@@ -177,14 +180,14 @@ var (
 			lease,
 			NULL AS value,
 			value AS old_value
-		FROM kine WHERE id = (SELECT MAX(id) FROM kine WHERE name = ?)
+		FROM kine WHERE id = (SELECT MAX(id) FROM kine WHERE name = CAST(? AS TEXT))
 			AND deleted = 0
 			AND id = ?`
 
 	createSQL = `
 		INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
 		SELECT 
-			? AS name,
+			CAST(? AS TEXT) AS name,
 			1 AS created,
 			0 AS deleted,
 			0 AS create_revision, 
@@ -195,14 +198,14 @@ var (
 		FROM (
 			SELECT MAX(id) AS id, deleted
 			FROM kine
-			WHERE name = ?
+			WHERE name = CAST(? AS TEXT)
 		) maxkv
 		WHERE maxkv.deleted = 1 OR id IS NULL`
 
 	updateSQL = `
 		INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
 		SELECT 
-			? AS name,
+			CAST(? AS TEXT) AS name,
 			0 AS created,
 			0 AS deleted,
 			CASE 
@@ -213,7 +216,7 @@ var (
 			? AS lease,
 			? AS value,
 			value AS old_value
-		FROM kine WHERE id = (SELECT MAX(id) FROM kine WHERE name = ?)
+		FROM kine WHERE id = (SELECT MAX(id) FROM kine WHERE name = CAST(? AS TEXT))
 			AND deleted = 0
 			AND id = ?`
 
@@ -373,18 +376,6 @@ func migrate(ctx context.Context, txn *sql.Tx) error {
 	return nil
 }
 
-func getPrefixRange(prefix string) (start, end string) {
-	start = prefix
-	if strings.HasSuffix(prefix, "/") {
-		end = prefix[0:len(prefix)-1] + "0"
-	} else {
-		// we are using only readable characters
-		end = prefix + "\x01"
-	}
-
-	return start, end
-}
-
 func (d *Driver) query(ctx context.Context, txName, query string, args ...interface{}) (rows *sql.Rows, err error) {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.query", otelName))
 	defer func() {
@@ -466,12 +457,11 @@ func (d *Driver) execute(ctx context.Context, txName, query string, args ...inte
 	return result, err
 }
 
-func (d *Driver) Count(ctx context.Context, prefix, startKey string, revision int64) (int64, error) {
-	start, end := getPrefixRange(prefix)
-	if startKey != "" {
-		start = startKey + "\x01"
+func (d *Driver) Count(ctx context.Context, key, rangeEnd []byte, revision int64) (int64, error) {
+	if len(rangeEnd) == 0 {
+		rangeEnd = append(key, 0)
 	}
-	rows, err := d.query(ctx, "count_revision", countRevisionSQL, start, end, revision)
+	rows, err := d.query(ctx, "count_revision", countRevisionSQL, key, rangeEnd, revision)
 	if err != nil {
 		return 0, err
 	}
@@ -491,7 +481,7 @@ func (d *Driver) Count(ctx context.Context, prefix, startKey string, revision in
 	return id, err
 }
 
-func (d *Driver) Create(ctx context.Context, key string, value []byte, ttl int64) (rev int64, succeeded bool, err error) {
+func (d *Driver) Create(ctx context.Context, key, value []byte, ttl int64) (rev int64, succeeded bool, err error) {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Create", otelName))
 
 	defer func() {
@@ -500,7 +490,7 @@ func (d *Driver) Create(ctx context.Context, key string, value []byte, ttl int64
 		span.End()
 	}()
 	span.SetAttributes(
-		attribute.String("key", key),
+		attribute.String("key", string(key)),
 		attribute.Int64("ttl", ttl),
 	)
 	createCnt.Add(ctx, 1)
@@ -519,7 +509,7 @@ func (d *Driver) Create(ctx context.Context, key string, value []byte, ttl int64
 	return rev, true, err
 }
 
-func (d *Driver) Update(ctx context.Context, key string, value []byte, preRev, ttl int64) (rev int64, updated bool, err error) {
+func (d *Driver) Update(ctx context.Context, key, value []byte, preRev, ttl int64) (rev int64, updated bool, err error) {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Update", otelName))
 	defer func() {
 		span.RecordError(err)
@@ -541,7 +531,7 @@ func (d *Driver) Update(ctx context.Context, key string, value []byte, preRev, t
 	return rev, true, err
 }
 
-func (d *Driver) Delete(ctx context.Context, key string, revision int64) (rev int64, deleted bool, err error) {
+func (d *Driver) Delete(ctx context.Context, key []byte, revision int64) (rev int64, deleted bool, err error) {
 	deleteCnt.Add(ctx, 1)
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Delete", otelName))
 	defer func() {
@@ -550,7 +540,7 @@ func (d *Driver) Delete(ctx context.Context, key string, revision int64) (rev in
 		span.SetAttributes(attribute.Bool("deleted", deleted))
 		span.End()
 	}()
-	span.SetAttributes(attribute.String("key", key))
+	span.SetAttributes(attribute.String("key", string(key)))
 
 	result, err := d.execute(ctx, "delete_sql", deleteSQL, key, revision)
 	if err != nil {
@@ -704,17 +694,16 @@ func (d *Driver) DeleteRevision(ctx context.Context, revision int64) error {
 	return err
 }
 
-func (d *Driver) List(ctx context.Context, prefix, startKey string, limit, revision int64) (*sql.Rows, error) {
-	start, end := getPrefixRange(prefix)
-	if startKey != "" {
-		start = startKey + "\x01"
+func (d *Driver) List(ctx context.Context, key, rangeEnd []byte, limit, revision int64) (*sql.Rows, error) {
+	if len(rangeEnd) == 0 {
+		rangeEnd = append(key, 0)
 	}
 	sql := listSQL
 	if limit > 0 {
 		sql = fmt.Sprintf("%s LIMIT ?", sql)
-		return d.query(ctx, "list_revision_start_sql_limit", sql, start, end, revision, limit)
+		return d.query(ctx, "list_revision_start_sql_limit", sql, key, rangeEnd, revision, limit)
 	}
-	return d.query(ctx, "list_revision_start_sql", sql, start, end, revision)
+	return d.query(ctx, "list_revision_start_sql", sql, key, rangeEnd, revision)
 }
 
 func (d *Driver) ListTTL(ctx context.Context, revision int64) (*sql.Rows, error) {
@@ -752,14 +741,16 @@ func (d *Driver) CurrentRevision(ctx context.Context) (int64, error) {
 	return id, nil
 }
 
-func (d *Driver) AfterPrefix(ctx context.Context, prefix string, rev, limit int64) (*sql.Rows, error) {
-	start, end := getPrefixRange(prefix)
+func (d *Driver) AfterPrefix(ctx context.Context, key, rangeEnd []byte, rev, limit int64) (*sql.Rows, error) {
+	if len(rangeEnd) == 0 {
+		rangeEnd = append(key, 0)
+	}
 	sql := afterSQLPrefix
 	if limit > 0 {
 		sql = fmt.Sprintf("%s LIMIT ?", sql)
-		return d.query(ctx, "after_sql_prefix_limit", sql, start, end, rev, limit)
+		return d.query(ctx, "after_sql_prefix_limit", sql, key, rangeEnd, rev, limit)
 	}
-	return d.query(ctx, "after_sql_prefix", sql, start, end, rev)
+	return d.query(ctx, "after_sql_prefix", sql, key, rangeEnd, rev)
 }
 
 func (d *Driver) After(ctx context.Context, rev, limit int64) (*sql.Rows, error) {
@@ -777,8 +768,8 @@ func (d *Driver) Fill(ctx context.Context, revision int64) error {
 	return err
 }
 
-func (d *Driver) IsFill(key string) bool {
-	return strings.HasPrefix(key, "gap-")
+func (d *Driver) IsFill(key []byte) bool {
+	return strings.HasPrefix(string(key), "gap-")
 }
 
 func (d *Driver) GetSize(ctx context.Context) (int64, error) {

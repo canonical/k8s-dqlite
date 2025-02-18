@@ -79,12 +79,12 @@ func TestCompaction(t *testing.T) {
 				g.Expect(finalSize).To(BeNumerically("<", initialSize))
 
 				// Expect for keys to still be there.
-				rev, count, err := kine.backend.Count(ctx, "key/", "", 0)
+				rev, count, err := kine.backend.Count(ctx, []byte("key/"), []byte("key0"), 0)
 				g.Expect(err).To(BeNil())
 				g.Expect(count).To(Equal(int64(10_000 - 500)))
 
 				// Expect old revisions not to be there anymore.
-				_, _, err = kine.backend.List(ctx, "key/", "", 0, rev-400)
+				_, _, err = kine.backend.List(ctx, []byte("key/"), []byte("key0"), 0, rev-400)
 				g.Expect(err).To(Not(BeNil()))
 			})
 		})
