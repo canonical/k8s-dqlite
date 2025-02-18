@@ -27,19 +27,16 @@ func init() {
 type Driver struct {
 	*sqlite.Driver
 
-	goDqliteApp *app.App
+	app *app.App
 }
 
 func (d *Driver) Compact(ctx context.Context, revision int64) (err error) {
 	// Skip the compaction if we're not the leader.
-	//
-	// WARNING: overridden methods will not be visible from the embedded
-	// (sqlite) driver.
-	isLeader, err := isLocalNodeLeader(ctx, d.goDqliteApp)
+	isLeader, err := d.isLocalNodeLeader(ctx)
 	if err != nil {
 		logrus.WithError(err).Warning("Couldn't determine whether the local node is the leader, allowing the compaction to proceed")
 	} else if !isLeader {
-		logrus.Info("skipping compaction on follower node")
+		logrus.Trace("skipping compaction on follower node")
 		return nil
 	}
 	return d.Driver.Compact(ctx, revision)
@@ -48,10 +45,15 @@ func (d *Driver) Compact(ctx context.Context, revision int64) (err error) {
 type DriverConfig struct {
 	DB      database.Interface
 	ErrCode func(error) string
+	App     *app.App
 }
 
-func NewDriver(ctx context.Context, config *DriverConfig, goDqliteApp *app.App) (*Driver, error) {
+func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
 	logrus.Printf("New driver for dqlite")
+
+	if config.App == nil {
+		return nil, fmt.Errorf("no go-dqlite app specified")
+	}
 
 	drv, err := sqlite.NewDriver(ctx, &sqlite.DriverConfig{
 		DB:         config.DB,
@@ -66,7 +68,9 @@ func NewDriver(ctx context.Context, config *DriverConfig, goDqliteApp *app.App) 
 		return nil, errors.Wrap(err, "failed to migrate DB from sqlite")
 	}
 
-	return &Driver{drv, goDqliteApp}, nil
+	return &Driver{
+		Driver: drv,
+		app:    config.App}, nil
 }
 
 func dqliteRetry(err error) bool {
@@ -100,13 +104,8 @@ func dqliteRetry(err error) bool {
 	return false
 }
 
-func isLocalNodeLeader(ctx context.Context, goDqliteApp *app.App) (bool, error) {
-	if goDqliteApp == nil {
-		err := fmt.Errorf("go-dqlite app unspecified, can't determine if this node is a leader")
-		return false, err
-	}
-
-	client, err := goDqliteApp.Client(ctx)
+func (d *Driver) isLocalNodeLeader(ctx context.Context) (bool, error) {
+	client, err := d.app.Client(ctx)
 	if err != nil {
 		return false, fmt.Errorf("couldn't obtain dqlite client: %w", err)
 	}
@@ -117,7 +116,7 @@ func isLocalNodeLeader(ctx context.Context, goDqliteApp *app.App) (bool, error) 
 		return false, fmt.Errorf("couldn't obtain dqlite leader info: %w", err)
 	}
 
-	return goDqliteApp.ID() == leader.ID, nil
+	return d.app.ID() == leader.ID, nil
 }
 
 // FIXME this might be very slow.

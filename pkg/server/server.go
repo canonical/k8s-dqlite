@@ -413,8 +413,9 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 
 	driver, err := dqliteDriver.NewDriver(ctx, &dqliteDriver.DriverConfig{
-		DB: database.NewPrepared(db),
-	}, s.app)
+		DB:  database.NewPrepared(db),
+		App: s.app,
+	})
 	if err != nil {
 		return fmt.Errorf("failed to create dqlite driver: %w", err)
 	}
