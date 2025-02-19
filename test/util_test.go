@@ -192,7 +192,8 @@ func startDqlite(ctx context.Context, tb testing.TB, dir string, listener *instr
 	}
 
 	driver, err := dqlite.NewDriver(ctx, &dqlite.DriverConfig{
-		DB: database.NewPrepared(db),
+		DB:  database.NewPrepared(db),
+		App: app,
 	})
 	if err != nil {
 		tb.Fatal(err)

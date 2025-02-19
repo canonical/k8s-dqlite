@@ -3,10 +3,12 @@ package dqlite
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"os"
 	"strings"
 
 	"github.com/canonical/go-dqlite/v2"
+	"github.com/canonical/go-dqlite/v2/app"
 	"github.com/canonical/go-dqlite/v2/driver"
 	"github.com/canonical/k8s-dqlite/pkg/database"
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/sqlite"
@@ -22,15 +24,24 @@ func init() {
 	}
 }
 
-type Driver = sqlite.Driver
+type Driver struct {
+	*sqlite.Driver
+
+	app *app.App
+}
 
 type DriverConfig struct {
 	DB      database.Interface
 	ErrCode func(error) string
+	App     *app.App
 }
 
 func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
 	logrus.Printf("New driver for dqlite")
+
+	if config.App == nil {
+		return nil, fmt.Errorf("no go-dqlite app specified")
+	}
 
 	drv, err := sqlite.NewDriver(ctx, &sqlite.DriverConfig{
 		DB:         config.DB,
@@ -45,7 +56,22 @@ func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
 		return nil, errors.Wrap(err, "failed to migrate DB from sqlite")
 	}
 
-	return drv, nil
+	return &Driver{
+		Driver: drv,
+		app:    config.App,
+	}, nil
+}
+
+func (d *Driver) Compact(ctx context.Context, revision int64) (err error) {
+	// Skip the compaction if we're not the leader.
+	isLeader, err := d.isLocalNodeLeader(ctx)
+	if err != nil {
+		logrus.WithError(err).Warning("Couldn't determine whether the local node is the leader, allowing the compaction to proceed")
+	} else if !isLeader {
+		logrus.Trace("skipping compaction on follower node")
+		return nil
+	}
+	return d.Driver.Compact(ctx, revision)
 }
 
 func dqliteRetry(err error) bool {
@@ -77,6 +103,21 @@ func dqliteRetry(err error) bool {
 	}
 
 	return false
+}
+
+func (d *Driver) isLocalNodeLeader(ctx context.Context) (bool, error) {
+	client, err := d.app.Client(ctx)
+	if err != nil {
+		return false, fmt.Errorf("couldn't obtain dqlite client: %w", err)
+	}
+	defer client.Close()
+
+	leader, err := client.Leader(ctx)
+	if err != nil {
+		return false, fmt.Errorf("couldn't obtain dqlite leader info: %w", err)
+	}
+
+	return d.app.ID() == leader.ID, nil
 }
 
 // FIXME this might be very slow.
