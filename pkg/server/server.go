@@ -8,11 +8,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
-	"github.com/canonical/go-dqlite/v2"
-	"github.com/canonical/go-dqlite/v2/app"
-	"github.com/canonical/go-dqlite/v2/client"
+	"github.com/canonical/go-dqlite/v3"
+	"github.com/canonical/go-dqlite/v3/app"
+	"github.com/canonical/go-dqlite/v3/client"
 	"github.com/canonical/k8s-dqlite/pkg/database"
 	dqliteDriver "github.com/canonical/k8s-dqlite/pkg/kine/drivers/dqlite"
 	"github.com/canonical/k8s-dqlite/pkg/kine/endpoint"
@@ -103,7 +104,7 @@ var expectedFilesDuringInitialization = map[string]struct{}{
 const (
 	defaultThreshold = 512
 	minThreshold     = 384
-	defaultTrailing  = 1024
+	defaultTrailing  = 4096
 	minTrailing      = 512
 )
 
@@ -282,6 +283,7 @@ func New(
 	snapshotParameters := dqlite.SnapshotParams{
 		Threshold: defaultThreshold,
 		Trailing:  defaultTrailing,
+		Strategy:  dqlite.TrailingStrategyDynamic,
 	}
 	if exists, err := fileExists(dir, "tuning.yaml"); err != nil {
 		return nil, fmt.Errorf("failed to check for tuning.yaml: %w", err)
@@ -311,6 +313,15 @@ func New(
 			if v.Threshold > v.Trailing {
 				snapshotParameters.Threshold = v.Trailing
 				logrus.WithFields(logrus.Fields{"adjustedThreshold": snapshotParameters.Threshold}).Warning("Threshold value is higher than trailing value, setting to trailing value")
+			}
+
+			if strings.EqualFold(v.Strategy, "static") {
+				snapshotParameters.Strategy = dqlite.TrailingStrategyStatic
+			} else {
+				snapshotParameters.Strategy = dqlite.TrailingStrategyDynamic
+				if v.Strategy != "" && !strings.EqualFold(v.Strategy, "dynamic") {
+					logrus.WithFields(logrus.Fields{"adjustedStrategy": "dynamic"}).Warning("Strategy parameter is invalid, setting to default (dynamic)")
+				}
 			}
 		}
 

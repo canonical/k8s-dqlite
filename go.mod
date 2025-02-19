@@ -5,7 +5,7 @@ go 1.23.3
 toolchain go1.23.4
 
 require (
-	github.com/canonical/go-dqlite/v2 v2.0.0
+	github.com/canonical/go-dqlite/v3 v3.0.1-0.20250213125704-d839b0a09a46
 	github.com/mattn/go-sqlite3 v1.14.22
 	github.com/onsi/gomega v1.33.1
 	github.com/pkg/errors v0.9.1
