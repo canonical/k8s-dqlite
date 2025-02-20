@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	KineSocket = "unix://kine.sock"
+	K8sDqliteSocket = "unix://k8s-dqlite.sock"
 )
 
 type ETCDConfig struct {
@@ -53,7 +53,7 @@ func Listen(ctx context.Context, config *EndpointConfig) (*ETCDConfig, error) {
 
 	listenAddress := config.ListenAddress
 	if listenAddress == "" {
-		listenAddress = KineSocket
+		listenAddress = K8sDqliteSocket
 	}
 	listener, err := createListener(listenAddress)
 	if err != nil {

@@ -112,7 +112,7 @@ func newKineServer(ctx context.Context, tb testing.TB, config *kineConfig) *kine
 
 	listenUrl := (&url.URL{
 		Scheme: "unix",
-		Path:   path.Join(dir, "kine.sock"),
+		Path:   path.Join(dir, "k8s-dqlite.sock"),
 	}).String()
 
 	_, err := endpoint.Listen(ctx, &endpoint.EndpointConfig{
