@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/canonical/k8s-dqlite/pkg/kine/tls"
+	"github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/tls"
 	"github.com/sirupsen/logrus"
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
 	"go.etcd.io/etcd/server/v3/embed"

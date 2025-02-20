@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"testing"
 
-	"github.com/canonical/k8s-dqlite/pkg/kine/sqllog"
+	"github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/sqllog"
 	. "github.com/onsi/gomega"
 )
 

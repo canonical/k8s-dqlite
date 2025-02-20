@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/canonical/k8s-dqlite/pkg/database"
-	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/sqlite"
+	"github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/drivers/sqlite"
 	"github.com/sirupsen/logrus"
 )
 

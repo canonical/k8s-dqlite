@@ -15,11 +15,11 @@ import (
 	"github.com/canonical/go-dqlite/v3/app"
 	"github.com/canonical/go-dqlite/v3/client"
 	"github.com/canonical/k8s-dqlite/pkg/database"
-	dqliteDriver "github.com/canonical/k8s-dqlite/pkg/kine/drivers/dqlite"
-	"github.com/canonical/k8s-dqlite/pkg/kine/endpoint"
-	"github.com/canonical/k8s-dqlite/pkg/kine/server"
-	"github.com/canonical/k8s-dqlite/pkg/kine/sqllog"
-	kine_tls "github.com/canonical/k8s-dqlite/pkg/kine/tls"
+	dqliteDriver "github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/drivers/dqlite"
+	"github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/endpoint"
+	"github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/server"
+	"github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/sqllog"
+	kine_tls "github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/tls"
 	"github.com/sirupsen/logrus"
 )
 

@@ -6,8 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/canonical/k8s-dqlite/pkg/kine/client"
-	kine_endpoint "github.com/canonical/k8s-dqlite/pkg/kine/endpoint"
+	"github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/client"
+	kine_endpoint "github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/endpoint"
 	"github.com/sirupsen/logrus"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )

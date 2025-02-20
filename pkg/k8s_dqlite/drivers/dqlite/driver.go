@@ -11,7 +11,7 @@ import (
 	"github.com/canonical/go-dqlite/v3/app"
 	"github.com/canonical/go-dqlite/v3/driver"
 	"github.com/canonical/k8s-dqlite/pkg/database"
-	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/sqlite"
+	"github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/drivers/sqlite"
 	"github.com/mattn/go-sqlite3"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"

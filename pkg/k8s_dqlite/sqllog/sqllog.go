@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/canonical/k8s-dqlite/pkg/kine/broadcaster"
-	"github.com/canonical/k8s-dqlite/pkg/kine/server"
+	"github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/broadcaster"
+	"github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/server"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
