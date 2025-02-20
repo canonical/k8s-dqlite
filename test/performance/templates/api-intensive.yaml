@@ -16,9 +16,9 @@ jobs:
     waitWhenFinished: true
     objects:
       - objectTemplate: configmap.yaml
-        replicas: 20
+        replicas: 15
       - objectTemplate: secret.yaml
-        replicas: 20
+        replicas: 15
   - name: remove-configmaps-secrets
     qps: 200
     burst: 100
