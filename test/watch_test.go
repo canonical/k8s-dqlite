@@ -29,12 +29,12 @@ func TestWatch(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			kine := newKineServer(ctx, t, &kineConfig{backendType: backendType})
+			server := newK8sDqliteServer(ctx, t, &k8sDqliteConfig{backendType: backendType})
 
 			// start watching for events on key
 			const watchedPrefix = "watched/"
 			const ingnoredPrefix = "ignored/"
-			watchCh := kine.client.Watch(ctx, watchedPrefix)
+			watchCh := server.client.Watch(ctx, watchedPrefix)
 
 			t.Run("ReceiveNothingUntilActivity", func(t *testing.T) {
 				g := NewWithT(t)
@@ -46,8 +46,8 @@ func TestWatch(t *testing.T) {
 
 				value := "testValue"
 				key := watchedPrefix + "createdKey"
-				rev := createKey(ctx, g, kine.client, key, value)
-				createKey(ctx, g, kine.client, ingnoredPrefix+"createdKey", value)
+				rev := createKey(ctx, g, server.client, key, value)
+				createKey(ctx, g, server.client, ingnoredPrefix+"createdKey", value)
 
 				g.Eventually(watchCh, pollTimeout).Should(ReceiveEvents(g,
 					CreateEvent(g, key, value, rev),
@@ -60,13 +60,13 @@ func TestWatch(t *testing.T) {
 
 				key := watchedPrefix + "updatedKey"
 				createValue := "testValue1"
-				createRev := createKey(ctx, g, kine.client, key, createValue)
+				createRev := createKey(ctx, g, server.client, key, createValue)
 				g.Eventually(watchCh, pollTimeout).Should(ReceiveEvents(g,
 					CreateEvent(g, key, createValue, createRev),
 				))
 
 				updateValue := "testValue2"
-				updateRev := updateRev(ctx, g, kine.client, key, createRev, updateValue)
+				updateRev := updateRev(ctx, g, server.client, key, createRev, updateValue)
 				g.Eventually(watchCh, pollTimeout).Should(ReceiveEvents(g,
 					UpdateEvent(g, key, createValue, updateValue, createRev, updateRev),
 				))
@@ -79,12 +79,12 @@ func TestWatch(t *testing.T) {
 
 				key := watchedPrefix + "deletedKey"
 				createValue := "testValue"
-				createRev := createKey(ctx, g, kine.client, key, createValue)
+				createRev := createKey(ctx, g, server.client, key, createValue)
 				g.Eventually(watchCh, pollTimeout).Should(ReceiveEvents(g,
 					CreateEvent(g, key, createValue, createRev),
 				))
 
-				deleteRev := deleteKey(ctx, g, kine.client, key, createRev)
+				deleteRev := deleteKey(ctx, g, server.client, key, createRev)
 				g.Eventually(watchCh, pollTimeout).Should(ReceiveEvents(g,
 					DeleteEvent(g, key, createValue, createRev, deleteRev),
 				))
@@ -99,14 +99,14 @@ func TestWatch(t *testing.T) {
 
 				key := watchedPrefix + "revisionKey"
 				createValue := "testValue1"
-				createRev := createKey(ctx, g, kine.client, key, createValue)
+				createRev := createKey(ctx, g, server.client, key, createValue)
 
 				updateValue := "testValue2"
-				updateRev := updateRev(ctx, g, kine.client, key, createRev, updateValue)
+				updateRev := updateRev(ctx, g, server.client, key, createRev, updateValue)
 
-				deleteRev := deleteKey(ctx, g, kine.client, key, updateRev)
+				deleteRev := deleteKey(ctx, g, server.client, key, updateRev)
 
-				watchCh := kine.client.Watch(ctx, key, clientv3.WithRev(createRev))
+				watchCh := server.client.Watch(ctx, key, clientv3.WithRev(createRev))
 				g.Eventually(watchCh, pollTimeout).Should(ReceiveEvents(g,
 					CreateEvent(g, key, createValue, createRev),
 					UpdateEvent(g, key, createValue, updateValue, createRev, updateRev),
@@ -119,7 +119,7 @@ func TestWatch(t *testing.T) {
 				ctx, cancel := context.WithCancel(ctx)
 				defer cancel()
 				g := NewWithT(t)
-				err := kine.client.RequestProgress(ctx)
+				err := server.client.RequestProgress(ctx)
 				g.Expect(err).NotTo(HaveOccurred())
 
 				g.Eventually(watchCh, progressNotifyTimeout).Should(ReceiveProgressNotify(g))

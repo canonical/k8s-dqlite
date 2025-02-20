@@ -62,7 +62,7 @@ func Listen(ctx context.Context, config *EndpointConfig) (*ETCDConfig, error) {
 
 	go func() {
 		if err := grpcServer.Serve(listener); err != nil {
-			logrus.Errorf("Kine server shutdown: %v", err)
+			logrus.Errorf("k8s-dqlite server shutdown: %v", err)
 		}
 		listener.Close()
 	}()
@@ -99,7 +99,7 @@ func createListener(listen string) (_ net.Listener, err error) {
 		}()
 	}
 
-	logrus.Infof("Kine listening on %s", listen)
+	logrus.Infof("k8s-dqlite listening on %s", listen)
 	return net.Listen(network, address)
 }
 

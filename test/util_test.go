@@ -33,14 +33,14 @@ const (
 	DQLiteBackend = "dqlite"
 )
 
-type kineServer struct {
+type k8sDqliteServer struct {
 	client         *clientv3.Client
 	backend        server.Backend
 	dqliteListener *instrument.Listener
 }
 
-type kineConfig struct {
-	// backendType is the type of the kine backend. It can be either
+type k8sDqliteConfig struct {
+	// backendType is the type of the k8s-dqlite backend. It can be either
 	// SQLiteBackend or DQLiteBackend.
 	backendType string
 
@@ -50,8 +50,8 @@ type kineConfig struct {
 	setup func(context.Context, *sql.Tx) error
 }
 
-// newKineServer spins up a new instance of kine. In case of an error, tb.Fatal is called.
-func newKineServer(ctx context.Context, tb testing.TB, config *kineConfig) *kineServer {
+// newK8sDqliteServer spins up a new instance of k8s-dqlite. In case of an error, tb.Fatal is called.
+func newK8sDqliteServer(ctx context.Context, tb testing.TB, config *k8sDqliteConfig) *k8sDqliteServer {
 	dir := tb.TempDir()
 
 	if err := instrument.StartSQLiteMonitoring(); err != nil {
@@ -134,7 +134,7 @@ func newKineServer(ctx context.Context, tb testing.TB, config *kineConfig) *kine
 		client.Close()
 	})
 
-	return &kineServer{
+	return &k8sDqliteServer{
 		client:         client,
 		backend:        backend,
 		dqliteListener: dqliteListener,
@@ -208,7 +208,7 @@ func startDqlite(ctx context.Context, tb testing.TB, dir string, listener *instr
 	return driver, db
 }
 
-func (ks *kineServer) ReportMetrics(b *testing.B) {
+func (ks *k8sDqliteServer) ReportMetrics(b *testing.B) {
 	sqliteMetrics := instrument.FetchSQLiteMetrics()
 	b.ReportMetric(float64(sqliteMetrics.PageCacheHits+sqliteMetrics.PageCacheMisses)/float64(b.N), "page-reads/op")
 	b.ReportMetric(float64(sqliteMetrics.PageCacheMisses)/float64(b.N), "page-cache-misses/op")
@@ -224,7 +224,7 @@ func (ks *kineServer) ReportMetrics(b *testing.B) {
 	}
 }
 
-func (ks *kineServer) ResetMetrics() {
+func (ks *k8sDqliteServer) ResetMetrics() {
 	instrument.ResetSQLiteMetrics()
 	if ks.dqliteListener != nil {
 		ks.dqliteListener.ResetMetrics()

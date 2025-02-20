@@ -18,7 +18,7 @@ func TestCompaction(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
 
-				kine := newKineServer(ctx, t, &kineConfig{
+				server := newK8sDqliteServer(ctx, t, &k8sDqliteConfig{
 					backendType: backendType,
 					setup: func(ctx context.Context, tx *sql.Tx) error {
 						if _, err := insertMany(ctx, tx, "key", 100, 2); err != nil {
@@ -34,13 +34,13 @@ func TestCompaction(t *testing.T) {
 					},
 				})
 
-				initialSize, err := kine.backend.DbSize(ctx)
+				initialSize, err := server.backend.DbSize(ctx)
 				g.Expect(err).To(BeNil())
 
-				err = kine.backend.DoCompact(ctx)
+				err = server.backend.DoCompact(ctx)
 				g.Expect(err).To(BeNil())
 
-				finalSize, err := kine.backend.DbSize(ctx)
+				finalSize, err := server.backend.DbSize(ctx)
 				g.Expect(err).To(BeNil())
 				g.Expect(finalSize).To(BeNumerically("==", initialSize)) // Expecting no compaction.
 			})
@@ -51,7 +51,7 @@ func TestCompaction(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
 
-				kine := newKineServer(ctx, t, &kineConfig{
+				server := newK8sDqliteServer(ctx, t, &k8sDqliteConfig{
 					backendType: backendType,
 					setup: func(ctx context.Context, tx *sql.Tx) error {
 						if _, err := insertMany(ctx, tx, "key", 100, 10_000); err != nil {
@@ -67,24 +67,24 @@ func TestCompaction(t *testing.T) {
 					},
 				})
 
-				initialSize, err := kine.backend.DbSize(ctx)
+				initialSize, err := server.backend.DbSize(ctx)
 				g.Expect(err).To(BeNil())
 
-				err = kine.backend.DoCompact(ctx)
+				err = server.backend.DoCompact(ctx)
 				g.Expect(err).To(BeNil())
 
 				// Expect compaction to reduce the size.
-				finalSize, err := kine.backend.DbSize(ctx)
+				finalSize, err := server.backend.DbSize(ctx)
 				g.Expect(err).To(BeNil())
 				g.Expect(finalSize).To(BeNumerically("<", initialSize))
 
 				// Expect for keys to still be there.
-				rev, count, err := kine.backend.Count(ctx, []byte("key/"), []byte("key0"), 0)
+				rev, count, err := server.backend.Count(ctx, []byte("key/"), []byte("key0"), 0)
 				g.Expect(err).To(BeNil())
 				g.Expect(count).To(Equal(int64(10_000 - 500)))
 
 				// Expect old revisions not to be there anymore.
-				_, _, err = kine.backend.List(ctx, []byte("key/"), []byte("key0"), 0, rev-400)
+				_, _, err = server.backend.List(ctx, []byte("key/"), []byte("key0"), 0, rev-400)
 				g.Expect(err).To(Not(BeNil()))
 			})
 		})
@@ -97,7 +97,7 @@ func BenchmarkCompaction(b *testing.B) {
 			b.StopTimer()
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			kine := newKineServer(ctx, b, &kineConfig{
+			server := newK8sDqliteServer(ctx, b, &k8sDqliteConfig{
 				backendType: backendType,
 				setup: func(ctx context.Context, tx *sql.Tx) error {
 					// Make sure there are enough rows deleted to have
@@ -117,12 +117,12 @@ func BenchmarkCompaction(b *testing.B) {
 					return nil
 				},
 			})
-			kine.ResetMetrics()
+			server.ResetMetrics()
 			b.StartTimer()
-			if err := kine.backend.DoCompact(ctx); err != nil {
+			if err := server.backend.DoCompact(ctx); err != nil {
 				b.Fatal(err)
 			}
-			kine.ReportMetrics(b)
+			server.ReportMetrics(b)
 		})
 	}
 }

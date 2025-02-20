@@ -26,14 +26,14 @@ func TestLease(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			kine := newKineServer(ctx, t, &kineConfig{backendType: backendType})
+			server := newK8sDqliteServer(ctx, t, &k8sDqliteConfig{backendType: backendType})
 
 			g := NewWithT(t)
-			lease := grantLease(ctx, g, kine.client, ttlSeconds)
+			lease := grantLease(ctx, g, server.client, ttlSeconds)
 
-			createKey(ctx, g, kine.client, leaseKey, leaseValue, clientv3.WithLease(lease))
+			createKey(ctx, g, server.client, leaseKey, leaseValue, clientv3.WithLease(lease))
 
-			resp, err := kine.client.Get(ctx, leaseKey, clientv3.WithRange(""))
+			resp, err := server.client.Get(ctx, leaseKey, clientv3.WithRange(""))
 			g.Expect(err).To(BeNil())
 			g.Expect(resp.Kvs).To(HaveLen(1))
 			g.Expect(resp.Kvs[0].Key).To(Equal([]byte(leaseKey)))
@@ -41,7 +41,7 @@ func TestLease(t *testing.T) {
 			g.Expect(resp.Kvs[0].Lease).To(Equal(int64(lease)))
 
 			g.Eventually(func() []*mvccpb.KeyValue {
-				resp, err := kine.client.Get(ctx, leaseKey, clientv3.WithRange(""))
+				resp, err := server.client.Get(ctx, leaseKey, clientv3.WithRange(""))
 				g.Expect(err).To(BeNil())
 				return resp.Kvs
 			}, time.Duration(ttlSeconds*2)*time.Second, testExpirePollPeriod, ctx).Should(BeEmpty())

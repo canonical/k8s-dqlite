@@ -19,11 +19,11 @@ func TestCreate(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			kine := newKineServer(ctx, t, &kineConfig{backendType: backendType})
+			server := newK8sDqliteServer(ctx, t, &k8sDqliteConfig{backendType: backendType})
 
-			createKey(ctx, g, kine.client, "testKey", "testValue")
+			createKey(ctx, g, server.client, "testKey", "testValue")
 
-			resp, err := kine.client.Txn(ctx).
+			resp, err := server.client.Txn(ctx).
 				If(clientv3.Compare(clientv3.ModRevision("testKey"), "=", 0)).
 				Then(clientv3.OpPut("testKey", "testValue2")).
 				Commit()
@@ -45,25 +45,25 @@ func BenchmarkCreate(b *testing.B) {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
 
-				kine := newKineServer(ctx, b, &kineConfig{backendType: backendType})
+				server := newK8sDqliteServer(ctx, b, &k8sDqliteConfig{backendType: backendType})
 				wg := &sync.WaitGroup{}
 				run := func(start int) {
 					defer wg.Done()
 					for i := start; i < b.N; i += workers {
 						key := fmt.Sprintf("key-%d", i)
 						value := fmt.Sprintf("value-%d", i)
-						createKey(ctx, g, kine.client, key, value)
+						createKey(ctx, g, server.client, key, value)
 					}
 				}
 
-				kine.ResetMetrics()
+				server.ResetMetrics()
 				b.StartTimer()
 				wg.Add(workers)
 				for worker := 0; worker < workers; worker++ {
 					go run(worker)
 				}
 				wg.Wait()
-				kine.ReportMetrics(b)
+				server.ReportMetrics(b)
 			})
 		}
 	}

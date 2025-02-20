@@ -19,7 +19,7 @@ import (
 	"github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/endpoint"
 	"github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/server"
 	"github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/sqllog"
-	kine_tls "github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/tls"
+	k8s_dqlite_tls "github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/tls"
 	"github.com/sirupsen/logrus"
 )
 
@@ -57,7 +57,7 @@ type ServerConfig struct {
 	WatchQueryTimeout time.Duration
 	NotifyInterval    time.Duration
 
-	TlsConfig kine_tls.Config
+	TlsConfig k8s_dqlite_tls.Config
 }
 
 type ConnectionPoolConfig struct {
@@ -271,7 +271,7 @@ func New(
 		}
 		logrus.WithField("min_tls_version", minTLSVersion).Print("Enable TLS")
 
-		serverConfig.TlsConfig = kine_tls.Config{
+		serverConfig.TlsConfig = k8s_dqlite_tls.Config{
 			CertFile: crtFile,
 			KeyFile:  keyFile,
 		}
@@ -330,12 +330,12 @@ func New(
 			options = append(options, app.WithNetworkLatency(*v))
 		}
 
-		// these are set in the kine endpoint config below
-		if tuning.KineCompactInterval != nil {
-			serverConfig.CompactInterval = *tuning.KineCompactInterval
+		// these are set in the k8s-dqlite endpoint config below
+		if tuning.K8sDqliteCompactInterval != nil {
+			serverConfig.CompactInterval = *tuning.K8sDqliteCompactInterval
 		}
-		if tuning.KinePollInterval != nil {
-			serverConfig.PollInterval = *tuning.KinePollInterval
+		if tuning.K8sDqlitePollInterval != nil {
+			serverConfig.PollInterval = *tuning.K8sDqlitePollInterval
 		}
 	}
 
@@ -409,7 +409,7 @@ func (s *Server) MustStop() <-chan struct{} {
 	return s.mustStopCh
 }
 
-// Start the dqlite node and the kine machinery.
+// Start the dqlite node and the k8s-dqlite machinery.
 func (s *Server) Start(ctx context.Context) error {
 	if err := s.app.Ready(ctx); err != nil {
 		return fmt.Errorf("failed to start dqlite app: %w", err)
@@ -439,7 +439,7 @@ func (s *Server) Start(ctx context.Context) error {
 	})
 	if err := backend.Start(ctx); err != nil {
 		backend.Close()
-		return fmt.Errorf("failed to start kine backend: %w", err)
+		return fmt.Errorf("failed to start k8s-dqlite backend: %w", err)
 	}
 
 	s.backend = backend
@@ -449,7 +449,7 @@ func (s *Server) Start(ctx context.Context) error {
 		Server:        server.New(backend, s.serverConfig.NotifyInterval),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to start kine: %w", err)
+		return fmt.Errorf("failed to start k8s-dqlite: %w", err)
 	}
 
 	go s.watchAvailableStorageSize(ctx)
