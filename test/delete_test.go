@@ -18,12 +18,12 @@ func TestDelete(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			kine := newKineServer(ctx, t, &kineConfig{backendType: backendType})
+			server := newK8sDqliteServer(ctx, t, &k8sDqliteConfig{backendType: backendType})
 
 			// Calling the delete method outside a transaction should fail in kine
 			t.Run("NotSupportedFails", func(t *testing.T) {
 				g := NewWithT(t)
-				resp, err := kine.client.Delete(ctx, "missingKey")
+				resp, err := server.client.Delete(ctx, "missingKey")
 
 				g.Expect(err).NotTo(BeNil())
 				g.Expect(err.Error()).To(ContainSubstring("delete is not supported"))
@@ -35,7 +35,7 @@ func TestDelete(t *testing.T) {
 				g := NewWithT(t)
 				key := "missing key"
 				rev := 0
-				resp, err := kine.client.Txn(ctx).
+				resp, err := server.client.Txn(ctx).
 					If(clientv3.Compare(clientv3.ModRevision(key), "=", rev)).
 					Then(clientv3.OpDelete(key)).
 					Else(clientv3.OpGet(key)).
@@ -52,12 +52,12 @@ func TestDelete(t *testing.T) {
 
 				key := "testKeyToDelete"
 				value := "testValue"
-				rev := createKey(ctx, g, kine.client, key, value)
-				assertKey(ctx, g, kine.client, key, value)
-				deleteKey(ctx, g, kine.client, key, rev)
-				assertMissingKey(ctx, g, kine.client, key)
-				createKey(ctx, g, kine.client, key, value)
-				assertKey(ctx, g, kine.client, key, value)
+				rev := createKey(ctx, g, server.client, key, value)
+				assertKey(ctx, g, server.client, key, value)
+				deleteKey(ctx, g, server.client, key, rev)
+				assertMissingKey(ctx, g, server.client, key)
+				createKey(ctx, g, server.client, key, value)
+				assertKey(ctx, g, server.client, key, value)
 			})
 		})
 	}
@@ -75,7 +75,7 @@ func BenchmarkDelete(b *testing.B) {
 				defer cancel()
 
 				var initialRev int64
-				kine := newKineServer(ctx, b, &kineConfig{
+				server := newK8sDqliteServer(ctx, b, &k8sDqliteConfig{
 					backendType: backendType,
 					setup: func(ctx context.Context, tx *sql.Tx) error {
 						if lastRev, err := insertMany(ctx, tx, "key", 100, b.N*2); err != nil {
@@ -92,18 +92,18 @@ func BenchmarkDelete(b *testing.B) {
 					for i := start; i < b.N; i += workers {
 						keyId := int64(i + 1)
 						key := fmt.Sprintf("key/%d", keyId)
-						deleteKey(ctx, g, kine.client, key, initialRev+keyId)
+						deleteKey(ctx, g, server.client, key, initialRev+keyId)
 					}
 				}
 
-				kine.ResetMetrics()
+				server.ResetMetrics()
 				b.StartTimer()
 				wg.Add(workers)
 				for worker := 0; worker < workers; worker++ {
 					go run(worker)
 				}
 				wg.Wait()
-				kine.ReportMetrics(b)
+				server.ReportMetrics(b)
 			})
 		}
 	}

@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/canonical/k8s-dqlite/pkg/kine/broadcaster"
-	"github.com/canonical/k8s-dqlite/pkg/kine/server"
+	"github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/broadcaster"
+	"github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/server"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -78,10 +78,10 @@ type SQLLogConfig struct {
 	// Driver is the SQL driver to use to query the database.
 	Driver Driver
 
-	// CompactInterval is interval between database compactions performed by kine.
+	// CompactInterval is interval between database compactions performed by k8s-dqlite.
 	CompactInterval time.Duration
 
-	// PollInterval is the event poll interval used by kine.
+	// PollInterval is the event poll interval used by k8s-dqlite.
 	PollInterval time.Duration
 
 	// WatchQueryTimeout is the timeout on the after query in the poll loop.

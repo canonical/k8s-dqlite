@@ -18,9 +18,9 @@ var (
 		Use:   "migrator",
 		Short: "Tool to migrate etcd to dqlite",
 		Long: `
-Copy data between etcd and kine (dqlite)
+Copy data between etcd and k8s-dqlite
 
-		k8s-dqlite migrator --mode [backup-etcd|restore-etcd|backup-dqlite|restore-dqlite] --endpoint [etcd or kine endpoint] --db-dir [dir to store entries]
+		k8s-dqlite migrator --mode [backup-etcd|restore-etcd|backup-dqlite|restore-dqlite] --endpoint [etcd or k8s-dqlite endpoint] --db-dir [dir to store entries]
 
 `,
 		Run: func(cmd *cobra.Command, args []string) {
@@ -54,7 +54,7 @@ Copy data between etcd and kine (dqlite)
 )
 
 func init() {
-	migratorCmd.Flags().StringVar(&migratorCmdOpts.endpoint, "endpoint", "unix:///var/snap/microk8s/current/var/kubernetes/backend/kine.sock", "")
+	migratorCmd.Flags().StringVar(&migratorCmdOpts.endpoint, "endpoint", "unix:///var/snap/microk8s/current/var/kubernetes/backend/k8s-dqlite.sock", "")
 	migratorCmd.Flags().StringVar(&migratorCmdOpts.mode, "mode", "backup", "")
 	migratorCmd.Flags().StringVar(&migratorCmdOpts.dbDir, "db-dir", "db", "")
 	migratorCmd.Flags().BoolVar(&migratorCmdOpts.debug, "debug", false, "")

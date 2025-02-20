@@ -17,14 +17,14 @@ func TestGet(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			kine := newKineServer(ctx, t, &kineConfig{backendType: backendType})
+			server := newK8sDqliteServer(ctx, t, &k8sDqliteConfig{backendType: backendType})
 
 			t.Run("FailNotFound", func(t *testing.T) {
 				g := NewWithT(t)
 				key := "testKeyFailNotFound"
 
 				// Get non-existent key
-				resp, err := kine.client.Get(ctx, key, clientv3.WithRange(""))
+				resp, err := server.client.Get(ctx, key, clientv3.WithRange(""))
 				g.Expect(err).To(BeNil())
 				g.Expect(resp.Kvs).To(BeEmpty())
 			})
@@ -33,7 +33,7 @@ func TestGet(t *testing.T) {
 				g := NewWithT(t)
 
 				// Get empty key
-				resp, err := kine.client.Get(ctx, "", clientv3.WithRange(""))
+				resp, err := server.client.Get(ctx, "", clientv3.WithRange(""))
 				g.Expect(err).To(BeNil())
 				g.Expect(resp.Kvs).To(HaveLen(0))
 			})
@@ -43,7 +43,7 @@ func TestGet(t *testing.T) {
 				key := "testKeyFailRange"
 
 				// Get range with a non-existing key
-				resp, err := kine.client.Get(ctx, key, clientv3.WithRange("thisIsNotAKey"))
+				resp, err := server.client.Get(ctx, key, clientv3.WithRange("thisIsNotAKey"))
 				g.Expect(err).To(BeNil())
 				g.Expect(resp.Kvs).To(BeEmpty())
 			})
@@ -52,9 +52,9 @@ func TestGet(t *testing.T) {
 				g := NewWithT(t)
 				key := "testKeySuccess"
 
-				createKey(ctx, g, kine.client, key, "testValue")
+				createKey(ctx, g, server.client, key, "testValue")
 
-				resp, err := kine.client.Get(ctx, key, clientv3.WithRange(""))
+				resp, err := server.client.Get(ctx, key, clientv3.WithRange(""))
 				g.Expect(err).To(BeNil())
 				g.Expect(resp.Kvs).To(HaveLen(1))
 				g.Expect(resp.Kvs[0].Key).To(Equal([]byte(key)))
@@ -64,17 +64,17 @@ func TestGet(t *testing.T) {
 			t.Run("KeyRevision", func(t *testing.T) {
 				g := NewWithT(t)
 				key := "testKeyRevision"
-				lastModRev := createKey(ctx, g, kine.client, key, "testValue")
+				lastModRev := createKey(ctx, g, server.client, key, "testValue")
 
 				// Get the key's version
-				resp, err := kine.client.Get(ctx, key, clientv3.WithCountOnly())
+				resp, err := server.client.Get(ctx, key, clientv3.WithCountOnly())
 				g.Expect(err).To(BeNil())
 				g.Expect(resp.Count).To(Equal(int64(0)))
 
-				updateRev(ctx, g, kine.client, key, lastModRev, "testValue2")
+				updateRev(ctx, g, server.client, key, lastModRev, "testValue2")
 
 				// Get the updated key
-				resp, err = kine.client.Get(ctx, key, clientv3.WithCountOnly())
+				resp, err = server.client.Get(ctx, key, clientv3.WithCountOnly())
 				g.Expect(err).To(BeNil())
 				g.Expect(resp.Kvs[0].Value).To(Equal([]byte("testValue2")))
 				g.Expect(resp.Kvs[0].ModRevision).To(BeNumerically(">", resp.Kvs[0].CreateRevision))
@@ -84,10 +84,10 @@ func TestGet(t *testing.T) {
 				g := NewWithT(t)
 
 				// Create keys with prefix
-				createKey(ctx, g, kine.client, "prefix/testKey1", "testValue1")
-				createKey(ctx, g, kine.client, "prefix/testKey2", "testValue2")
+				createKey(ctx, g, server.client, "prefix/testKey1", "testValue1")
+				createKey(ctx, g, server.client, "prefix/testKey2", "testValue2")
 
-				resp, err := kine.client.Get(ctx, "prefix", clientv3.WithPrefix())
+				resp, err := server.client.Get(ctx, "prefix", clientv3.WithPrefix())
 
 				g.Expect(err).To(BeNil())
 				g.Expect(resp.Kvs).To(HaveLen(2))
@@ -100,12 +100,12 @@ func TestGet(t *testing.T) {
 				key := "testKeyFailNotFound"
 				value := "testValue"
 
-				rev := createKey(ctx, g, kine.client, key, value)
+				rev := createKey(ctx, g, server.client, key, value)
 				// Delete key
-				deleteKey(ctx, g, kine.client, key, rev)
+				deleteKey(ctx, g, server.client, key, rev)
 
 				// Get key
-				resp, err := kine.client.Get(ctx, key, clientv3.WithRange(""))
+				resp, err := server.client.Get(ctx, key, clientv3.WithRange(""))
 				g.Expect(err).To(BeNil())
 				g.Expect(resp.Kvs).To(BeEmpty())
 			})
@@ -123,7 +123,7 @@ func BenchmarkGet(b *testing.B) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			kine := newKineServer(ctx, b, &kineConfig{
+			server := newK8sDqliteServer(ctx, b, &k8sDqliteConfig{
 				backendType: backendType,
 				setup: func(ctx context.Context, tx *sql.Tx) error {
 					if _, err := insertMany(ctx, tx, "testKey", 100, b.N*2); err != nil {
@@ -136,14 +136,14 @@ func BenchmarkGet(b *testing.B) {
 				},
 			})
 
-			kine.ResetMetrics()
+			server.ResetMetrics()
 			b.StartTimer()
 			for i := 0; i < b.N; i++ {
-				resp, err := kine.client.Get(ctx, fmt.Sprintf("testKey/%d", i+1), clientv3.WithRange(""))
+				resp, err := server.client.Get(ctx, fmt.Sprintf("testKey/%d", i+1), clientv3.WithRange(""))
 				g.Expect(err).To(BeNil())
 				g.Expect(resp.Kvs).To(HaveLen(1))
 			}
-			kine.ReportMetrics(b)
+			server.ReportMetrics(b)
 		})
 	}
 }
