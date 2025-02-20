@@ -21,6 +21,10 @@ import (
 
 const (
 	otelName = "sqlite"
+
+	retryLinearBackoff    = 10 * time.Millisecond
+	maxRetryBackoff       = 100 * time.Millisecond
+	maxRetryTotalDuration = 5 * time.Second
 )
 
 var (
@@ -229,8 +233,6 @@ var (
 		FROM pragma_page_count(), pragma_page_size(), pragma_freelist_count()`
 )
 
-const maxRetries = 500
-
 type Stripped string
 
 func (s Stripped) String() string {
@@ -262,6 +264,11 @@ type DriverConfig struct {
 	LockWrites bool
 	Retry      func(error) bool
 	ErrCode    func(error) string
+}
+
+func wait(iteration uint) {
+	sleepInterval := min(time.Duration(iteration)*retryLinearBackoff, maxRetryBackoff)
+	time.Sleep(sleepInterval)
 }
 
 func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
@@ -394,7 +401,7 @@ func (d *Driver) query(ctx context.Context, txName, query string, args ...interf
 		}
 		recordOpResult(txName, err, start)
 	}()
-	for ; retryCount < maxRetries; retryCount++ {
+	for ; time.Now().Sub(start) < maxRetryTotalDuration; retryCount++ {
 		if retryCount == 0 {
 			logrus.Tracef("QUERY (try: %d) %v : %s", retryCount, args, Stripped(query))
 		} else {
@@ -402,11 +409,15 @@ func (d *Driver) query(ctx context.Context, txName, query string, args ...interf
 		}
 		rows, err = d.config.DB.QueryContext(ctx, query, args...)
 		if err == nil {
+			if retryCount != 0 {
+				logrus.Printf("query retries: %d, duration: %v", retryCount, time.Now().Sub(start))
+			}
 			break
 		}
 		if !d.config.Retry(err) {
 			break
 		}
+		wait(uint(retryCount))
 	}
 
 	recordTxResult(txName, err)
@@ -438,7 +449,7 @@ func (d *Driver) execute(ctx context.Context, txName, query string, args ...inte
 		}
 		recordOpResult(txName, err, start)
 	}()
-	for ; retryCount < maxRetries; retryCount++ {
+	for ; time.Now().Sub(start) < maxRetryTotalDuration; retryCount++ {
 		if retryCount > 2 {
 			logrus.Debugf("EXEC (try: %d) %v : %s", retryCount, args, Stripped(query))
 		} else {
@@ -446,11 +457,15 @@ func (d *Driver) execute(ctx context.Context, txName, query string, args ...inte
 		}
 		result, err = d.config.DB.ExecContext(ctx, query, args...)
 		if err == nil {
+			if retryCount != 0 {
+				logrus.Printf("execute retries: %d, duration: %v", retryCount, time.Now().Sub(start))
+			}
 			break
 		}
 		if !d.config.Retry(err) {
 			break
 		}
+		wait(uint(retryCount))
 	}
 
 	recordTxResult(txName, err)
@@ -582,11 +597,16 @@ func (d *Driver) Compact(ctx context.Context, revision int64) (err error) {
 		revision = currentRevision
 	}
 
-	for retryCount := 0; retryCount < maxRetries; retryCount++ {
+	start := time.Now()
+	for retryCount := 0; time.Now().Sub(start) < maxRetryTotalDuration; retryCount++ {
 		err = d.tryCompact(ctx, compactStart, revision)
 		if err == nil || !d.config.Retry(err) {
+			if retryCount != 0 {
+				logrus.Printf("compact retries: %d, duration: %v", retryCount, time.Now().Sub(start))
+			}
 			break
 		}
+		wait(uint(retryCount))
 	}
 	return err
 }
