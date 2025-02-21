@@ -44,9 +44,8 @@ func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
 	}
 
 	drv, err := sqlite.NewDriver(ctx, &sqlite.DriverConfig{
-		DB:         config.DB,
-		LockWrites: true,
-		Retry:      dqliteRetry,
+		DB:    config.DB,
+		Retry: dqliteRetry,
 	})
 	if err != nil {
 		return nil, err
