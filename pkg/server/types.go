@@ -34,8 +34,8 @@ type TuningConfiguration struct {
 	NetworkLatency *time.Duration `yaml:"network-latency"`
 
 	// K8sDqliteCompactInterval is the interval between k8s-dqlite database compaction operations.
-	K8sDqliteCompactInterval *time.Duration `yaml:"k8s-dqlite-compact-interval"`
+	K8sDqliteCompactInterval *time.Duration `yaml:"kine-compact-interval"`
 
 	// K8sDqlitePollInterval is the k8s-dqite poll interval.
-	K8sDqlitePollInterval *time.Duration `yaml:"k8s-dqlite-poll-interval"`
+	K8sDqlitePollInterval *time.Duration `yaml:"kine-poll-interval"`
 }
