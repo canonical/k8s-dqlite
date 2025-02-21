@@ -46,7 +46,7 @@ and connect to the Dqlite database.
     make static
     sudo ./bin/static/k8s-dqlite \
       --storage-dir /var/snap/microk8s/current/var/kubernetes/backend \
-      --listen unix:///var/snap/microk8s/current/var/kubernetes/backend/k8s-dqlite.sock:12379
+      --listen unix:///var/snap/microk8s/current/var/kubernetes/backend/kine.sock:12379
     ```
 
 7. While developing and making changes to `k8s-dqlite`, just restart k8s-dqlite.
@@ -68,7 +68,7 @@ Follow the guide for MicroK8s steps 1-5 while changing the snap name to `k8s`.
     make static
     sudo ./bin/static/k8s-dqlite \
     --storage-dir /var/snap/k8s/common/var/lib/k8s-dqlite \
-    --listen unix:///var/snap/k8s/common/var/lib/k8s-dqlite/k8s-dqlite.sock
+    --listen unix:///var/snap/k8s/common/var/lib/k8s-dqlite/kine.sock
     ```
 
 ## Viewing logs and debugging

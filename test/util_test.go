@@ -112,7 +112,7 @@ func newK8sDqliteServer(ctx context.Context, tb testing.TB, config *k8sDqliteCon
 
 	listenUrl := (&url.URL{
 		Scheme: "unix",
-		Path:   path.Join(dir, "k8s-dqlite.sock"),
+		Path:   path.Join(dir, "kine.sock"),
 	}).String()
 
 	_, err := endpoint.Listen(ctx, &endpoint.EndpointConfig{

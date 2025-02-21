@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	K8sDqliteSocket = "unix://k8s-dqlite.sock"
+	K8sDqliteSocket = "unix://kine.sock"
 )
 
 type ETCDConfig struct {

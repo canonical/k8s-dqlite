@@ -54,7 +54,7 @@ Copy data between etcd and k8s-dqlite
 )
 
 func init() {
-	migratorCmd.Flags().StringVar(&migratorCmdOpts.endpoint, "endpoint", "unix:///var/snap/microk8s/current/var/kubernetes/backend/k8s-dqlite.sock", "")
+	migratorCmd.Flags().StringVar(&migratorCmdOpts.endpoint, "endpoint", "unix:///var/snap/microk8s/current/var/kubernetes/backend/kine.sock", "")
 	migratorCmd.Flags().StringVar(&migratorCmdOpts.mode, "mode", "backup", "")
 	migratorCmd.Flags().StringVar(&migratorCmdOpts.dbDir, "db-dir", "db", "")
 	migratorCmd.Flags().BoolVar(&migratorCmdOpts.debug, "debug", false, "")
