@@ -6,6 +6,9 @@ on:
     paths:
       - .github/workflows/stale-cron.yaml
 
+permissions:
+  contents: read
+
 jobs:
   close-issues:
     runs-on: ubuntu-latest
