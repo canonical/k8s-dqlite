@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/canonical/k8s-dqlite/pkg/kine/tls"
+	"github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/tls"
 	"github.com/sirupsen/logrus"
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
 	"go.etcd.io/etcd/server/v3/embed"
@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	KineSocket = "unix://kine.sock"
+	K8sDqliteSocket = "unix://kine.sock"
 )
 
 type ETCDConfig struct {
@@ -53,7 +53,7 @@ func Listen(ctx context.Context, config *EndpointConfig) (*ETCDConfig, error) {
 
 	listenAddress := config.ListenAddress
 	if listenAddress == "" {
-		listenAddress = KineSocket
+		listenAddress = K8sDqliteSocket
 	}
 	listener, err := createListener(listenAddress)
 	if err != nil {
@@ -62,7 +62,7 @@ func Listen(ctx context.Context, config *EndpointConfig) (*ETCDConfig, error) {
 
 	go func() {
 		if err := grpcServer.Serve(listener); err != nil {
-			logrus.Errorf("Kine server shutdown: %v", err)
+			logrus.Errorf("k8s-dqlite server shutdown: %v", err)
 		}
 		listener.Close()
 	}()
@@ -99,7 +99,7 @@ func createListener(listen string) (_ net.Listener, err error) {
 		}()
 	}
 
-	logrus.Infof("Kine listening on %s", listen)
+	logrus.Infof("k8s-dqlite listening on %s", listen)
 	return net.Listen(network, address)
 }
 

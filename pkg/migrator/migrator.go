@@ -6,8 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/canonical/k8s-dqlite/pkg/kine/client"
-	kine_endpoint "github.com/canonical/k8s-dqlite/pkg/kine/endpoint"
+	"github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/client"
+	k8s_dqlite_endpoint "github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/endpoint"
 	"github.com/sirupsen/logrus"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
@@ -49,7 +49,7 @@ func BackupEtcd(ctx context.Context, endpoint, dir string) error {
 
 // RestoreToDqlite restores database contents from backup directory to a k8s-dqlite database.
 func RestoreToDqlite(ctx context.Context, endpoint, dir string) error {
-	client, err := client.New(kine_endpoint.ETCDConfig{
+	client, err := client.New(k8s_dqlite_endpoint.ETCDConfig{
 		Endpoints: []string{endpoint},
 	})
 	if err != nil {
@@ -86,7 +86,7 @@ func RestoreToDqlite(ctx context.Context, endpoint, dir string) error {
 
 // BackupDqlite makes a back up of the contents of a k8s-dqlite database into a filesystem directory.
 func BackupDqlite(ctx context.Context, endpoint, dir string) error {
-	client, err := client.New(kine_endpoint.ETCDConfig{Endpoints: []string{endpoint}})
+	client, err := client.New(k8s_dqlite_endpoint.ETCDConfig{Endpoints: []string{endpoint}})
 	if err != nil {
 		return fmt.Errorf("failed to create k8s-dqlite client: %w", err)
 	}

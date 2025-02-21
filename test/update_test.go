@@ -17,15 +17,15 @@ func TestUpdate(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			kine := newKineServer(ctx, t, &kineConfig{backendType: backendType})
+			server := newK8sDqliteServer(ctx, t, &k8sDqliteConfig{backendType: backendType})
 
 			t.Run("UpdateExisting", func(t *testing.T) {
 				g := NewWithT(t)
 
-				lastModRev := createKey(ctx, g, kine.client, "updateExistingKey", "testValue1")
-				updateRev(ctx, g, kine.client, "updateExistingKey", lastModRev, "testValue2")
+				lastModRev := createKey(ctx, g, server.client, "updateExistingKey", "testValue1")
+				updateRev(ctx, g, server.client, "updateExistingKey", lastModRev, "testValue2")
 
-				resp, err := kine.client.Get(ctx, "updateExistingKey", clientv3.WithRange(""))
+				resp, err := server.client.Get(ctx, "updateExistingKey", clientv3.WithRange(""))
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(resp.Kvs).To(HaveLen(1))
 				g.Expect(resp.Kvs[0].Key).To(Equal([]byte("updateExistingKey")))
@@ -36,9 +36,9 @@ func TestUpdate(t *testing.T) {
 			t.Run("CreateExistingFails", func(t *testing.T) {
 				g := NewWithT(t)
 
-				createKey(ctx, g, kine.client, "createExistingKey", "testValue1")
+				createKey(ctx, g, server.client, "createExistingKey", "testValue1")
 
-				resp, err := kine.client.Txn(ctx).
+				resp, err := server.client.Txn(ctx).
 					If(clientv3.Compare(clientv3.ModRevision("createExistingKey"), "=", 0)).
 					Then(clientv3.OpPut("createExistingKey", "testValue1")).
 					Else(clientv3.OpGet("createExistingKey", clientv3.WithRange(""))).
@@ -52,10 +52,10 @@ func TestUpdate(t *testing.T) {
 			t.Run("UpdateOldRevisionFails", func(t *testing.T) {
 				g := NewWithT(t)
 
-				lastModRev := createKey(ctx, g, kine.client, "updateOldRevKey", "testValue1")
-				updateRev(ctx, g, kine.client, "updateOldRevKey", lastModRev, "testValue2")
+				lastModRev := createKey(ctx, g, server.client, "updateOldRevKey", "testValue1")
+				updateRev(ctx, g, server.client, "updateOldRevKey", lastModRev, "testValue2")
 
-				resp, err := kine.client.Txn(ctx).
+				resp, err := server.client.Txn(ctx).
 					If(clientv3.Compare(clientv3.ModRevision("updateOldRevKey"), "=", lastModRev)).
 					Then(clientv3.OpPut("updateOldRevKey", "testValue2")).
 					Else(clientv3.OpGet("updateOldRevKey", clientv3.WithRange(""))).
@@ -70,7 +70,7 @@ func TestUpdate(t *testing.T) {
 			t.Run("UpdateNotExistingFails", func(t *testing.T) {
 				g := NewWithT(t)
 
-				resp, err := kine.client.Txn(ctx).
+				resp, err := server.client.Txn(ctx).
 					If(clientv3.Compare(clientv3.ModRevision("updateNotExistingKey"), "=", 1)).
 					Then(clientv3.OpPut("updateNotExistingKey", "testValue3")).
 					Else(clientv3.OpGet("updateNotExistingKey", clientv3.WithRange(""))).
@@ -85,10 +85,10 @@ func TestUpdate(t *testing.T) {
 			t.Run("UpdatedDeletedKeyFails", func(t *testing.T) {
 				g := NewWithT(t)
 
-				lastModRev := createKey(ctx, g, kine.client, "updateDeletedKey", "testValue4")
-				lastModRev = deleteKey(ctx, g, kine.client, "updateDeletedKey", lastModRev)
+				lastModRev := createKey(ctx, g, server.client, "updateDeletedKey", "testValue4")
+				lastModRev = deleteKey(ctx, g, server.client, "updateDeletedKey", lastModRev)
 
-				resp, err := kine.client.Txn(ctx).
+				resp, err := server.client.Txn(ctx).
 					If(clientv3.Compare(clientv3.ModRevision("updateDeletedKey"), "=", lastModRev)).
 					Then(clientv3.OpPut("updateDeletedKey", "testValue4")).
 					Else(clientv3.OpGet("updateDeletedKey", clientv3.WithRange(""))).
@@ -114,25 +114,25 @@ func BenchmarkUpdate(b *testing.B) {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
 
-				kine := newKineServer(ctx, b, &kineConfig{backendType: backendType})
+				server := newK8sDqliteServer(ctx, b, &k8sDqliteConfig{backendType: backendType})
 				wg := &sync.WaitGroup{}
 				run := func(start int) {
 					defer wg.Done()
 					benchKey := fmt.Sprintf("benchKey-%d", start)
 					for i, lastModRev := start, int64(0); i < b.N; i += workers {
 						value := fmt.Sprintf("value-%d", i)
-						lastModRev = updateRev(ctx, g, kine.client, benchKey, lastModRev, value)
+						lastModRev = updateRev(ctx, g, server.client, benchKey, lastModRev, value)
 					}
 				}
 
-				kine.ResetMetrics()
+				server.ResetMetrics()
 				b.StartTimer()
 				wg.Add(workers)
 				for worker := 0; worker < workers; worker++ {
 					go run(worker)
 				}
 				wg.Wait()
-				kine.ReportMetrics(b)
+				server.ReportMetrics(b)
 			})
 		}
 	}

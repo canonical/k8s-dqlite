@@ -19,7 +19,7 @@ type UpdateConfiguration struct {
 // FailureDomainConfiguration is the configuration format for failure-domain (just an integer)
 type FailureDomainConfiguration uint64
 
-// TuningConfiguration is configuration for tuning dqlite and kine parameters
+// TuningConfiguration is configuration for tuning dqlite and k8s-dqlite parameters
 type TuningConfiguration struct {
 	// Snapshot is tuning for the raft snapshot parameters.
 	// If non-nil, it is set with app.WithSnapshotParams() when starting dqlite.
@@ -33,9 +33,9 @@ type TuningConfiguration struct {
 	// If non-nil, it is passed as app.WithNetworkLatency() when starting dqlite.
 	NetworkLatency *time.Duration `yaml:"network-latency"`
 
-	// KineCompactInterval is the interval between kine database compaction operations.
-	KineCompactInterval *time.Duration `yaml:"kine-compact-interval"`
+	// K8sDqliteCompactInterval is the interval between k8s-dqlite database compaction operations.
+	K8sDqliteCompactInterval *time.Duration `yaml:"kine-compact-interval"`
 
-	// KinePollInterval is the kine poll interval.
-	KinePollInterval *time.Duration `yaml:"kine-poll-interval"`
+	// K8sDqlitePollInterval is the k8s-dqite poll interval.
+	K8sDqlitePollInterval *time.Duration `yaml:"kine-poll-interval"`
 }
