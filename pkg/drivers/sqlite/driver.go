@@ -87,7 +87,7 @@ var (
 		FROM kine`
 
 	// listSQL query looks for the latest version of every row in
-	// the range and returns all columns from it.
+	// the range.
 	// The search for the "latest id" (table `maxkv` in the query)
 	// can be carried on quickly with a covering index (kine_name_index).
 	// Unfortunately, using a normal JOIN operation will confuse
@@ -100,7 +100,8 @@ var (
 	// table forces ordering of `maxkv` (without paying for it
 	// as it is the same order as the index) and CROSS JOIN is
 	// used as it forces SQLite to keep the outer-loop order
-	// when joining tables. See https://www.sqlite.org/optoverview.html#crossjoin
+	// when joining tables.
+	// See https://www.sqlite.org/optoverview.html#crossjoin
 	// for more details.
 	listSQL = `
 		WITH maxkv AS (
