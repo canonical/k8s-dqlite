@@ -43,7 +43,7 @@ jobs:
       - name: Set-up R
         run: |
           sudo apt-get install -y r-base
-          sudo Rscript -e 'install.packages(c("ggplot2", "dplyr", "optparse"), repos="https://cloud.r-project.org")'
+          sudo Rscript -e 'install.packages(c("ggplot2", "dplyr", "optparse"), repos="https://cloud.r-project.org", type="both")'
       - name: Install lxd
         uses: canonical/k8s-snap/.github/actions/install-lxd@main
       - name: Download latest k8s-snap
