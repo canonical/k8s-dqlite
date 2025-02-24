@@ -4,7 +4,8 @@
 import itertools
 import logging
 from pathlib import Path
-from typing import Generator, Iterator, List, Optional, Union
+import threading
+from typing import Dict, Generator, Iterator, List, Optional, Union
 
 import pytest
 from test_util import config, harness, util
@@ -161,25 +162,58 @@ def instances(
 
     LOG.info(f"Creating {node_count} instances")
     instances: List[harness.Instance] = []
+    # We're initializing the snaps in parallel, however we need to preserve
+    # the instance order. The first instance must be the bootstrapped instance
+    # and we accept a list of snap versions.
+    # For this reason, we'll use a map and flatten it before yielding the instance
+    # list.
+    instance_map: Dict[int][harness.Instance] = dict()
+    lock = threading.Lock()
 
-    for _, snap in zip(range(node_count), snap_versions(request)):
-        # Create <node_count> instances and setup the k8s snap in each.
-        instance = h.new_instance(network_type=network_type)
-        instances.append(instance)
-        if not no_setup:
-            util.setup_core_dumps(instance)
-            util.setup_k8s_snap(instance, tmp_path, snap)
+    def setup_instance(
+        idx: int,
+        snap_version: Optional[str] = None,
+        bootstrap: bool = False,
+        bootstrap_config: Optional[str] = None,
+    ):
+        try:
+            instance = h.new_instance(network_type=network_type)
+            if not no_setup:
+                util.setup_core_dumps(instance)
+                util.setup_k8s_snap(instance, tmp_path, snap_version)
 
-    if not disable_k8s_bootstrapping and not no_setup:
-        first_node, *_ = instances
+            if bootstrap:
+                if bootstrap_config:
+                    instance.exec(
+                        ["k8s", "bootstrap", "--file", "-"],
+                        input=str.encode(bootstrap_config),
+                    )
+                else:
+                    instance.exec(["k8s", "bootstrap"])
 
-        if bootstrap_config is not None:
-            first_node.exec(
-                ["k8s", "bootstrap", "--file", "-"],
-                input=str.encode(bootstrap_config),
-            )
-        else:
-            first_node.exec(["k8s", "bootstrap"])
+            with lock:
+                instance_map[idx] = instance
+        except Exception:
+            LOG.exception("Failed to initialize instance.")
+
+    threads = []
+    for (
+        idx,
+        snap_version,
+    ) in zip(range(node_count), snap_versions(request)):
+        bootstrap = idx == 0 and not (disable_k8s_bootstrapping or no_setup)
+        thread = threading.Thread(
+            target=setup_instance, args=(idx, snap_version, bootstrap, bootstrap_config)
+        )
+        thread.start()
+        threads.append(thread)
+
+    for thread in threads:
+        thread.join(config.DEFAULT_WAIT_RETRIES * config.DEFAULT_WAIT_DELAY_S)
+
+    assert len(instance_map) == node_count, "failed to initialize instances"
+    for idx in range(node_count):
+        instances.append(instance_map[idx])
 
     yield instances
 
@@ -189,10 +223,21 @@ def instances(
 
     # Collect all the reports before initiating the cleanup so that we won't
     # affect the state of the observed cluster.
+    def generate_report(instance_id: str):
+        try:
+            LOG.debug(f"Generating inspection reports for test instance: {instance_id}")
+            _generate_inspection_report(h, instance_id)
+        finally:
+            LOG.exception("failed to collect inspection report")
+
+    threads = []
     for instance in instances:
-        if config.INSPECTION_REPORTS_DIR is not None:
-            LOG.debug("Generating inspection reports for test instances")
-            _generate_inspection_report(h, instance.id)
+        if config.INSPECTION_REPORTS_DIR:
+            thread = threading.Thread(target=generate_report, args=[instance.id])
+            thread.start()
+            threads.append(thread)
+    for thread in threads:
+        thread.join(config.DEFAULT_WAIT_RETRIES * config.DEFAULT_WAIT_DELAY_S)
 
     # Cleanup after each test.
     # We cannot execute _harness_clean() here as this would also
