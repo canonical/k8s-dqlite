@@ -44,6 +44,8 @@ for (file in metrics_files) {
   # Convert numeric columns and handle NA values
   df[2:(ncol(df) - 1)] <- lapply(df[2:(ncol(df) - 1)], function(x) as.numeric(as.character(x)))
   df[is.na(df)] <- 0
+  # Convert RSS kiB to MiB
+  df["RSS"] <- df["RSS"] / 1024
   
   metrics_data[[basename(file)]] <- df
 }
@@ -70,5 +72,6 @@ print("Creating plots")
 # Generate and save all required plots
 create_plot(metrics_data, "X.CPU", "CPU Usage Over Time", "% CPU", "cpu_usage_plot", 250)
 create_plot(metrics_data, "X.MEM", "Memory Usage Over Time", "% MEM", "mem_usage_plot", 2)
+create_plot(metrics_data, "RSS", "Resident Set Size in MiB Over Time", "RSS", "rss_plot", 400)
 create_plot(metrics_data, "kB_rd_s", "IO Read Usage Over Time", "kB_rd_s", "io_read_usage_plot", 30)
 create_plot(metrics_data, "kB_wr_s", "IO Write Usage Over Time", "kB_wr_s", "io_write_usage_plot", 35000)
