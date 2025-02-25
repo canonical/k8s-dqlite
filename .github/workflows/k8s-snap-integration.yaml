@@ -56,7 +56,7 @@ jobs:
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
         run: |
           git clone https://github.com/canonical/k8s-snap.git      
-          cd k8s-snap/tests/integration && sg lxd -c 'tox -e integration'
+          cd k8s-snap/tests/integration && sg lxd -c 'tox -e integration -- --tags up_to_weekly'
       - name: Prepare inspection reports
         if: failure()
         run: |
