@@ -54,7 +54,7 @@ if (length(metrics_data) < 1) {
 }
 
 # Define function to create and save plots
-create_plot <- function(data_list, y_column, title, y_label, file_suffix, max_y = 100) {
+create_plot <- function(data_list, y_column, title, y_label, file_suffix, max_y) {
   plot <- ggplot() +
     lapply(names(data_list), function(node) {
       geom_line(data = data_list[[node]], aes(x = 1:nrow(data_list[[node]]), y = !!sym(y_column), color = node))
@@ -69,6 +69,6 @@ create_plot <- function(data_list, y_column, title, y_label, file_suffix, max_y 
 print("Creating plots")
 # Generate and save all required plots
 create_plot(metrics_data, "X.CPU", "CPU Usage Over Time", "% CPU", "cpu_usage_plot", 150)
-create_plot(metrics_data, "X.MEM", "Memory Usage Over Time", "% MEM", "mem_usage_plot", 1.2)
+create_plot(metrics_data, "X.MEM", "Memory Usage Over Time", "% MEM", "mem_usage_plot", 1.5)
 create_plot(metrics_data, "kB_rd_s", "IO Read Usage Over Time", "kB_rd_s", "io_read_usage_plot", 20)
 create_plot(metrics_data, "kB_wr_s", "IO Write Usage Over Time", "kB_wr_s", "io_write_usage_plot", 35000)
