@@ -13,12 +13,12 @@ import (
 	dqlitedrv "github.com/canonical/go-dqlite/v3"
 	"github.com/canonical/go-dqlite/v3/app"
 	"github.com/canonical/k8s-dqlite/pkg/database"
+	"github.com/canonical/k8s-dqlite/pkg/drivers/dqlite"
+	"github.com/canonical/k8s-dqlite/pkg/drivers/sqlite"
+	"github.com/canonical/k8s-dqlite/pkg/endpoint"
 	"github.com/canonical/k8s-dqlite/pkg/instrument"
-	"github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/drivers/dqlite"
-	"github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/drivers/sqlite"
-	"github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/endpoint"
-	"github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/server"
-	"github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/sqllog"
+	"github.com/canonical/k8s-dqlite/pkg/limited"
+	"github.com/canonical/k8s-dqlite/pkg/sqllog"
 	"github.com/sirupsen/logrus"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
@@ -35,7 +35,7 @@ const (
 
 type k8sDqliteServer struct {
 	client         *clientv3.Client
-	backend        server.Backend
+	backend        limited.Backend
 	dqliteListener *instrument.Listener
 }
 
@@ -117,7 +117,7 @@ func newK8sDqliteServer(ctx context.Context, tb testing.TB, config *k8sDqliteCon
 
 	_, err := endpoint.Listen(ctx, &endpoint.EndpointConfig{
 		ListenAddress: listenUrl,
-		Server:        server.New(backend, 5*time.Second),
+		Server:        limited.New(backend, 5*time.Second),
 	})
 	if err != nil {
 		tb.Fatal(err)
