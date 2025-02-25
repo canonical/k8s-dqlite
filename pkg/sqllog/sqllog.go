@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/broadcaster"
-	"github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/server"
+	"github.com/canonical/k8s-dqlite/pkg/broadcaster"
+	"github.com/canonical/k8s-dqlite/pkg/limited"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -69,7 +69,7 @@ type SQLLog struct {
 	stop    func()
 	started bool
 
-	broadcaster broadcaster.Broadcaster[[]*server.Event]
+	broadcaster broadcaster.Broadcaster[[]*limited.Event]
 	notify      chan int64
 	wg          sync.WaitGroup
 }
@@ -238,7 +238,7 @@ func (s *SQLLog) GetCompactRevision(ctx context.Context) (int64, int64, error) {
 	return s.config.Driver.GetCompactRevision(ctx)
 }
 
-func (s *SQLLog) After(ctx context.Context, key, rangeEnd []byte, revision, limit int64) (int64, []*server.Event, error) {
+func (s *SQLLog) After(ctx context.Context, key, rangeEnd []byte, revision, limit int64) (int64, []*limited.Event, error) {
 	var err error
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.After", otelName))
 	defer func() {
@@ -258,7 +258,7 @@ func (s *SQLLog) After(ctx context.Context, key, rangeEnd []byte, revision, limi
 	if revision == 0 || revision > currentRevision {
 		revision = currentRevision
 	} else if revision < compactRevision {
-		return currentRevision, nil, server.ErrCompacted
+		return currentRevision, nil, limited.ErrCompacted
 	}
 
 	rows, err := s.config.Driver.AfterPrefix(ctx, key, rangeEnd, revision, limit)
@@ -273,7 +273,7 @@ func (s *SQLLog) After(ctx context.Context, key, rangeEnd []byte, revision, limi
 	return currentRevision, result, err
 }
 
-func (s *SQLLog) List(ctx context.Context, key, rangeEnd []byte, limit, revision int64) (int64, []*server.KeyValue, error) {
+func (s *SQLLog) List(ctx context.Context, key, rangeEnd []byte, limit, revision int64) (int64, []*limited.KeyValue, error) {
 	var err error
 
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.List", otelName))
@@ -295,7 +295,7 @@ func (s *SQLLog) List(ctx context.Context, key, rangeEnd []byte, limit, revision
 	if revision == 0 || revision > currentRevision {
 		revision = currentRevision
 	} else if revision < compactRevision {
-		return currentRevision, nil, server.ErrCompacted
+		return currentRevision, nil, limited.ErrCompacted
 	}
 
 	rows, err := s.config.Driver.List(ctx, key, rangeEnd, limit, revision)
@@ -365,7 +365,7 @@ func (s *SQLLog) ttl(ctx context.Context) {
 	}()
 }
 
-func (s *SQLLog) Watch(ctx context.Context, key, rangeEnd []byte, startRevision int64) (<-chan []*server.Event, error) {
+func (s *SQLLog) Watch(ctx context.Context, key, rangeEnd []byte, startRevision int64) (<-chan []*limited.Event, error) {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Watch", otelName))
 	defer span.End()
 	span.SetAttributes(
@@ -391,9 +391,9 @@ func (s *SQLLog) Watch(ctx context.Context, key, rangeEnd []byte, startRevision 
 		if !errors.Is(err, context.Canceled) {
 			span.RecordError(err)
 			logrus.Errorf("Failed to list %s for revision %d: %v", key, startRevision, err)
-			// We return an error message that the api-server understands: server.ErrGRPCUnhealthy
-			if err != server.ErrCompacted {
-				err = server.ErrGRPCUnhealthy
+			// We return an error message that the api-server understands: limited.ErrGRPCUnhealthy
+			if err != limited.ErrCompacted {
+				err = limited.ErrGRPCUnhealthy
 			}
 		}
 		// Cancel the watcher by cancelling the context of its subscription to the broadcaster
@@ -401,7 +401,7 @@ func (s *SQLLog) Watch(ctx context.Context, key, rangeEnd []byte, startRevision 
 		return nil, err
 	}
 
-	res := make(chan []*server.Event, 100)
+	res := make(chan []*limited.Event, 100)
 	if len(initialEvents) > 0 {
 		res <- initialEvents
 	}
@@ -426,8 +426,8 @@ func (s *SQLLog) Watch(ctx context.Context, key, rangeEnd []byte, startRevision 
 	return res, nil
 }
 
-func filterEvents(events []*server.Event, key string, startRevision int64) []*server.Event {
-	filteredEventList := make([]*server.Event, 0, len(events))
+func filterEvents(events []*limited.Event, key string, startRevision int64) []*limited.Event {
+	filteredEventList := make([]*limited.Event, 0, len(events))
 	checkPrefix := strings.HasSuffix(key, "/")
 
 	for _, event := range events {
@@ -443,7 +443,7 @@ func filterEvents(events []*server.Event, key string, startRevision int64) []*se
 	return filteredEventList
 }
 
-func (s *SQLLog) startWatch(ctx context.Context) (chan []*server.Event, error) {
+func (s *SQLLog) startWatch(ctx context.Context) (chan []*limited.Event, error) {
 	if err := s.compactStart(ctx); err != nil {
 		return nil, err
 	}
@@ -453,7 +453,7 @@ func (s *SQLLog) startWatch(ctx context.Context) (chan []*server.Event, error) {
 		return nil, err
 	}
 
-	c := make(chan []*server.Event)
+	c := make(chan []*limited.Event)
 	// start compaction and polling at the same time to watch starts
 	// at the oldest revision, but compaction doesn't create gaps
 	s.wg.Add(2)
@@ -483,7 +483,7 @@ func (s *SQLLog) startWatch(ctx context.Context) (chan []*server.Event, error) {
 	return c, nil
 }
 
-func (s *SQLLog) poll(ctx context.Context, result chan []*server.Event, pollStart int64) {
+func (s *SQLLog) poll(ctx context.Context, result chan []*limited.Event, pollStart int64) {
 	var (
 		last        = pollStart
 		skip        int64
@@ -524,7 +524,7 @@ func (s *SQLLog) poll(ctx context.Context, result chan []*server.Event, pollStar
 
 		rev := last
 		var (
-			sequential []*server.Event
+			sequential []*limited.Event
 			saveLast   bool
 		)
 
@@ -580,7 +580,7 @@ func (s *SQLLog) poll(ctx context.Context, result chan []*server.Event, pollStar
 	}
 }
 
-func (s *SQLLog) getLatestEvents(ctx context.Context, last int64) ([]*server.Event, error) {
+func (s *SQLLog) getLatestEvents(ctx context.Context, last int64) ([]*limited.Event, error) {
 	watchCtx, cancel := context.WithTimeout(ctx, s.config.WatchQueryTimeout)
 	defer cancel()
 
@@ -620,7 +620,7 @@ func (s *SQLLog) Count(ctx context.Context, key, rangeEnd []byte, revision int64
 	if revision == 0 || revision > currentRevision {
 		revision = currentRevision
 	} else if revision < compactRevision {
-		return currentRevision, 0, server.ErrCompacted
+		return currentRevision, 0, limited.ErrCompacted
 	}
 	count, err := s.config.Driver.Count(ctx, key, rangeEnd, revision)
 	if err != nil {
@@ -696,8 +696,8 @@ func ScanAll[T any](rows *sql.Rows, scanOne func(*sql.Rows) (T, error)) ([]T, er
 	return result, nil
 }
 
-func scanKeyValue(rows *sql.Rows) (*server.KeyValue, error) {
-	kv := &server.KeyValue{}
+func scanKeyValue(rows *sql.Rows) (*limited.KeyValue, error) {
+	kv := &limited.KeyValue{}
 	err := rows.Scan(
 		&kv.ModRevision,
 		&kv.Key,
@@ -711,10 +711,10 @@ func scanKeyValue(rows *sql.Rows) (*server.KeyValue, error) {
 	return kv, nil
 }
 
-func scanEvent(rows *sql.Rows) (*server.Event, error) {
-	event := &server.Event{
-		KV:     &server.KeyValue{},
-		PrevKV: &server.KeyValue{},
+func scanEvent(rows *sql.Rows) (*limited.Event, error) {
+	event := &limited.Event{
+		KV:     &limited.KeyValue{},
+		PrevKV: &limited.KeyValue{},
 	}
 
 	err := rows.Scan(

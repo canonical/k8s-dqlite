@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/endpoint"
+	"github.com/canonical/k8s-dqlite/pkg/endpoint"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 

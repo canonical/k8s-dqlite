@@ -15,11 +15,11 @@ import (
 	"github.com/canonical/go-dqlite/v3/app"
 	"github.com/canonical/go-dqlite/v3/client"
 	"github.com/canonical/k8s-dqlite/pkg/database"
-	dqliteDriver "github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/drivers/dqlite"
-	"github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/endpoint"
-	"github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/server"
-	"github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/sqllog"
-	k8s_dqlite_tls "github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/tls"
+	dqliteDriver "github.com/canonical/k8s-dqlite/pkg/drivers/dqlite"
+	"github.com/canonical/k8s-dqlite/pkg/endpoint"
+	"github.com/canonical/k8s-dqlite/pkg/limited"
+	"github.com/canonical/k8s-dqlite/pkg/sqllog"
+	k8s_dqlite_tls "github.com/canonical/k8s-dqlite/pkg/tls"
 	"github.com/sirupsen/logrus"
 )
 
@@ -28,7 +28,7 @@ type Server struct {
 	// app is the dqlite application driving the server.
 	app *app.App
 
-	backend server.Backend
+	backend limited.Backend
 
 	serverConfig         *ServerConfig
 	connectionPoolConfig *ConnectionPoolConfig
@@ -446,7 +446,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	_, err = endpoint.Listen(ctx, &endpoint.EndpointConfig{
 		ListenAddress: s.serverConfig.ListenAddress,
-		Server:        server.New(backend, s.serverConfig.NotifyInterval),
+		Server:        limited.New(backend, s.serverConfig.NotifyInterval),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to start k8s-dqlite: %w", err)

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/canonical/k8s-dqlite/pkg/k8s_dqlite/client"
+	"github.com/canonical/k8s-dqlite/pkg/client"
 )
 
 func putKey(ctx context.Context, c client.Client, key string, value []byte) error {
