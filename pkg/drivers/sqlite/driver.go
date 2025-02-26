@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 	"unicode"
 
@@ -84,27 +83,46 @@ func init() {
 // no-op for sqlite.
 var (
 	revSQL = `
-		SELECT MAX(rkv.id) AS id
-		FROM kine AS rkv`
+		SELECT MAX(id) AS id
+		FROM kine`
 
+	// listSQL query looks for the latest version of every row in
+	// the range.
+	// The search for the "latest id" (table `maxkv` in the query)
+	// can be carried on quickly with a covering index (kine_name_index).
+	// Unfortunately, using a normal JOIN operation will confuse
+	// SQLite planner and insert a SORT temp table at the end of
+	// the plan, forcing SQLite to load and sort the entire set
+	// before returning it (and making the cost of a paginated
+	// query very high) and returning an unsorted set would make
+	// pagination impossible.
+	// To workaround this silly misplan, a ORDER BY in the first
+	// table forces ordering of `maxkv` (without paying for it
+	// as it is the same order as the index) and CROSS JOIN is
+	// used as it forces SQLite to keep the outer-loop order
+	// when joining tables.
+	// See https://www.sqlite.org/optoverview.html#crossjoin
+	// for more details.
 	listSQL = `
-		SELECT kv.id, 
-			name, 
-			CASE WHEN kv.created THEN kv.id ELSE kv.create_revision END AS create_revision,
-			lease, 
+		WITH maxkv AS (
+			SELECT MAX(id) AS id
+			FROM kine
+			WHERE name >= CAST(? AS TEXT) AND name < CAST(? AS TEXT)
+				AND id <= ?
+			GROUP BY name
+			HAVING deleted = 0
+			ORDER BY name
+		)
+		SELECT kv.id,
+			name,
+			CASE
+				WHEN kv.created THEN kv.id
+				ELSE kv.create_revision
+			END AS create_revision,
+			lease,
 			value
-		FROM kine AS kv
-		JOIN (
-			SELECT MAX(mkv.id) as id
-			FROM kine AS mkv
-			WHERE
-				mkv.name >= CAST(? AS TEXT) AND mkv.name < CAST(? AS TEXT)
-				AND mkv.id <= ?
-			GROUP BY mkv.name
-		) AS maxkv
-	    	ON maxkv.id = kv.id
-		WHERE kv.deleted = 0
-		ORDER BY kv.name ASC, kv.id ASC`
+		FROM maxkv CROSS JOIN kine kv
+			ON maxkv.id = kv.id`
 
 	revisionIntervalSQL = `
 		SELECT (
@@ -118,17 +136,14 @@ var (
 
 	countRevisionSQL = `
 		SELECT COUNT(*)
-		FROM kine AS kv
-		JOIN (
-			SELECT MAX(mkv.id) as id
-			FROM kine AS mkv
-			WHERE
-				mkv.name >= CAST(? AS TEXT) AND mkv.name < CAST(? AS TEXT)
-				AND mkv.id <= ?
-			GROUP BY mkv.name
-		) AS maxkv
-	    	ON maxkv.id = kv.id
-		WHERE kv.deleted = 0`
+		FROM (
+			SELECT MAX(id)
+			FROM kine
+			WHERE name >= CAST(? AS TEXT) AND name < CAST(? AS TEXT)
+				AND id <= ?
+			GROUP BY name
+			HAVING deleted = 0
+		)`
 
 	afterSQLPrefix = `
 		SELECT id, name, created, deleted, create_revision, prev_revision, lease, value, old_value
@@ -144,8 +159,8 @@ var (
 		ORDER BY id ASC`
 
 	ttlSQL = `
-		SELECT kv.id, 
-			name, 
+		SELECT kv.id,
+			name,
 			lease
 		FROM kine AS kv
 		JOIN (
@@ -168,11 +183,11 @@ var (
 
 	deleteSQL = `
 		INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
-		SELECT 
+		SELECT
 			name,
 			0 AS created,
 			1 AS deleted,
-			CASE 
+			CASE
 				WHEN kine.created THEN id
 				ELSE create_revision
 			END AS create_revision,
@@ -190,10 +205,10 @@ var (
 			CAST(? AS TEXT) AS name,
 			1 AS created,
 			0 AS deleted,
-			0 AS create_revision, 
-			COALESCE(id, 0) AS prev_revision, 
-			? AS lease, 
-			? AS value, 
+			0 AS create_revision,
+			COALESCE(id, 0) AS prev_revision,
+			? AS lease,
+			? AS value,
 			NULL AS old_value
 		FROM (
 			SELECT MAX(id) AS id, deleted
@@ -252,8 +267,6 @@ func (s Stripped) String() string {
 }
 
 type Driver struct {
-	mu sync.Mutex
-
 	config *DriverConfig
 }
 
@@ -361,6 +374,11 @@ func migrate(ctx context.Context, txn *sql.Tx) error {
 	switch currentSchemaVersion {
 	case NewSchemaVersion(0, 0):
 		if err := applySchemaV0_1(ctx, txn); err != nil {
+			return err
+		}
+		fallthrough
+	case NewSchemaVersion(0, 1):
+		if err := applySchemaV0_2(ctx, txn); err != nil {
 			return err
 		}
 	default:
