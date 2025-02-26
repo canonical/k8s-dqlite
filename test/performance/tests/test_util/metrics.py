@@ -3,6 +3,7 @@
 #
 import logging
 import os
+import time
 from typing import List
 
 from test_util import config, harness, util
@@ -117,7 +118,16 @@ def configure_kube_burner(instance: harness.Instance):
         == 0
     ):
         url = config.KUBE_BURNER_URL
-        instance.exec(["wget", url])
+        for retry in range(5):
+            try:
+                instance.exec(["wget", url])
+                break
+            except Exception as ex:
+                if retry < 5:
+                    time.sleep(3)
+                    LOG.exception("Failed to download kube-burner, retrying...")
+                else:
+                    raise ex
         tarball_name = os.path.basename(url)
         instance.exec(["tar", "-zxvf", tarball_name, "kube-burner"])
         instance.exec(["rm", tarball_name])
