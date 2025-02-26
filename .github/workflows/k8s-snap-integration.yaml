@@ -20,6 +20,7 @@ jobs:
       matrix:
         os: ["ubuntu:20.04", "ubuntu:22.04", "ubuntu:24.04"]
         arch: ["arm64", "amd64"]
+      fail-fast: false
     steps:
       - name: Checking out repo
         uses: actions/checkout@v4
