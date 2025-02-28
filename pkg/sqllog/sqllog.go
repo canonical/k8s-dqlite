@@ -69,9 +69,10 @@ type SQLLog struct {
 	stop    func()
 	started bool
 
-	broadcaster broadcaster.Broadcaster[[]*limited.Event]
-	notify      chan int64
-	wg          sync.WaitGroup
+	broadcaster  broadcaster.Broadcaster[[]*limited.Event]
+	notify       chan int64
+	wg           sync.WaitGroup
+	watchPollRev int64
 }
 
 type SQLLogConfig struct {
@@ -426,6 +427,10 @@ func (s *SQLLog) Watch(ctx context.Context, key, rangeEnd []byte, startRevision 
 	return res, nil
 }
 
+func (s *SQLLog) WatchPollRevision() int64 {
+	return s.watchPollRev
+}
+
 func filterEvents(events []*limited.Event, key string, startRevision int64) []*limited.Event {
 	filteredEventList := make([]*limited.Event, 0, len(events))
 	checkPrefix := strings.HasSuffix(key, "/")
@@ -485,11 +490,11 @@ func (s *SQLLog) startWatch(ctx context.Context) (chan []*limited.Event, error) 
 
 func (s *SQLLog) poll(ctx context.Context, result chan []*limited.Event, pollStart int64) {
 	var (
-		last        = pollStart
 		skip        int64
 		skipTime    time.Time
 		waitForMore = true
 	)
+	s.watchPollRev = pollStart
 
 	wait := time.NewTicker(s.config.PollInterval)
 	defer wait.Stop()
@@ -501,14 +506,14 @@ func (s *SQLLog) poll(ctx context.Context, result chan []*limited.Event, pollSta
 			case <-ctx.Done():
 				return
 			case check := <-s.notify:
-				if check <= last {
+				if check <= s.watchPollRev {
 					continue
 				}
 			case <-wait.C:
 			}
 		}
 		waitForMore = true
-		events, err := s.getLatestEvents(ctx, last)
+		events, err := s.getLatestEvents(ctx, s.watchPollRev)
 		if err != nil {
 			if !errors.Is(err, context.DeadlineExceeded) {
 				logrus.Errorf("fail to get latest events: %v", err)
@@ -522,7 +527,7 @@ func (s *SQLLog) poll(ctx context.Context, result chan []*limited.Event, pollSta
 
 		waitForMore = len(events) < 100
 
-		rev := last
+		rev := s.watchPollRev
 		var (
 			sequential []*limited.Event
 			saveLast   bool
@@ -572,7 +577,7 @@ func (s *SQLLog) poll(ctx context.Context, result chan []*limited.Event, pollSta
 		}
 
 		if saveLast {
-			last = rev
+			s.watchPollRev = rev
 			if len(sequential) > 0 {
 				result <- sequential
 			}

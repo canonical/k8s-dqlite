@@ -282,24 +282,18 @@ func (w *watcher) Progress(ctx context.Context) {
 
 	// If all watchers are synced, send a broadcast progress notification with the latest revision.
 	id := int64(clientv3.InvalidWatchID)
-	rev, err := w.backend.CurrentRevision(ctx)
-	if err != nil {
-		logrus.Errorf("Failed to get current revision for ProgressNotify: %v", err)
-		return
-	}
+	watchPollRev := w.backend.WatchPollRevision()
 
-	logrus.Tracef("WATCH SEND PROGRESS id=%d, revision=%d", id, rev)
-	go w.server.Send(&etcdserverpb.WatchResponse{Header: txnHeader(rev), WatchId: id})
+	logrus.Tracef("WATCH SEND PROGRESS id=%d, revision=%d", id, watchPollRev)
+	go w.server.Send(&etcdserverpb.WatchResponse{Header: txnHeader(watchPollRev), WatchId: id})
 }
 
 // ProgressIfSynced sends a progress report on any channels that are synced and blocked on the outer loop
 func (w *watcher) ProgressIfSynced(ctx context.Context) error {
 	logrus.Tracef("WATCH PROGRESS TICK")
-	revision, err := w.backend.CurrentRevision(ctx)
-	if err != nil {
-		logrus.Errorf("Failed to get current revision for ProgressNotify: %v", err)
-		return err
-	}
+
+	watchPollRev := w.backend.WatchPollRevision()
+	logrus.Debugf("WATCH PROGRESS TICK revision=%d", watchPollRev)
 
 	w.Lock()
 	defer w.Unlock()
@@ -307,7 +301,7 @@ func (w *watcher) ProgressIfSynced(ctx context.Context) error {
 	// Send revision to all synced channels
 	for _, progressCh := range w.progress {
 		select {
-		case progressCh <- revision:
+		case progressCh <- watchPollRev:
 		default:
 		}
 	}
