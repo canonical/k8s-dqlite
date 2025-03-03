@@ -5,11 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/canonical/k8s-dqlite/pkg/broadcaster"
 	"github.com/canonical/k8s-dqlite/pkg/limited"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
@@ -69,9 +67,14 @@ type SQLLog struct {
 	stop    func()
 	started bool
 
-	broadcaster broadcaster.Broadcaster[[]*limited.Event]
-	notify      chan int64
-	wg          sync.WaitGroup
+	watchers *Watchers
+	notify   chan int64
+	wg       sync.WaitGroup
+}
+
+type Watchers struct {
+	channels map[int64]*limited.Watcher
+	mu       sync.Mutex
 }
 
 type SQLLogConfig struct {
@@ -90,8 +93,9 @@ type SQLLogConfig struct {
 
 func New(config *SQLLogConfig) *SQLLog {
 	return &SQLLog{
-		config: config,
-		notify: make(chan int64, 1024),
+		config:   config,
+		notify:   make(chan int64, 1024),
+		watchers: &Watchers{channels: make(map[int64]*limited.Watcher)},
 	}
 }
 
@@ -109,7 +113,10 @@ func (s *SQLLog) Start(startCtx context.Context) error {
 	}
 
 	ctx, stop := context.WithCancel(context.Background())
-	err = s.broadcaster.Start(ctx, s.startWatch)
+	s.watchers.channels = make(map[int64]*limited.Watcher)
+	pollCh, err := s.startWatch(ctx)
+	s.forwardPolledEventsToWatchers(ctx, pollCh)
+
 	if err != nil {
 		stop()
 		return err
@@ -349,13 +356,22 @@ func (s *SQLLog) ttl(ctx context.Context) {
 			go run(ctx, key, revision, time.Duration(lease)*time.Second)
 		}
 
-		watchCh, err := s.Watch(ctx, []byte("/"), []byte("0"), startRevision)
+		ctx, cancel := context.WithCancel(ctx)
+		watcher := &limited.Watcher{
+			Cancel:        cancel,
+			EventsCh:      make(chan []*limited.Event, 100),
+			Key:           []byte("/"),
+			StartRevision: startRevision,
+		}
+
+		// TODO needs to be restarted, never cancelled/dropped
+		err = s.Watch(ctx, -1, watcher, []byte("0"))
 		if err != nil {
 			logrus.Errorf("failed to watch events for ttl: %v", err)
 			return
 		}
 
-		for events := range watchCh {
+		for events := range watcher.EventsCh {
 			for _, event := range events {
 				if event.KV.Lease > 0 {
 					go run(ctx, []byte(event.KV.Key), event.KV.ModRevision, time.Duration(event.KV.Lease)*time.Second)
@@ -365,82 +381,48 @@ func (s *SQLLog) ttl(ctx context.Context) {
 	}()
 }
 
-func (s *SQLLog) Watch(ctx context.Context, key, rangeEnd []byte, startRevision int64) (<-chan []*limited.Event, error) {
+func (s *SQLLog) Watch(ctx context.Context, id int64, watcher *limited.Watcher, rangeEnd []byte) error {
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Watch", otelName))
 	defer span.End()
 	span.SetAttributes(
-		attribute.String("key", string(key)),
+		attribute.String("key", string(watcher.Key)),
 		attribute.String("rangeEnd", string(rangeEnd)),
-		attribute.Int64("startRevision", startRevision),
+		attribute.Int64("startRevision", watcher.StartRevision),
 	)
 
 	// starting watching right away so we don't miss anything
-	ctx, cancel := context.WithCancel(ctx)
-	values, err := s.broadcaster.Subscribe(ctx)
-	if err != nil {
-		cancel()
-		return nil, err
+	if s.watchers == nil {
+		s.watchers = &Watchers{mu: sync.Mutex{}, channels: make(map[int64]*limited.Watcher)}
+	}
+	s.watchers.mu.Lock()
+	defer s.watchers.mu.Unlock()
+	s.watchers.channels[id] = watcher
+
+	if watcher.StartRevision > 0 {
+		watcher.StartRevision -= 1
 	}
 
-	if startRevision > 0 {
-		startRevision = startRevision - 1
-	}
-
-	initialRevision, initialEvents, err := s.After(ctx, key, rangeEnd, startRevision, 0)
+	initialRevision, initialEvents, err := s.After(ctx, watcher.Key, rangeEnd, watcher.StartRevision, 0)
 	if err != nil {
 		if !errors.Is(err, context.Canceled) {
 			span.RecordError(err)
-			logrus.Errorf("Failed to list %s for revision %d: %v", key, startRevision, err)
+			logrus.Errorf("Failed to list %s for revision %d: %v", watcher.Key, watcher.StartRevision, err)
 			// We return an error message that the api-server understands: limited.ErrGRPCUnhealthy
 			if err != limited.ErrCompacted {
 				err = limited.ErrGRPCUnhealthy
 			}
 		}
 		// Cancel the watcher by cancelling the context of its subscription to the broadcaster
-		cancel()
-		return nil, err
+		watcher.Cancel()
+		return err
 	}
+	watcher.StartRevision = initialRevision
 
-	res := make(chan []*limited.Event, 100)
 	if len(initialEvents) > 0 {
-		res <- initialEvents
+		watcher.EventsCh <- initialEvents
 	}
 
-	s.wg.Add(1)
-	go func() {
-		defer func() {
-			close(res)
-			s.wg.Done()
-			cancel()
-		}()
-
-		// Filter for events that update/create/delete the given key
-		for events := range values {
-			filtered := filterEvents(events, string(key), initialRevision)
-			if len(filtered) > 0 {
-				res <- filtered
-			}
-		}
-	}()
-
-	return res, nil
-}
-
-func filterEvents(events []*limited.Event, key string, startRevision int64) []*limited.Event {
-	filteredEventList := make([]*limited.Event, 0, len(events))
-	checkPrefix := strings.HasSuffix(key, "/")
-
-	for _, event := range events {
-		if event.KV.ModRevision <= startRevision {
-			continue
-		}
-		if !(checkPrefix && strings.HasPrefix(event.KV.Key, key)) && event.KV.Key != key {
-			continue
-		}
-		filteredEventList = append(filteredEventList, event)
-	}
-
-	return filteredEventList
+	return nil
 }
 
 func (s *SQLLog) startWatch(ctx context.Context) (chan []*limited.Event, error) {
@@ -453,7 +435,7 @@ func (s *SQLLog) startWatch(ctx context.Context) (chan []*limited.Event, error) 
 		return nil, err
 	}
 
-	c := make(chan []*limited.Event)
+	pollCh := make(chan []*limited.Event)
 	// start compaction and polling at the same time to watch starts
 	// at the oldest revision, but compaction doesn't create gaps
 	s.wg.Add(2)
@@ -476,14 +458,35 @@ func (s *SQLLog) startWatch(ctx context.Context) (chan []*limited.Event, error) 
 	}()
 
 	go func() {
-		defer s.wg.Done()
-		s.poll(ctx, c, pollStart)
+		defer func() {
+			s.wg.Done()
+			defer close(pollCh)
+		}()
+		s.poll(ctx, pollCh, pollStart)
 	}()
 
-	return c, nil
+	return pollCh, nil
 }
 
-func (s *SQLLog) poll(ctx context.Context, result chan []*limited.Event, pollStart int64) {
+func (s *SQLLog) StopWatch(all bool, id int64) {
+	s.watchers.mu.Lock()
+	defer s.watchers.mu.Unlock()
+	if all {
+		for id, watcher := range s.watchers.channels {
+			watcher.Cancel()
+			close(watcher.EventsCh)
+			delete(s.watchers.channels, id)
+		}
+		return
+	}
+	if watcher, ok := s.watchers.channels[id]; ok {
+		watcher.Cancel()
+		close(watcher.EventsCh)
+		delete(s.watchers.channels, id)
+	}
+}
+
+func (s *SQLLog) poll(ctx context.Context, pollCh chan []*limited.Event, pollStart int64) {
 	var (
 		last        = pollStart
 		skip        int64
@@ -493,7 +496,6 @@ func (s *SQLLog) poll(ctx context.Context, result chan []*limited.Event, pollSta
 
 	wait := time.NewTicker(s.config.PollInterval)
 	defer wait.Stop()
-	defer close(result)
 
 	for {
 		if waitForMore {
@@ -574,10 +576,40 @@ func (s *SQLLog) poll(ctx context.Context, result chan []*limited.Event, pollSta
 		if saveLast {
 			last = rev
 			if len(sequential) > 0 {
-				result <- sequential
+				pollCh <- sequential
 			}
 		}
 	}
+}
+
+func (s *SQLLog) forwardPolledEventsToWatchers(ctx context.Context, pollCh chan []*limited.Event) {
+	// TODO this lock thing
+	defer s.StopWatch(true, 0)
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case events, ok := <-pollCh:
+				if !ok {
+					logrus.Debugf("Poll channel closed")
+					return
+				}
+				s.watchers.mu.Lock()
+				for id, watcher := range s.watchers.channels {
+					select {
+					case watcher.EventsCh <- events:
+					default:
+						logrus.Debugf("Dropping Slow watcher %v", id)
+						// TODO do watch cancel limited progress channel
+						// watcher.Cancel()
+						// delete(s.watchers, id)
+					}
+				}
+				s.watchers.mu.Unlock()
+			}
+		}
+	}()
 }
 
 func (s *SQLLog) getLatestEvents(ctx context.Context, last int64) ([]*limited.Event, error) {

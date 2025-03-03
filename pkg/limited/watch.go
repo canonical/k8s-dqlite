@@ -2,6 +2,7 @@ package limited
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -23,8 +24,7 @@ func (s *KVServerBridge) Watch(ws etcdserverpb.Watch_WatchServer) error {
 	w := watcher{
 		server:   ws,
 		backend:  s.limited.backend,
-		watches:  map[int64]func(){},
-		progress: map[int64]chan<- int64{},
+		progress: map[int64]chan<- struct{}{},
 	}
 	defer w.Close()
 
@@ -74,8 +74,7 @@ type watcher struct {
 	wg       sync.WaitGroup
 	backend  Backend
 	server   etcdserverpb.Watch_WatchServer
-	watches  map[int64]func()
-	progress map[int64]chan<- int64
+	progress map[int64]chan<- struct{}
 }
 
 func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest) {
@@ -90,19 +89,23 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 	ctx, cancel := context.WithCancel(ctx)
 
 	id := atomic.AddInt64(&watchID, 1)
-	w.watches[id] = cancel
 	w.wg.Add(1)
 
-	key := string(r.Key)
+	watcher := &Watcher{
+		Cancel:   cancel,
+		EventsCh: make(chan []*Event, 100),
+		Key:      r.Key,
+	}
+
 	startRevision := r.StartRevision
 
-	var progressCh chan int64
+	var progressCh chan struct{}
 	if r.ProgressNotify {
-		progressCh = make(chan int64)
+		progressCh = make(chan struct{})
 		w.progress[id] = progressCh
 	}
 
-	logrus.Tracef("WATCH START id=%d, key=%s, revision=%d, progressNotify=%v, watchCount=%d", id, key, startRevision, r.ProgressNotify, len(w.watches))
+	logrus.Tracef("WATCH START id=%d, key=%s, revision=%d, progressNotify=%v", id, string(r.Key), startRevision, r.ProgressNotify)
 
 	go func() {
 		defer w.wg.Done()
@@ -115,7 +118,7 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 			return
 		}
 
-		watchCh, err := w.backend.Watch(ctx, r.Key, r.RangeEnd, startRevision)
+		err := w.backend.Watch(ctx, id, watcher, r.RangeEnd)
 		if err != nil {
 			logrus.Errorf("Failed to start watch: %v", err)
 			w.Cancel(id, err)
@@ -124,6 +127,7 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 
 		trace := logrus.IsLevelEnabled(logrus.TraceLevel)
 		outer := true
+		watchCurrentRev := startRevision //TODO  maybe compact rev?
 		for outer {
 			var reads int
 			var events []*Event
@@ -131,13 +135,21 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 
 			// Wait for events or progress notifications
 			select {
-			case events = <-watchCh:
+			case events = <-watcher.EventsCh:
+				if len(events) > 0 {
+					watchCurrentRev = events[len(events)-1].KV.ModRevision
+				}
+				filteredEventList := filterEvents(events, *watcher)
+				if len(filteredEventList) == 0 {
+					continue
+				}
+
 				// We received events; batch any additional queued events
 				reads++
 				inner := true
 				for inner {
 					select {
-					case e, ok := <-watchCh:
+					case e, ok := <-watcher.EventsCh:
 						reads++
 						events = append(events, e...)
 						if !ok {
@@ -150,8 +162,9 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 						inner = false
 					}
 				}
-			case revision = <-progressCh:
+			case <-progressCh:
 				// Received progress update without events
+				revision = watchCurrentRev
 			}
 
 			// Determine the highest revision among the collected events
@@ -171,15 +184,33 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 					WatchId: id,
 					Events:  toEvents(events...),
 				}
-				logrus.Tracef("WATCH SEND id=%d, key=%s, revision=%d, events=%d, size=%d, reads=%d", id, key, revision, len(wr.Events), wr.Size(), reads)
+				logrus.Tracef("WATCH SEND id=%d, key=%s, revision=%d, events=%d, size=%d, reads=%d", id, string(r.Key), revision, len(wr.Events), wr.Size(), reads)
 				if err := w.server.Send(wr); err != nil {
 					w.Cancel(id, err)
 				}
 			}
 		}
 
-		logrus.Debugf("WATCH CLOSE id=%d, key=%s", id, key)
+		logrus.Debugf("WATCH CLOSE id=%d, key=%s", id, string(r.Key))
 	}()
+}
+
+func filterEvents(events []*Event, watcher Watcher) []*Event {
+	key := string(watcher.Key)
+	filteredEventList := make([]*Event, 0, len(events))
+	checkPrefix := strings.HasSuffix(key, "/")
+
+	for _, event := range events {
+		if event.KV.ModRevision <= watcher.StartRevision {
+			continue
+		}
+		if !(checkPrefix && strings.HasPrefix(event.KV.Key, key)) && event.KV.Key != key {
+			continue
+		}
+		filteredEventList = append(filteredEventList, event)
+	}
+
+	return filteredEventList
 }
 
 func toEvents(events ...*Event) []*mvccpb.Event {
@@ -211,10 +242,7 @@ func (w *watcher) Cancel(watchID int64, err error) {
 		close(progressCh)
 		delete(w.progress, watchID)
 	}
-	if cancel, ok := w.watches[watchID]; ok {
-		cancel()
-		delete(w.watches, watchID)
-	}
+	w.backend.StopWatch(false, watchID)
 	w.Unlock()
 
 	revision := int64(0)
@@ -252,10 +280,7 @@ func (w *watcher) Close() {
 		close(progressCh)
 		delete(w.progress, id)
 	}
-	for id, cancel := range w.watches {
-		cancel()
-		delete(w.watches, id)
-	}
+	w.backend.StopWatch(true, 0)
 	w.Unlock()
 	w.wg.Wait()
 }
@@ -273,7 +298,7 @@ func (w *watcher) Progress(ctx context.Context) {
 	// Send revision 0, as we don't actually want the watchers to send a progress response if they do receive.
 	for id, progressCh := range w.progress {
 		select {
-		case progressCh <- 0:
+		case progressCh <- struct{}{}:
 		default:
 			logrus.Tracef("WATCH SEND PROGRESS FAILED NOT SYNCED id=%d ", id)
 			return
@@ -295,11 +320,6 @@ func (w *watcher) Progress(ctx context.Context) {
 // ProgressIfSynced sends a progress report on any channels that are synced and blocked on the outer loop
 func (w *watcher) ProgressIfSynced(ctx context.Context) error {
 	logrus.Tracef("WATCH PROGRESS TICK")
-	revision, err := w.backend.CurrentRevision(ctx)
-	if err != nil {
-		logrus.Errorf("Failed to get current revision for ProgressNotify: %v", err)
-		return err
-	}
 
 	w.Lock()
 	defer w.Unlock()
@@ -307,7 +327,7 @@ func (w *watcher) ProgressIfSynced(ctx context.Context) error {
 	// Send revision to all synced channels
 	for _, progressCh := range w.progress {
 		select {
-		case progressCh <- revision:
+		case progressCh <- struct{}{}:
 		default:
 		}
 	}
