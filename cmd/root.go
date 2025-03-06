@@ -168,6 +168,7 @@ var rootCmd = &cobra.Command{
 			StorageDir:    storageDir,
 			ListenAddress: listenAddress,
 			DiskMode:      diskModeEnabled,
+			BusyTimeout:   time.Second,
 
 			LowDiskThresholdBytes: watchAvailableStorageMinBytes,
 			LowDiskCheckInterval:  watchAvailableStorageInterval,

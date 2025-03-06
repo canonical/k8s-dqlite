@@ -38,6 +38,7 @@ type ServerConfig struct {
 	StorageDir            string
 	ListenAddress         string
 	DiskMode              bool
+	BusyTimeout           time.Duration
 	LowDiskThresholdBytes uint64
 	LowDiskCheckInterval  time.Duration
 	LowDiskAction         LowDiskAction
@@ -205,6 +206,10 @@ func New(config *ServerConfig) (*Server, error) {
 		if err := os.Remove(filepath.Join(config.StorageDir, "update.yaml")); err != nil {
 			return nil, fmt.Errorf("failed to remove update.yaml after dqlite address update: %w", err)
 		}
+	}
+
+	if config.BusyTimeout != 0 {
+		options = append(options, app.WithBusyTimeout(config.BusyTimeout))
 	}
 
 	// handle failure-domain
