@@ -19,45 +19,64 @@ import (
 	"github.com/canonical/k8s-dqlite/pkg/endpoint"
 	"github.com/canonical/k8s-dqlite/pkg/limited"
 	"github.com/canonical/k8s-dqlite/pkg/sqllog"
-	k8s_dqlite_tls "github.com/canonical/k8s-dqlite/pkg/tls"
 	"github.com/sirupsen/logrus"
 )
 
 // Server is the main k8s-dqlite server.
 type Server struct {
+	config *ServerConfig
+
 	// app is the dqlite application driving the server.
-	app *app.App
-
+	app     *app.App
 	backend limited.Backend
-
-	serverConfig         *ServerConfig
-	connectionPoolConfig *ConnectionPoolConfig
-
-	// storageDir is the root directory used for dqlite storage.
-	storageDir string
-	// watchAvailableStorageMinBytes is the minimum required bytes that the server will expect to be
-	// available on the storage directory. If not, it will handover the leader role and terminate.
-	watchAvailableStorageMinBytes uint64
-	// watchAvailableStorageInterval is the interval to check for available disk size. If set to
-	// zero, then no checks will be performed.
-	watchAvailableStorageInterval time.Duration
-	// actionOnLowDisk is the action to perform in case the system is running low on disk.
-	// One of "terminate", "handover", "none"
-	actionOnLowDisk string
 
 	// mustStopCh is used when the server must terminate.
 	mustStopCh chan struct{}
 }
 
 type ServerConfig struct {
-	ListenAddress string
+	StorageDir            string
+	ListenAddress         string
+	DiskMode              bool
+	LowDiskThresholdBytes uint64
+	LowDiskCheckInterval  time.Duration
+	LowDiskAction         LowDiskAction
 
 	CompactInterval   time.Duration
 	PollInterval      time.Duration
 	WatchQueryTimeout time.Duration
 	NotifyInterval    time.Duration
 
-	TlsConfig k8s_dqlite_tls.Config
+	ConnectionPoolConfig *ConnectionPoolConfig
+	TlsConfig            *TlsConfig
+}
+
+type LowDiskAction int
+
+const (
+	LowDiskActionNone LowDiskAction = iota
+	LowDiskActionHandover
+	LowDiskActionTerminate
+)
+
+func (e LowDiskAction) String() string {
+	switch e {
+	case LowDiskActionNone:
+		return "none"
+	case LowDiskActionHandover:
+		return "handover"
+	case LowDiskActionTerminate:
+		return "terminate"
+	default:
+		return "<unknown>"
+	}
+}
+
+type TlsConfig struct {
+	CertFile               string
+	KeyFile                string
+	MinTlsVersion          uint16
+	ClientSessionCacheSize int
 }
 
 type ConnectionPoolConfig struct {
@@ -109,45 +128,17 @@ const (
 )
 
 // New creates a new instance of Server based on configuration.
-func New(
-	dir string,
-	listen string,
-	enableTLS bool,
-	diskMode bool,
-	clientSessionCacheSize uint,
-	minTLSVersion string,
-	watchAvailableStorageInterval time.Duration,
-	watchAvailableStorageMinBytes uint64,
-	lowAvailableStorageAction string,
-	connectionPoolConfig *ConnectionPoolConfig,
-	watchQueryTimeout time.Duration,
-	watchProgressNotifyInterval time.Duration,
-
-) (*Server, error) {
+func New(config *ServerConfig) (*Server, error) {
 	options := []app.Option{}
-	serverConfig := &ServerConfig{
-		ListenAddress: listen,
 
-		CompactInterval:   5 * time.Minute,
-		PollInterval:      1 * time.Second,
-		WatchQueryTimeout: watchQueryTimeout,
-		NotifyInterval:    watchProgressNotifyInterval,
-	}
-
-	switch lowAvailableStorageAction {
-	case "none", "handover", "terminate":
-	default:
-		return nil, fmt.Errorf("unsupported low available storage action %v (supported values are none, handover, terminate)", lowAvailableStorageAction)
-	}
-
-	if mustInit, err := fileExists(dir, "init.yaml"); err != nil {
+	if mustInit, err := fileExists(config.StorageDir, "init.yaml"); err != nil {
 		return nil, fmt.Errorf("failed to check for init.yaml: %w", err)
 	} else if mustInit {
 		// handle init.yaml
 		var init InitConfiguration
 
 		// ensure we do not have existing state
-		files, err := os.ReadDir(dir)
+		files, err := os.ReadDir(config.StorageDir)
 		if err != nil {
 			return nil, fmt.Errorf("failed to list storage dir contents: %w", err)
 		}
@@ -157,7 +148,7 @@ func New(
 			}
 		}
 
-		if err := fileUnmarshal(&init, dir, "init.yaml"); err != nil {
+		if err := fileUnmarshal(&init, config.StorageDir, "init.yaml"); err != nil {
 			return nil, fmt.Errorf("failed to read init.yaml: %w", err)
 		}
 		if init.Address == "" {
@@ -165,14 +156,14 @@ func New(
 		}
 
 		// delete init.yaml from disk
-		if err := os.Remove(filepath.Join(dir, "init.yaml")); err != nil {
+		if err := os.Remove(filepath.Join(config.StorageDir, "init.yaml")); err != nil {
 			return nil, fmt.Errorf("failed to remove init.yaml after init: %w", err)
 		}
 
 		logrus.WithFields(logrus.Fields{"address": init.Address, "cluster": init.Cluster}).Print("Will initialize dqlite node")
 
 		options = append(options, app.WithAddress(init.Address), app.WithCluster(init.Cluster))
-	} else if mustUpdate, err := fileExists(dir, "update.yaml"); err != nil {
+	} else if mustUpdate, err := fileExists(config.StorageDir, "update.yaml"); err != nil {
 		return nil, fmt.Errorf("failed to check for update.yaml: %w", err)
 	} else if mustUpdate {
 		// handle update.yaml
@@ -182,13 +173,13 @@ func New(
 		)
 
 		// load info.yaml and update.yaml
-		if err := fileUnmarshal(&update, dir, "update.yaml"); err != nil {
+		if err := fileUnmarshal(&update, config.StorageDir, "update.yaml"); err != nil {
 			return nil, fmt.Errorf("failed to read update.yaml: %w", err)
 		}
 		if update.Address == "" {
 			return nil, fmt.Errorf("empty address in update.yaml")
 		}
-		if err := fileUnmarshal(&info, dir, "info.yaml"); err != nil {
+		if err := fileUnmarshal(&info, config.StorageDir, "info.yaml"); err != nil {
 			return nil, fmt.Errorf("failed to read info.yaml: %w", err)
 		}
 
@@ -198,30 +189,30 @@ func New(
 		info.Address = update.Address
 
 		// reconfigure dqlite membership
-		if err := dqlite.ReconfigureMembershipExt(dir, []dqlite.NodeInfo{info}); err != nil {
+		if err := dqlite.ReconfigureMembershipExt(config.StorageDir, []dqlite.NodeInfo{info}); err != nil {
 			return nil, fmt.Errorf("failed to reconfigure dqlite membership for new address: %w", err)
 		}
 
 		// update info.yaml and cluster.yaml on disk
-		if err := fileMarshal(info, dir, "info.yaml"); err != nil {
+		if err := fileMarshal(info, config.StorageDir, "info.yaml"); err != nil {
 			return nil, fmt.Errorf("failed to write new address in info.yaml: %w", err)
 		}
-		if err := fileMarshal([]dqlite.NodeInfo{info}, dir, "cluster.yaml"); err != nil {
+		if err := fileMarshal([]dqlite.NodeInfo{info}, config.StorageDir, "cluster.yaml"); err != nil {
 			return nil, fmt.Errorf("failed to write new address in cluster.yaml: %w", err)
 		}
 
 		// delete update.yaml from disk
-		if err := os.Remove(filepath.Join(dir, "update.yaml")); err != nil {
+		if err := os.Remove(filepath.Join(config.StorageDir, "update.yaml")); err != nil {
 			return nil, fmt.Errorf("failed to remove update.yaml after dqlite address update: %w", err)
 		}
 	}
 
 	// handle failure-domain
 	var failureDomain uint64
-	if exists, err := fileExists(dir, "failure-domain"); err != nil {
+	if exists, err := fileExists(config.StorageDir, "failure-domain"); err != nil {
 		return nil, fmt.Errorf("failed to check failure-domain: %w", err)
 	} else if exists {
-		if err := fileUnmarshal(&failureDomain, dir, "failure-domain"); err != nil {
+		if err := fileUnmarshal(&failureDomain, config.StorageDir, "failure-domain"); err != nil {
 			return nil, fmt.Errorf("failed to parse failure-domain from file: %w", err)
 		}
 	}
@@ -229,52 +220,36 @@ func New(
 	options = append(options, app.WithFailureDomain(failureDomain))
 
 	// handle TLS
-	if enableTLS {
-		crtFile := filepath.Join(dir, "cluster.crt")
-		keyFile := filepath.Join(dir, "cluster.key")
-
-		keypair, err := tls.LoadX509KeyPair(crtFile, keyFile)
+	if config.TlsConfig != nil {
+		certPEM, err := os.ReadFile(config.TlsConfig.CertFile)
+		if err != nil {
+			return nil, err
+		}
+		keyPEM, err := os.ReadFile(config.TlsConfig.KeyFile)
+		if err != nil {
+			return nil, err
+		}
+		keypair, err := tls.X509KeyPair(certPEM, keyPEM)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load keypair from cluster.crt and cluster.key: %w", err)
 		}
-		crtPEM, err := os.ReadFile(crtFile)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read cluster.crt: %w", err)
-		}
 		pool := x509.NewCertPool()
-		if !pool.AppendCertsFromPEM(crtPEM) {
+		if !pool.AppendCertsFromPEM(certPEM) {
 			return nil, fmt.Errorf("failed to add certificate to pool")
 		}
 
 		listen, dial := app.SimpleTLSConfig(keypair, pool)
+		listen.MinVersion = config.TlsConfig.MinTlsVersion
 
-		if clientSessionCacheSize > 0 {
-			logrus.WithField("cache_size", clientSessionCacheSize).Print("Use TLS ClientSessionCache")
-			dial.ClientSessionCache = tls.NewLRUClientSessionCache(int(clientSessionCacheSize))
+		if config.TlsConfig.ClientSessionCacheSize > 0 {
+			logrus.WithField("cache_size", config.TlsConfig.ClientSessionCacheSize).Print("Use TLS ClientSessionCache")
+			dial.ClientSessionCache = tls.NewLRUClientSessionCache(int(config.TlsConfig.ClientSessionCacheSize))
 		} else {
 			logrus.Print("Disable TLS ClientSessionCache")
 			dial.ClientSessionCache = nil
 		}
 
-		switch minTLSVersion {
-		case "tls10":
-			listen.MinVersion = tls.VersionTLS10
-		case "tls11":
-			listen.MinVersion = tls.VersionTLS11
-		case "", "tls12":
-			minTLSVersion = "tls12"
-			listen.MinVersion = tls.VersionTLS12
-		case "tls13":
-			listen.MinVersion = tls.VersionTLS13
-		default:
-			return nil, fmt.Errorf("unsupported TLS version %v (supported values are tls10, tls11, tls12, tls13)", minTLSVersion)
-		}
-		logrus.WithField("min_tls_version", minTLSVersion).Print("Enable TLS")
-
-		serverConfig.TlsConfig = k8s_dqlite_tls.Config{
-			CertFile: crtFile,
-			KeyFile:  keyFile,
-		}
+		logrus.WithField("min_tls_version", listen.MinVersion).Print("Enable TLS")
 		options = append(options, app.WithTLS(listen, dial))
 	}
 
@@ -285,11 +260,11 @@ func New(
 		Trailing:  defaultTrailing,
 		Strategy:  dqlite.TrailingStrategyDynamic,
 	}
-	if exists, err := fileExists(dir, "tuning.yaml"); err != nil {
+	if exists, err := fileExists(config.StorageDir, "tuning.yaml"); err != nil {
 		return nil, fmt.Errorf("failed to check for tuning.yaml: %w", err)
 	} else if exists {
 		var tuning TuningConfiguration
-		if err := fileUnmarshal(&tuning, dir, "tuning.yaml"); err != nil {
+		if err := fileUnmarshal(&tuning, config.StorageDir, "tuning.yaml"); err != nil {
 			return nil, fmt.Errorf("failed to read tuning.yaml: %w", err)
 		}
 
@@ -332,17 +307,16 @@ func New(
 
 		// these are set in the k8s-dqlite endpoint config below
 		if tuning.K8sDqliteCompactInterval != nil {
-			serverConfig.CompactInterval = *tuning.K8sDqliteCompactInterval
+			config.CompactInterval = *tuning.K8sDqliteCompactInterval
 		}
 		if tuning.K8sDqlitePollInterval != nil {
-			serverConfig.PollInterval = *tuning.K8sDqlitePollInterval
+			config.PollInterval = *tuning.K8sDqlitePollInterval
 		}
 	}
-
 	logrus.WithFields(logrus.Fields{"threshold": snapshotParameters.Threshold, "trailing": snapshotParameters.Trailing}).Print("Configure dqlite raft snapshot parameters")
 	options = append(options, app.WithSnapshotParams(snapshotParameters))
 
-	if diskMode {
+	if config.DiskMode {
 		logrus.Print("Enable dqlite disk mode operation")
 		options = append(options, app.WithDiskMode(true))
 
@@ -351,51 +325,44 @@ func New(
 	}
 
 	// FIXME: this also starts dqlite. It should be moved to `Start`.
-	app, err := app.New(dir, options...)
+	app, err := app.New(config.StorageDir, options...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create dqlite app: %w", err)
 	}
 
 	return &Server{
-		app:                  app,
-		serverConfig:         serverConfig,
-		connectionPoolConfig: connectionPoolConfig,
-
-		storageDir:                    dir,
-		watchAvailableStorageMinBytes: watchAvailableStorageMinBytes,
-		watchAvailableStorageInterval: watchAvailableStorageInterval,
-		actionOnLowDisk:               lowAvailableStorageAction,
+		app:    app,
+		config: config,
 
 		mustStopCh: make(chan struct{}, 1),
 	}, nil
 }
 
 func (s *Server) watchAvailableStorageSize(ctx context.Context) {
-	logrus := logrus.WithField("dir", s.storageDir)
+	logrus := logrus.WithField("dir", s.config.StorageDir)
 
-	if s.watchAvailableStorageInterval <= 0 {
+	if s.config.LowDiskCheckInterval <= 0 {
 		logrus.Info("Disable periodic check for available disk size")
 		return
 	}
 
-	logrus.WithField("interval", s.watchAvailableStorageInterval).Info("Enable periodic check for available disk size")
+	logrus.WithField("interval", s.config.LowDiskCheckInterval).Info("Enable periodic check for available disk size")
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(s.watchAvailableStorageInterval):
-			if err := checkAvailableStorageSize(s.storageDir, s.watchAvailableStorageMinBytes); err != nil {
-				err := fmt.Errorf("periodic check for available disk storage failed: %w", err)
-
-				switch s.actionOnLowDisk {
-				case "none":
-					logrus.WithError(err).Info("Ignoring failed available disk storage check")
-				case "handover":
+		case <-time.After(s.config.LowDiskCheckInterval):
+			if availableBytes, err := availableStorage(s.config.StorageDir); err != nil {
+				logrus.WithError(err).Info("Periodic check for available disk storage failed")
+			} else if availableBytes < s.config.LowDiskThresholdBytes {
+				switch s.config.LowDiskAction {
+				case LowDiskActionNone:
+				case LowDiskActionHandover:
 					logrus.WithError(err).Info("Handover dqlite leadership role")
 					if err := s.app.Handover(ctx); err != nil {
 						logrus.WithError(err).Warning("Failed to handover dqlite leadership")
 					}
-				case "terminate":
+				case LowDiskActionTerminate:
 					logrus.WithError(err).Error("Terminating due to failed available disk storage check")
 					s.mustStopCh <- struct{}{}
 				}
@@ -416,7 +383,7 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	logrus.WithFields(logrus.Fields{"id": s.app.ID(), "address": s.app.Address()}).Print("Started dqlite")
 
-	logrus.WithField("config", s.serverConfig).Debug("Starting k8s-dqlite server")
+	logrus.WithField("config", s.config).Debug("Starting k8s-dqlite server")
 
 	db, err := s.robustOpenDb(ctx)
 	if err != nil {
@@ -433,9 +400,9 @@ func (s *Server) Start(ctx context.Context) error {
 
 	backend := sqllog.New(&sqllog.SQLLogConfig{
 		Driver:            driver,
-		CompactInterval:   s.serverConfig.CompactInterval,
-		PollInterval:      s.serverConfig.PollInterval,
-		WatchQueryTimeout: s.serverConfig.WatchQueryTimeout,
+		CompactInterval:   s.config.CompactInterval,
+		PollInterval:      s.config.PollInterval,
+		WatchQueryTimeout: s.config.WatchQueryTimeout,
 	})
 	if err := backend.Start(ctx); err != nil {
 		backend.Close()
@@ -445,8 +412,8 @@ func (s *Server) Start(ctx context.Context) error {
 	s.backend = backend
 
 	_, err = endpoint.Listen(ctx, &endpoint.EndpointConfig{
-		ListenAddress: s.serverConfig.ListenAddress,
-		Server:        limited.New(backend, s.serverConfig.NotifyInterval),
+		ListenAddress: s.config.ListenAddress,
+		Server:        limited.New(backend, s.config.NotifyInterval),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to start k8s-dqlite: %w", err)
@@ -454,7 +421,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	go s.watchAvailableStorageSize(ctx)
 
-	logrus.WithField("address", s.serverConfig.ListenAddress).Print("Started k8s-dqlite server")
+	logrus.WithField("address", s.config.ListenAddress).Print("Started k8s-dqlite server")
 	return nil
 }
 
@@ -479,7 +446,7 @@ func (s *Server) robustOpenDb(ctx context.Context) (*sql.DB, error) {
 		return nil, err
 	}
 
-	s.connectionPoolConfig.apply(db)
+	s.config.ConnectionPoolConfig.apply(db)
 	return db, nil
 }
 

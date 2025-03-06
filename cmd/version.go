@@ -3,6 +3,8 @@ package cmd
 import (
 	"fmt"
 	"runtime"
+
+	"github.com/spf13/cobra"
 )
 
 /*
@@ -35,7 +37,14 @@ void print_dqlite_library_versions() {
 */
 import "C"
 
-func printVersions() error {
+func init() {
+	rootCmd.AddCommand(&cobra.Command{
+		Use:  "version",
+		RunE: printVersions,
+	})
+}
+
+func printVersions(cmd *cobra.Command, args []string) error {
 	fmt.Println("go:", runtime.Version())
 	C.print_dqlite_library_versions()
 	return nil

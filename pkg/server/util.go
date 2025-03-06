@@ -41,13 +41,10 @@ func fileExists(path ...string) (bool, error) {
 	return true, nil
 }
 
-func checkAvailableStorageSize(storageDir string, minimumBytes uint64) error {
+func availableStorage(storageDir string) (uint64, error) {
 	var stat unix.Statfs_t
 	if err := unix.Statfs(storageDir, &stat); err != nil {
-		return fmt.Errorf("failed to check available disk size: %w", err)
+		return 0, fmt.Errorf("failed to check available disk size: %w", err)
 	}
-	if availableBytes := stat.Bavail * uint64(stat.Bsize); availableBytes < minimumBytes {
-		return fmt.Errorf("available disk size (%v bytes) is below minimum required (%v bytes)", availableBytes, minimumBytes)
-	}
-	return nil
+	return stat.Bavail * uint64(stat.Bsize), nil
 }
