@@ -229,8 +229,6 @@ var (
 		FROM pragma_page_count(), pragma_page_size(), pragma_freelist_count()`
 )
 
-const maxRetries = 500
-
 type Stripped string
 
 func (s Stripped) String() string {
@@ -386,18 +384,14 @@ func (d *Driver) query(ctx context.Context, txName, query string, args ...interf
 	)
 
 	start := time.Now()
-	retryCount := 0
 	defer func() {
-		if err != nil {
-			err = fmt.Errorf("query (try: %d): %w", retryCount, err)
-		}
 		recordOpResult(txName, err, start)
 	}()
-	for ; retryCount < maxRetries; retryCount++ {
-		if retryCount == 0 {
-			logrus.Tracef("QUERY (try: %d) %v : %s", retryCount, args, Stripped(query))
-		} else {
-			logrus.Debugf("QUERY (try: %d) %v : %s", retryCount, args, Stripped(query))
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
 		}
 		rows, err = d.config.DB.QueryContext(ctx, query, args...)
 		if err == nil {
@@ -424,24 +418,19 @@ func (d *Driver) execute(ctx context.Context, txName, query string, args ...inte
 	)
 
 	start := time.Now()
-	retryCount := 0
 	defer func() {
-		if err != nil {
-			err = fmt.Errorf("exec (try: %d): %w", retryCount, err)
-		}
 		recordOpResult(txName, err, start)
 	}()
-	for ; retryCount < maxRetries; retryCount++ {
-		if retryCount > 2 {
-			logrus.Debugf("EXEC (try: %d) %v : %s", retryCount, args, Stripped(query))
-		} else {
-			logrus.Tracef("EXEC (try: %d) %v : %s", retryCount, args, Stripped(query))
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
 		}
 		result, err = d.config.DB.ExecContext(ctx, query, args...)
 		if err == nil {
 			break
-		}
-		if !d.config.Retry(err) {
+		} else if !d.config.Retry(err) {
 			break
 		}
 	}
@@ -575,13 +564,7 @@ func (d *Driver) Compact(ctx context.Context, revision int64) (err error) {
 		revision = currentRevision
 	}
 
-	for retryCount := 0; retryCount < maxRetries; retryCount++ {
-		err = d.tryCompact(ctx, compactStart, revision)
-		if err == nil || !d.config.Retry(err) {
-			break
-		}
-	}
-	return err
+	return d.tryCompact(ctx, compactStart, revision)
 }
 
 func (d *Driver) tryCompact(ctx context.Context, start, end int64) (err error) {
