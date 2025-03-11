@@ -24,6 +24,7 @@ func (s *KVServerBridge) Watch(ws etcdserverpb.Watch_WatchServer) error {
 	w := watcher{
 		server:   ws,
 		backend:  s.limited.backend,
+		watches:  map[int64]func(){},
 		progress: map[int64]chan<- struct{}{},
 	}
 	defer w.Close()
@@ -74,6 +75,7 @@ type watcher struct {
 	wg       sync.WaitGroup
 	backend  Backend
 	server   etcdserverpb.Watch_WatchServer
+	watches  map[int64]func()
 	progress map[int64]chan<- struct{}
 }
 
@@ -87,17 +89,9 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 	defer w.Unlock()
 
 	ctx, cancel := context.WithCancel(ctx)
-
+	w.watches[watchID] = cancel
 	id := atomic.AddInt64(&watchID, 1)
 	w.wg.Add(1)
-
-	watcher := &Watcher{
-		Cancel:   cancel,
-		EventsCh: make(chan []*Event, 100),
-		Key:      r.Key,
-	}
-
-	startRevision := r.StartRevision
 
 	var progressCh chan struct{}
 	if r.ProgressNotify {
@@ -105,7 +99,7 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 		w.progress[id] = progressCh
 	}
 
-	logrus.Tracef("WATCH START id=%d, key=%s, revision=%d, progressNotify=%v", id, string(r.Key), startRevision, r.ProgressNotify)
+	logrus.Tracef("WATCH START id=%d, key=%s, revision=%d, progressNotify=%v", id, string(r.Key), r.StartRevision, r.ProgressNotify)
 
 	go func() {
 		defer w.wg.Done()
@@ -118,7 +112,7 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 			return
 		}
 
-		err := w.backend.Watch(ctx, id, watcher, r.RangeEnd)
+		wn, err := w.backend.Watch(ctx, id, r.Key, r.StartRevision, r.RangeEnd)
 		if err != nil {
 			logrus.Errorf("Failed to start watch: %v", err)
 			w.Cancel(id, err)
@@ -127,7 +121,8 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 
 		trace := logrus.IsLevelEnabled(logrus.TraceLevel)
 		outer := true
-		watchCurrentRev := startRevision //TODO  maybe compact rev?
+		watchCurrentRev := r.StartRevision //TODO  maybe compact rev?
+		key := string(r.Key)
 		for outer {
 			var reads int
 			var events []*Event
@@ -135,11 +130,11 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 
 			// Wait for events or progress notifications
 			select {
-			case events = <-watcher.EventsCh:
+			case events = <-wn.Events:
 				if len(events) > 0 {
-					watchCurrentRev = events[len(events)-1].KV.ModRevision
+					watchCurrentRev = wn.CurrentRevision
 				}
-				filteredEventList := filterEvents(events, *watcher)
+				filteredEventList := filterEvents(events, key, r.StartRevision)
 				if len(filteredEventList) == 0 {
 					continue
 				}
@@ -149,7 +144,7 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 				inner := true
 				for inner {
 					select {
-					case e, ok := <-watcher.EventsCh:
+					case e, ok := <-wn.Events:
 						reads++
 						events = append(events, e...)
 						if !ok {
@@ -178,7 +173,7 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 			}
 
 			// Send response, even if this is a progress-only response and no events occured
-			if revision >= startRevision {
+			if revision >= r.StartRevision {
 				wr := &etcdserverpb.WatchResponse{
 					Header:  txnHeader(revision),
 					WatchId: id,
@@ -195,13 +190,12 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 	}()
 }
 
-func filterEvents(events []*Event, watcher Watcher) []*Event {
-	key := string(watcher.Key)
+func filterEvents(events []*Event, key string, startRevision int64) []*Event {
 	filteredEventList := make([]*Event, 0, len(events))
 	checkPrefix := strings.HasSuffix(key, "/")
 
 	for _, event := range events {
-		if event.KV.ModRevision <= watcher.StartRevision {
+		if event.KV.ModRevision <= startRevision {
 			continue
 		}
 		if !(checkPrefix && strings.HasPrefix(event.KV.Key, key)) && event.KV.Key != key {
@@ -242,7 +236,10 @@ func (w *watcher) Cancel(watchID int64, err error) {
 		close(progressCh)
 		delete(w.progress, watchID)
 	}
-	w.backend.StopWatch(false, watchID)
+	if cancel, ok := w.watches[watchID]; ok {
+		cancel()
+		delete(w.watches, watchID)
+	}
 	w.Unlock()
 
 	revision := int64(0)
@@ -280,7 +277,10 @@ func (w *watcher) Close() {
 		close(progressCh)
 		delete(w.progress, id)
 	}
-	w.backend.StopWatch(true, 0)
+	for id, cancel := range w.watches {
+		cancel()
+		delete(w.watches, id)
+	}
 	w.Unlock()
 	w.wg.Wait()
 }
