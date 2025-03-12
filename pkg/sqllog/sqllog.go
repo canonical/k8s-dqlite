@@ -78,10 +78,9 @@ type Watchers struct {
 }
 
 type Watcher struct {
-	Cancel        context.CancelFunc
-	EventsCh      chan []*limited.Event
-	StartRevision int64
-	Key           []byte
+	Cancel   context.CancelFunc
+	EventsCh chan []*limited.Event
+	Key      []byte
 }
 
 type SQLLogConfig struct {
@@ -101,7 +100,7 @@ type SQLLogConfig struct {
 func New(config *SQLLogConfig) *SQLLog {
 	return &SQLLog{
 		config:   config,
-		notify:   make(chan int64, 1024),
+		notify:   make(chan int64, 100),
 		watchers: &Watchers{channels: make(map[int64]*Watcher)},
 	}
 }
@@ -383,8 +382,8 @@ func (s *SQLLog) ttl(ctx context.Context) {
 
 func (s *SQLLog) Watch(ctx context.Context, watchId int64, key []byte, startRevision int64, rangeEnd []byte) (limited.WatchNotification, error) {
 	wn := &limited.WatchNotification{
-		CurrentRevision: 0,
-		Events:          make(chan []*limited.Event, 1024)}
+		CurrentRevision: startRevision,
+		Events:          make(chan []*limited.Event, 100)}
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Watch", otelName))
 	defer span.End()
 	span.SetAttributes(
@@ -398,7 +397,6 @@ func (s *SQLLog) Watch(ctx context.Context, watchId int64, key []byte, startRevi
 		s.watchers = &Watchers{mu: sync.Mutex{}, channels: make(map[int64]*Watcher)}
 	}
 	s.watchers.mu.Lock()
-	defer s.watchers.mu.Unlock()
 
 	ctx, cancel := context.WithCancel(ctx)
 	watcher := &Watcher{
@@ -408,15 +406,17 @@ func (s *SQLLog) Watch(ctx context.Context, watchId int64, key []byte, startRevi
 	}
 	s.watchers.channels[watchId] = watcher
 
-	if watcher.StartRevision > 0 {
-		watcher.StartRevision -= 1
+	s.watchers.mu.Unlock()
+
+	if startRevision > 0 {
+		startRevision -= 1
 	}
 
-	initialRevision, initialEvents, err := s.After(ctx, watcher.Key, rangeEnd, watcher.StartRevision, 0)
+	initialRevision, initialEvents, err := s.After(ctx, watcher.Key, rangeEnd, startRevision, 0)
 	if err != nil {
 		if !errors.Is(err, context.Canceled) {
 			span.RecordError(err)
-			logrus.Errorf("Failed to list %s for revision %d: %v", watcher.Key, watcher.StartRevision, err)
+			logrus.Errorf("Failed to list %s for revision %d: %v", watcher.Key, startRevision, err)
 			// We return an error message that the api-server understands: limited.ErrGRPCUnhealthy
 			if err != limited.ErrCompacted {
 				err = limited.ErrGRPCUnhealthy
@@ -444,7 +444,7 @@ func (s *SQLLog) startWatch(ctx context.Context) (chan []*limited.Event, error) 
 		return nil, err
 	}
 
-	pollCh := make(chan []*limited.Event, 1024)
+	pollCh := make(chan []*limited.Event, 100)
 	// start compaction and polling at the same time to watch starts
 	// at the oldest revision, but compaction doesn't create gaps
 	s.wg.Add(2)
@@ -478,8 +478,6 @@ func (s *SQLLog) startWatch(ctx context.Context) (chan []*limited.Event, error) 
 }
 
 func (s *SQLLog) stopWatch(all bool, id int64) {
-	s.watchers.mu.Lock()
-	defer s.watchers.mu.Unlock()
 	if all {
 		for id, watcher := range s.watchers.channels {
 			watcher.Cancel()
@@ -488,6 +486,8 @@ func (s *SQLLog) stopWatch(all bool, id int64) {
 		}
 		return
 	}
+	s.watchers.mu.Lock()
+	defer s.watchers.mu.Unlock()
 	if watcher, ok := s.watchers.channels[id]; ok {
 		watcher.Cancel()
 		close(watcher.EventsCh)
@@ -607,10 +607,10 @@ func (s *SQLLog) forwardPolledEventsToWatchers(ctx context.Context, pollCh chan 
 				for id, watcher := range s.watchers.channels {
 					select {
 					case watcher.EventsCh <- events:
-					default:
+					default: // TODO: It may not be this watcher's fault since we are forwarding all events to all watchers
 						logrus.Debugf("Dropping Slow watcher %v", id)
 						if id > 0 { // don't stop ttl watchers
-							s.stopWatch(false, id)
+							go s.stopWatch(false, id)
 						}
 					}
 				}

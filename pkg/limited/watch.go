@@ -93,13 +93,15 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 	id := atomic.AddInt64(&watchID, 1)
 	w.wg.Add(1)
 
+	startRevision := r.StartRevision
+
 	var progressCh chan struct{}
 	if r.ProgressNotify {
 		progressCh = make(chan struct{})
 		w.progress[id] = progressCh
 	}
 
-	logrus.Tracef("WATCH START id=%d, key=%s, revision=%d, progressNotify=%v", id, string(r.Key), r.StartRevision, r.ProgressNotify)
+	logrus.Tracef("WATCH START id=%d, key=%s, revision=%d, progressNotify=%v", id, string(r.Key), startRevision, r.ProgressNotify)
 
 	go func() {
 		defer w.wg.Done()
@@ -112,7 +114,7 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 			return
 		}
 
-		wn, err := w.backend.Watch(ctx, id, r.Key, r.StartRevision, r.RangeEnd)
+		wn, err := w.backend.Watch(ctx, id, r.Key, startRevision, r.RangeEnd)
 		if err != nil {
 			logrus.Errorf("Failed to start watch: %v", err)
 			w.Cancel(id, err)
@@ -121,7 +123,7 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 
 		trace := logrus.IsLevelEnabled(logrus.TraceLevel)
 		outer := true
-		watchCurrentRev := r.StartRevision //TODO  maybe compact rev?
+		watchCurrentRev := startRevision //TODO  maybe compact rev?
 		key := string(r.Key)
 		for outer {
 			var reads int
@@ -134,7 +136,7 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 				if len(events) > 0 {
 					watchCurrentRev = wn.CurrentRevision
 				}
-				filteredEventList := filterEvents(events, key, r.StartRevision)
+				filteredEventList := filterEvents(events, key, startRevision)
 				if len(filteredEventList) == 0 {
 					continue
 				}
@@ -173,7 +175,7 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 			}
 
 			// Send response, even if this is a progress-only response and no events occured
-			if revision >= r.StartRevision {
+			if revision >= startRevision {
 				wr := &etcdserverpb.WatchResponse{
 					Header:  txnHeader(revision),
 					WatchId: id,
