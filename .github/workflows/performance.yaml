@@ -88,6 +88,9 @@ jobs:
           set -o pipefail
           git fetch origin $BASE_BRANCH
           git reset --hard $BASE_SHA
+          # dbg: Log retries
+          git fetch origin lpetrut/log-retries
+          git cherry-pick a4e26c53e07eb2d4dadfc1da1cf9237b518cab66
           make static
           sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
           sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite

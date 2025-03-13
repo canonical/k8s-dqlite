@@ -387,14 +387,19 @@ func (d *Driver) query(ctx context.Context, txName, query string, args ...interf
 	defer func() {
 		recordOpResult(txName, err, start)
 	}()
-	for {
+
+	for retryCount := 0; ; retryCount++ {
 		select {
 		case <-ctx.Done():
+			logrus.Printf("context canceled, query retries: %d, duration: %v", retryCount, time.Now().Sub(start))
 			return nil, ctx.Err()
 		default:
 		}
 		rows, err = d.config.DB.QueryContext(ctx, query, args...)
 		if err == nil {
+			if retryCount != 0 {
+				logrus.Printf("query retries: %d, duration: %v", retryCount, time.Now().Sub(start))
+			}
 			break
 		}
 		if !d.config.Retry(err) {
@@ -421,14 +426,18 @@ func (d *Driver) execute(ctx context.Context, txName, query string, args ...inte
 	defer func() {
 		recordOpResult(txName, err, start)
 	}()
-	for {
+	for retryCount := 0; ; retryCount++ {
 		select {
 		case <-ctx.Done():
+			logrus.Printf("context canceled, execute retries: %d, duration: %v", retryCount, time.Now().Sub(start))
 			return nil, ctx.Err()
 		default:
 		}
 		result, err = d.config.DB.ExecContext(ctx, query, args...)
 		if err == nil {
+			if retryCount != 0 {
+				logrus.Printf("execute retries: %d, duration: %v", retryCount, time.Now().Sub(start))
+			}
 			break
 		} else if !d.config.Retry(err) {
 			break
