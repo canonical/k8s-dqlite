@@ -89,8 +89,9 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 	defer w.Unlock()
 
 	ctx, cancel := context.WithCancel(ctx)
-	w.watches[watchID] = cancel
 	id := atomic.AddInt64(&watchID, 1)
+
+	w.watches[id] = cancel
 	w.wg.Add(1)
 
 	startRevision := r.StartRevision

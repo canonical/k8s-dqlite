@@ -521,7 +521,7 @@ func (s *SQLLog) poll(ctx context.Context, pollCh chan []*limited.Event, pollSta
 		waitForMore = true
 		events, err := s.getLatestEvents(ctx, last)
 		if err != nil {
-			if !errors.Is(err, context.DeadlineExceeded) {
+			if !errors.Is(err, context.DeadlineExceeded) || !errors.Is(err, context.Canceled) {
 				logrus.Errorf("fail to get latest events: %v", err)
 			}
 			continue
