@@ -19,7 +19,7 @@ type Backend interface {
 	List(ctx context.Context, key, rangeEnd []byte, limit, revision int64) (int64, []*KeyValue, error)
 	Count(ctx context.Context, key, rangeEnd []byte, revision int64) (int64, int64, error)
 	Update(ctx context.Context, key, value []byte, revision, lease int64) (int64, bool, error)
-	Watch(ctx context.Context, watchId int64, key []byte, startRevision int64, rangeEnd []byte) (WatchNotification, error)
+	Watch(ctx context.Context, watchId int64, key []byte, startRevision int64, rangeEnd []byte) (chan PollData, error)
 	DbSize(ctx context.Context) (int64, error)
 	CurrentRevision(ctx context.Context) (int64, error)
 	GetCompactRevision(ctx context.Context) (int64, int64, error)
@@ -49,7 +49,7 @@ type Watcher struct {
 	Key           []byte
 }
 
-type WatchNotification struct {
+type PollData struct {
 	CurrentRevision int64
-	Events          chan []*Event
+	Events          []*Event
 }

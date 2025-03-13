@@ -115,7 +115,7 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 			return
 		}
 
-		wn, err := w.backend.Watch(ctx, id, r.Key, startRevision, r.RangeEnd)
+		watchCh, err := w.backend.Watch(ctx, id, r.Key, startRevision, r.RangeEnd)
 		if err != nil {
 			logrus.Errorf("Failed to start watch: %v", err)
 			w.Cancel(id, err)
@@ -128,14 +128,18 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 		key := string(r.Key)
 		for outer {
 			var reads int
-			var events []*Event
+			var pollData PollData
+			var filteredEventList []*Event
+
 			var revision int64
 
 			// Wait for events or progress notifications
 			select {
-			case events = <-wn.Events:
-				if len(events) > 0 {
-					watchCurrentRev = wn.CurrentRevision
+			case pollData = <-watchCh:
+				watchCurrentRev = pollData.CurrentRevision
+				events := pollData.Events
+				if len(events) == 0 {
+					continue
 				}
 				filteredEventList := filterEvents(events, key, startRevision)
 				if len(filteredEventList) == 0 {
@@ -147,9 +151,10 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 				inner := true
 				for inner {
 					select {
-					case e, ok := <-wn.Events:
+					case d, ok := <-watchCh:
 						reads++
-						events = append(events, e...)
+						watchCurrentRev = d.CurrentRevision
+						filteredEventList = append(filteredEventList, filterEvents(d.Events, key, startRevision)...)
 						if !ok {
 							// channel is closed, break out of both loops
 							inner = false
@@ -166,21 +171,21 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 			}
 
 			// Determine the highest revision among the collected events
-			if len(events) > 0 {
-				revision = events[len(events)-1].KV.ModRevision
+			if len(filteredEventList) > 0 {
+				revision = filteredEventList[len(filteredEventList)-1].KV.ModRevision
 				if trace {
-					for _, event := range events {
+					for _, event := range filteredEventList {
 						logrus.Tracef("WATCH READ id=%d, key=%s, revision=%d", id, event.KV.Key, event.KV.ModRevision)
 					}
 				}
 			}
 
-			// Send response, even if this is a progress-only response and no events occured
+			// Send response, even if this is a progress-only response and no events occurred
 			if revision >= startRevision {
 				wr := &etcdserverpb.WatchResponse{
 					Header:  txnHeader(revision),
 					WatchId: id,
-					Events:  toEvents(events...),
+					Events:  toEvents(filteredEventList...),
 				}
 				logrus.Tracef("WATCH SEND id=%d, key=%s, revision=%d, events=%d, size=%d, reads=%d", id, string(r.Key), revision, len(wr.Events), wr.Size(), reads)
 				if err := w.server.Send(wr); err != nil {
