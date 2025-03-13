@@ -88,6 +88,9 @@ jobs:
           set -o pipefail
           git fetch origin $BASE_BRANCH
           git reset --hard $BASE_SHA
+          # Needed to cherry-pick commits.
+          git config --global user.name "Github Actions"
+          git config --global user.email "worker@org.com"
           # dbg: Log retries
           git fetch origin lpetrut/log-retries
           git cherry-pick a4e26c53e07eb2d4dadfc1da1cf9237b518cab66
