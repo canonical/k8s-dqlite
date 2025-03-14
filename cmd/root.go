@@ -20,22 +20,23 @@ import (
 
 var (
 	rootCmdOpts struct {
-		dir                    string
-		listen                 string
-		tls                    bool
-		debug                  bool
-		profiling              bool
-		profilingAddress       string
-		profilingDir           string
-		diskMode               bool
-		clientSessionCacheSize uint
-		minTLSVersion          string
-		metrics                bool
-		metricsAddress         string
-		otel                   bool
-		otelAddress            string
-		otelDir                string
-		otelSpanFilter    string
+		dir                       string
+		listen                    string
+		tls                       bool
+		debug                     bool
+		profiling                 bool
+		profilingAddress          string
+		profilingDir              string
+		diskMode                  bool
+		clientSessionCacheSize    uint
+		minTLSVersion             string
+		metrics                   bool
+		metricsAddress            string
+		otel                      bool
+		otelAddress               string
+		otelDir                   string
+		otelSpanNameFilter        string
+		otelSpanMinDurationFilter string
 
 		connectionPoolConfig server.ConnectionPoolConfig
 
@@ -96,8 +97,18 @@ var (
 					logrus.WithField("address", rootCmdOpts.otelAddress).Print("Enabling otel endpoint")
 				}
 
+				var otelSpanMinDuration time.Duration
+				if rootCmdOpts.otelSpanMinDurationFilter != "" {
+					otelSpanMinDuration, err = time.ParseDuration(rootCmdOpts.otelSpanMinDurationFilter)
+					if err != nil {
+						logrus.Fatal("Could not parse span duration %s: %w", rootCmdOpts.otelSpanMinDurationFilter, err)
+					}
+				}
+
 				otelShutdown, err = setupOTelSDK(cmd.Context(), rootCmdOpts.otelAddress,
-					rootCmdOpts.otelDir, rootCmdOpts.otelSpanFilter)
+					rootCmdOpts.otelDir,
+					rootCmdOpts.otelSpanNameFilter,
+					otelSpanMinDuration)
 				if err != nil {
 					logrus.WithError(err).Warning("Failed to setup OpenTelemetry SDK")
 				}
@@ -206,7 +217,8 @@ func init() {
 	rootCmd.Flags().BoolVar(&rootCmdOpts.otel, "otel", false, "enable traces endpoint")
 	rootCmd.Flags().StringVar(&rootCmdOpts.otelAddress, "otel-listen", "127.0.0.1:4317", "listen address for OpenTelemetry endpoint")
 	rootCmd.Flags().StringVar(&rootCmdOpts.otelDir, "otel-dir", "", "dump OpenTelemetry metrics in the specified directory")
-	rootCmd.Flags().StringVar(&rootCmdOpts.otelSpanFilter, "otel-span-filter", "", "drop OpenTelemetry trace spans that do not match the specified regex filter")
+	rootCmd.Flags().StringVar(&rootCmdOpts.otelSpanNameFilter, "otel-span-name-filter", "", "drop OpenTelemetry trace spans that do not match the specified regex filter")
+	rootCmd.Flags().StringVar(&rootCmdOpts.otelSpanMinDurationFilter, "otel-span-min-duration-filter", "", "drop OpenTelemetry trace spans below the specified time interval (e.g. 10ms)")
 	rootCmd.Flags().StringVar(&rootCmdOpts.metricsAddress, "metrics-listen", "127.0.0.1:9042", "listen address for metrics endpoint")
 	rootCmd.Flags().IntVar(&rootCmdOpts.connectionPoolConfig.MaxIdle, "datastore-max-idle-connections", 5, "Maximum number of idle connections retained by datastore. If value = 0, the system default will be used. If value < 0, idle connections will not be reused.")
 	rootCmd.Flags().IntVar(&rootCmdOpts.connectionPoolConfig.MaxOpen, "datastore-max-open-connections", 5, "Maximum number of open connections used by datastore. If value <= 0, then there is no limit")

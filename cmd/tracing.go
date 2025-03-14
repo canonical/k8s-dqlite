@@ -5,8 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"regexp"
 	"path/filepath"
+	"regexp"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
@@ -44,14 +45,41 @@ func (f NameFilter) OnStart(parent context.Context, s trace.ReadWriteSpan) {
 func (f NameFilter) Shutdown(ctx context.Context) error   { return f.Next.Shutdown(ctx) }
 func (f NameFilter) ForceFlush(ctx context.Context) error { return f.Next.ForceFlush(ctx) }
 func (f NameFilter) OnEnd(s trace.ReadOnlySpan) {
-	if !f.AllowedPattern.MatchString(s.Name()) {
+	if f.AllowedPattern != nil && !f.AllowedPattern.MatchString(s.Name()) {
 		return
 	}
 	f.Next.OnEnd(s)
 }
+
+// DurationFilter is a SpanProcessor that filters spans that have lifetimes
+// outside of a defined range.
+type DurationFilter struct {
+	// Next is the next SpanProcessor in the chain.
+	Next trace.SpanProcessor
+
+	// Min is the duration under which spans are dropped.
+	Min time.Duration
+}
+
+func (f DurationFilter) OnStart(parent context.Context, s trace.ReadWriteSpan) {
+	f.Next.OnStart(parent, s)
+}
+func (f DurationFilter) Shutdown(ctx context.Context) error   { return f.Next.Shutdown(ctx) }
+func (f DurationFilter) ForceFlush(ctx context.Context) error { return f.Next.ForceFlush(ctx) }
+func (f DurationFilter) OnEnd(s trace.ReadOnlySpan) {
+	if f.Min > 0 && s.EndTime().Sub(s.StartTime()) < f.Min {
+		// Drop short lived spans.
+		return
+	}
+	f.Next.OnEnd(s)
+}
+
 // setupOTelSDK bootstraps the OpenTelemetry pipeline.
 // If it does not return an error, make sure to call shutdown for proper cleanup.
-func setupOTelSDK(ctx context.Context, otelEndpoint string, otelDir string, spanFilter string) (shutdown func(context.Context) error, err error) {
+func setupOTelSDK(
+	ctx context.Context, otelEndpoint string,
+	otelDir string, spanNameFilter string,
+	spanMinDurationFilter time.Duration) (shutdown func(context.Context) error, err error) {
 	var grpcConn *grpc.ClientConn
 	var traceExporter trace.SpanExporter
 	var traceProvider *trace.TracerProvider
@@ -142,7 +170,7 @@ func setupOTelSDK(ctx context.Context, otelEndpoint string, otelDir string, span
 		return nil, err
 	}
 
-	tracerProvider, err := newTraceProvider(traceExporter, res, spanFilter)
+	tracerProvider, err := newTraceProvider(traceExporter, res, spanNameFilter, spanMinDurationFilter)
 	if err != nil {
 		shutdown(ctx)
 		return nil, err
@@ -202,19 +230,27 @@ func newFileTraceExporter(ctx context.Context, file *os.File) (trace.SpanExporte
 	return exporter, nil
 }
 
-func newTraceProvider(traceExporter trace.SpanExporter, res *resource.Resource, spanFilter string) (*trace.TracerProvider, error) {
+func newTraceProvider(traceExporter trace.SpanExporter, res *resource.Resource, spanNameFilter string, spanMinDurationFilter time.Duration) (*trace.TracerProvider, error) {
 	var sp sdktrace.SpanProcessor
 	bsp := sdktrace.NewBatchSpanProcessor(traceExporter)
 	sp = bsp
 
-	if spanFilter != "" {
-		allowedPattern, err := regexp.Compile(spanFilter)
+	if spanNameFilter != "" {
+		allowedPattern, err := regexp.Compile(spanNameFilter)
 		if err != nil {
-			return nil, fmt.Errorf("invalid span filter regex %s: %w", spanFilter, err)
+			return nil, fmt.Errorf("invalid span filter regex %s: %w", spanNameFilter, err)
 		}
 		filter := NameFilter{
-			Next: bsp,
+			Next:           bsp,
 			AllowedPattern: allowedPattern,
+		}
+		sp = filter
+	}
+
+	if spanMinDurationFilter > 0 {
+		filter := DurationFilter{
+			Next: sp,
+			Min:  spanMinDurationFilter,
 		}
 		sp = filter
 	}
