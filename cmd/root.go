@@ -34,6 +34,7 @@ var (
 		metricsAddress         string
 		otel                   bool
 		otelAddress            string
+		otelDir                string
 
 		connectionPoolConfig server.ConnectionPoolConfig
 
@@ -81,8 +82,20 @@ var (
 
 			if rootCmdOpts.otel {
 				var err error
-				logrus.WithField("address", rootCmdOpts.otelAddress).Print("Enable otel endpoint")
-				otelShutdown, err = setupOTelSDK(cmd.Context(), rootCmdOpts.otelAddress)
+				if rootCmdOpts.otelAddress == "" && rootCmdOpts.otelDir == "" {
+					logrus.Fatal("No OTEL address or directory specified.")
+				}
+				if rootCmdOpts.otelDir != "" {
+					logrus.WithField("otel-dir", rootCmdOpts.otelDir).Print("Dumping otel data to local directory.")
+					if rootCmdOpts.otelAddress != "" {
+						logrus.Warning("Only one otel exporter allowed, ignoring otel endpoint.")
+						rootCmdOpts.otelAddress = ""
+					}
+				} else {
+					logrus.WithField("address", rootCmdOpts.otelAddress).Print("Enabling otel endpoint")
+				}
+
+				otelShutdown, err = setupOTelSDK(cmd.Context(), rootCmdOpts.otelAddress, rootCmdOpts.otelDir)
 				if err != nil {
 					logrus.WithError(err).Warning("Failed to setup OpenTelemetry SDK")
 				}
