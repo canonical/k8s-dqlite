@@ -108,7 +108,7 @@ jobs:
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
           TEST_METRICS_DIR: ${{ github.workspace }}/test/performance/results
           TEST_RUN_NAME: head
-          TEST_KUBE_BURNER_ITERATIONS: 15
+          TEST_KUBE_BURNER_ITERATIONS: 100
         run: |
           cd test/performance
           sg lxd -c 'tox -e performance -- -k test_single_node'
