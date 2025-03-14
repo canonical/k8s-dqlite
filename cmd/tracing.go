@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"regexp"
 	"path/filepath"
 
 	"github.com/sirupsen/logrus"
@@ -27,9 +28,30 @@ const (
 	resourceName = "k8s-dqlite"
 )
 
+// NameFilter is a SpanProcessor that filters trace spans based on the span name.
+type NameFilter struct {
+	// Next is the next SpanProcessor in the chain.
+	Next trace.SpanProcessor
+
+	// AllowedPattern is a regex that will be used to filter spans,
+	// dropping the the spans in case of mismatching span names.
+	AllowedPattern *regexp.Regexp
+}
+
+func (f NameFilter) OnStart(parent context.Context, s trace.ReadWriteSpan) {
+	f.Next.OnStart(parent, s)
+}
+func (f NameFilter) Shutdown(ctx context.Context) error   { return f.Next.Shutdown(ctx) }
+func (f NameFilter) ForceFlush(ctx context.Context) error { return f.Next.ForceFlush(ctx) }
+func (f NameFilter) OnEnd(s trace.ReadOnlySpan) {
+	if !f.AllowedPattern.MatchString(s.Name()) {
+		return
+	}
+	f.Next.OnEnd(s)
+}
 // setupOTelSDK bootstraps the OpenTelemetry pipeline.
 // If it does not return an error, make sure to call shutdown for proper cleanup.
-func setupOTelSDK(ctx context.Context, otelEndpoint string, otelDir string) (shutdown func(context.Context) error, err error) {
+func setupOTelSDK(ctx context.Context, otelEndpoint string, otelDir string, spanFilter string) (shutdown func(context.Context) error, err error) {
 	var grpcConn *grpc.ClientConn
 	var traceExporter trace.SpanExporter
 	var traceProvider *trace.TracerProvider
@@ -120,7 +142,11 @@ func setupOTelSDK(ctx context.Context, otelEndpoint string, otelDir string) (shu
 		return nil, err
 	}
 
-	tracerProvider := newTraceProvider(traceExporter, res)
+	tracerProvider, err := newTraceProvider(traceExporter, res, spanFilter)
+	if err != nil {
+		shutdown(ctx)
+		return nil, err
+	}
 	otel.SetTracerProvider(tracerProvider)
 
 	// Initialize meter exporter.
@@ -167,7 +193,7 @@ func newGrpcTraceExporter(ctx context.Context, conn *grpc.ClientConn) (trace.Spa
 
 func newFileTraceExporter(ctx context.Context, file *os.File) (trace.SpanExporter, error) {
 	exporter, err := stdouttrace.New(
-		stdouttrace.WithPrettyPrint(),
+		// stdouttrace.WithPrettyPrint(),
 		stdouttrace.WithWriter(file),
 	)
 	if err != nil {
@@ -176,14 +202,29 @@ func newFileTraceExporter(ctx context.Context, file *os.File) (trace.SpanExporte
 	return exporter, nil
 }
 
-func newTraceProvider(traceExporter trace.SpanExporter, res *resource.Resource) *trace.TracerProvider {
+func newTraceProvider(traceExporter trace.SpanExporter, res *resource.Resource, spanFilter string) (*trace.TracerProvider, error) {
+	var sp sdktrace.SpanProcessor
 	bsp := sdktrace.NewBatchSpanProcessor(traceExporter)
+	sp = bsp
+
+	if spanFilter != "" {
+		allowedPattern, err := regexp.Compile(spanFilter)
+		if err != nil {
+			return nil, fmt.Errorf("invalid span filter regex %s: %w", spanFilter, err)
+		}
+		filter := NameFilter{
+			Next: bsp,
+			AllowedPattern: allowedPattern,
+		}
+		sp = filter
+	}
+
 	traceProvider := sdktrace.NewTracerProvider(
 		sdktrace.WithSampler(sdktrace.AlwaysSample()),
 		sdktrace.WithResource(res),
-		sdktrace.WithSpanProcessor(bsp),
+		sdktrace.WithSpanProcessor(sp),
 	)
-	return traceProvider
+	return traceProvider, nil
 }
 
 func newGrpcMetricExporter(ctx context.Context, conn *grpc.ClientConn) (sdkmetric.Exporter, error) {
