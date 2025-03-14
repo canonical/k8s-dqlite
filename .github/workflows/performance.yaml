@@ -83,21 +83,21 @@ jobs:
           sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
           sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
           sudo mksquashfs snap-unpack-dir head.snap -noappend -comp lzo -no-fragments
-      - name: Create snap with k8s-dqlite base-code
-        run: |
-          set -o pipefail
-          git fetch origin $BASE_BRANCH
-          git reset --hard $BASE_SHA
-          # Needed to cherry-pick commits.
-          git config --global user.name "Github Actions"
-          git config --global user.email "worker@org.com"
-          # dbg: Log retries
-          git fetch origin lpetrut/log-retries
-          git cherry-pick a4e26c53e07eb2d4dadfc1da1cf9237b518cab66
-          make static
-          sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
-          sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
-          sudo mksquashfs snap-unpack-dir base-code.snap -noappend -comp lzo -no-fragments
+      # - name: Create snap with k8s-dqlite base-code
+      #   run: |
+      #     set -o pipefail
+      #     git fetch origin $BASE_BRANCH
+      #     git reset --hard $BASE_SHA
+      #     # Needed to cherry-pick commits.
+      #     git config --global user.name "Github Actions"
+      #     git config --global user.email "worker@org.com"
+      #     # dbg: Log retries
+      #     git fetch origin lpetrut/log-retries
+      #     git cherry-pick a4e26c53e07eb2d4dadfc1da1cf9237b518cab66
+      #     make static
+      #     sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
+      #     sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
+      #     sudo mksquashfs snap-unpack-dir base-code.snap -noappend -comp lzo -no-fragments
       - name: Switch back to target branch
         run: git reset --hard $TARGET_SHA
       - name: Run Performance test ${{ github.head_ref }} snap
@@ -112,31 +112,31 @@ jobs:
         run: |
           cd test/performance
           sg lxd -c 'tox -e performance -- -k test_single_node'
-      - name: Run Performance test for base code snap
-        env:
-          TEST_SNAP: ${{ github.workspace }}/base-code.snap
-          TEST_SUBSTRATE: lxd
-          TEST_LXD_IMAGE: ubuntu:22.04
-          TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
-          TEST_METRICS_DIR: ${{ github.workspace }}/test/performance/results
-          TEST_RUN_NAME: base-code
-          TEST_KUBE_BURNER_ITERATIONS: 15
-        run: |
-          cd test/performance
-          sg lxd -c 'tox -e performance -- -k test_single_node'
-      - name: Generate aggregated Graphs
-        if: always()
-        run: |
-          cd test/performance
-          mkdir -p ./results/aggregated-results/single-node
-          cp ./results/head/single-node/metrics.log \
-             ./results/aggregated-results/single-node/head-metrics.log
-          cp ./results/base-code/single-node/metrics.log \
-             ./results/aggregated-results/single-node/base-metrics.log
-          sudo Rscript parse-performance-metrics.R \
-            -p ./results/aggregated-results/single-node/ \
-            -o ./results/aggregated-results/single-node/ \
-            -f *metrics.log
+      # - name: Run Performance test for base code snap
+      #   env:
+      #     TEST_SNAP: ${{ github.workspace }}/base-code.snap
+      #     TEST_SUBSTRATE: lxd
+      #     TEST_LXD_IMAGE: ubuntu:22.04
+      #     TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
+      #     TEST_METRICS_DIR: ${{ github.workspace }}/test/performance/results
+      #     TEST_RUN_NAME: base-code
+      #     TEST_KUBE_BURNER_ITERATIONS: 15
+      #   run: |
+      #     cd test/performance
+      #     sg lxd -c 'tox -e performance -- -k test_single_node'
+      # - name: Generate aggregated Graphs
+      #   if: always()
+      #   run: |
+      #     cd test/performance
+      #     mkdir -p ./results/aggregated-results/single-node
+      #     cp ./results/head/single-node/metrics.log \
+      #        ./results/aggregated-results/single-node/head-metrics.log
+      #     cp ./results/base-code/single-node/metrics.log \
+      #        ./results/aggregated-results/single-node/base-metrics.log
+      #     sudo Rscript parse-performance-metrics.R \
+      #       -p ./results/aggregated-results/single-node/ \
+      #       -o ./results/aggregated-results/single-node/ \
+      #       -f *metrics.log
       - name: Upload performance result
         uses: actions/upload-artifact@v4
         if: always()
@@ -154,12 +154,12 @@ jobs:
         with:
           name: ${{ env.artifact_name }}
           path: ${{ github.workspace }}/inspection-reports.tar.gz
-      - name: Upload base-code.snap
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: base-code.snap
-          path: ${{ github.workspace }}/base-code.snap
+      # - name: Upload base-code.snap
+      #   if: failure()
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: base-code.snap
+      #     path: ${{ github.workspace }}/base-code.snap
       - name: Upload head.snap
         if: failure()
         uses: actions/upload-artifact@v4
