@@ -26,6 +26,7 @@ func (s *KVServerBridge) Watch(ws etcdserverpb.Watch_WatchServer) error {
 	stream := &watchStream{
 		watcherGroup:   watcherGroup,
 		notifyInterval: s.limited.notifyInterval,
+		server:         ws,
 		watches:        make(map[int64]*watch),
 	}
 
@@ -153,16 +154,21 @@ func (ws *watchStream) sendProgress() error {
 }
 
 func (ws *watchStream) Create(id int64, key, rangeEnd []byte, startRevision int64) error {
+	ws.mu.Lock()
+	defer ws.mu.Unlock()
+
 	if err := ws.watcherGroup.Watch(id, key, rangeEnd, startRevision); err != nil {
 		return err
 	}
-
-	ws.mu.Lock()
-	defer ws.mu.Unlock()
 	ws.watches[id] = &watch{
 		reportProgress: true,
 	}
-	return nil
+
+	return ws.server.Send(&etcdserverpb.WatchResponse{
+		Header:  &etcdserverpb.ResponseHeader{},
+		WatchId: id,
+		Created: true,
+	})
 }
 
 func (ws *watchStream) Close(id int64) {

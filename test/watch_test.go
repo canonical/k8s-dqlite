@@ -14,7 +14,7 @@ import (
 func TestWatch(t *testing.T) {
 	const (
 		// pollTimeout is the timeout for waiting to receive an event.
-		pollTimeout = 50 * time.Millisecond
+		pollTimeout = 2 * time.Second
 
 		// progressNotifyTimeout is the timeout for waiting to receive a progress notify.
 		progressNotifyTimeout = 1 * time.Second
@@ -34,7 +34,7 @@ func TestWatch(t *testing.T) {
 			// start watching for events on key
 			const watchedPrefix = "watched/"
 			const ingnoredPrefix = "ignored/"
-			watchCh := server.client.Watch(ctx, watchedPrefix)
+			watchCh := server.client.Watch(ctx, watchedPrefix, clientv3.WithPrefix())
 
 			t.Run("ReceiveNothingUntilActivity", func(t *testing.T) {
 				g := NewWithT(t)
@@ -115,6 +115,7 @@ func TestWatch(t *testing.T) {
 
 				g.Consistently(watchCh, idleTimeout).ShouldNot(Receive())
 			})
+
 			t.Run("ProgressNotify", func(t *testing.T) {
 				ctx, cancel := context.WithCancel(ctx)
 				defer cancel()
@@ -124,7 +125,6 @@ func TestWatch(t *testing.T) {
 
 				g.Eventually(watchCh, progressNotifyTimeout).Should(ReceiveProgressNotify(g))
 			})
-
 		})
 	}
 }

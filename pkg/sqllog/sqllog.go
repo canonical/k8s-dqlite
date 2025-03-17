@@ -70,6 +70,7 @@ type SQLLog struct {
 	started bool
 
 	watcherGroups map[*watcherGroup]*watcherGroup
+	pollRevision  int64
 
 	notify chan int64
 	wg     sync.WaitGroup
@@ -129,15 +130,15 @@ func (s *SQLLog) Start(startCtx context.Context) error {
 
 func (s *SQLLog) Stop() error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	if !s.started {
 		return nil
 	}
-
 	s.stop()
-	s.wg.Wait()
 	s.stop, s.started = nil, false
+	s.mu.Unlock()
+
+	s.wg.Wait()
 	return nil
 }
 
@@ -149,7 +150,9 @@ func (s *SQLLog) Close() error {
 }
 
 func (s *SQLLog) compactStart(ctx context.Context) error {
-	rows, err := s.config.Driver.AfterPrefix(ctx, []byte("compact_rev_key"), nil, 0, 0)
+	currentRevision, err := s.CurrentRevision(ctx)
+
+	rows, err := s.config.Driver.AfterPrefix(ctx, []byte("compact_rev_key"), []byte("compact_rev_key\x00"), 0, currentRevision)
 	if err != nil {
 		return err
 	}
@@ -236,10 +239,11 @@ func (s *SQLLog) WatcherGroup(ctx context.Context) (limited.WatcherGroup, error)
 	defer s.mu.Unlock()
 
 	wg := &watcherGroup{
-		ctx:      ctx,
-		driver:   s.config.Driver,
-		watchers: make(map[int64]*watcher),
-		updates:  make(chan limited.WatcherGroupUpdate, 100),
+		ctx:             ctx,
+		driver:          s.config.Driver,
+		currentRevision: s.pollRevision,
+		watchers:        make(map[int64]*watcher),
+		updates:         make(chan limited.WatcherGroupUpdate, 100),
 	}
 	stop := context.AfterFunc(ctx, func() {
 		s.mu.Lock()
@@ -259,41 +263,6 @@ func (s *SQLLog) CurrentRevision(ctx context.Context) (int64, error) {
 
 func (s *SQLLog) GetCompactRevision(ctx context.Context) (int64, int64, error) {
 	return s.config.Driver.GetCompactRevision(ctx)
-}
-
-func (s *SQLLog) After(ctx context.Context, key, rangeEnd []byte, revision, limit int64) (int64, []*limited.Event, error) {
-	var err error
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.After", otelName))
-	defer func() {
-		span.RecordError(err)
-		span.End()
-	}()
-	span.SetAttributes(
-		attribute.String("key", string(key)),
-		attribute.Int64("revision", revision),
-		attribute.Int64("limit", limit),
-	)
-
-	compactRevision, currentRevision, err := s.config.Driver.GetCompactRevision(ctx)
-	if err != nil {
-		return 0, nil, err
-	}
-	if revision == 0 || revision > currentRevision {
-		revision = currentRevision
-	} else if revision < compactRevision {
-		return currentRevision, nil, limited.ErrCompacted
-	}
-
-	rows, err := s.config.Driver.AfterPrefix(ctx, key, rangeEnd, revision, limit)
-	if err != nil {
-		return 0, nil, err
-	}
-
-	result, err := ScanAll(rows, scanEvent)
-	if err != nil {
-		return 0, nil, err
-	}
-	return currentRevision, result, err
 }
 
 func (s *SQLLog) List(ctx context.Context, key, rangeEnd []byte, limit, revision int64) (int64, []*limited.KeyValue, error) {
@@ -378,12 +347,14 @@ func (s *SQLLog) ttl(ctx context.Context) {
 			logrus.Errorf("failed to create watch groupw for ttl: %v", err)
 			return
 		}
-		group.Watch(1, []byte{'/'}, []byte{'0'}, startRevision)
+		group.Watch(1, []byte{0}, []byte{255}, startRevision)
 
 		for pollData := range group.Updates() {
-			for _, event := range pollData.Updates[0].Events {
-				if event.Kv.Lease > 0 {
-					go run(ctx, []byte(event.Kv.Key), event.Kv.ModRevision, time.Duration(event.Kv.Lease)*time.Second)
+			for _, group := range pollData.Updates {
+				for _, event := range group.Events {
+					if event.Kv.Lease > 0 {
+						go run(ctx, []byte(event.Kv.Key), event.Kv.ModRevision, time.Duration(event.Kv.Lease)*time.Second)
+					}
 				}
 			}
 		}
@@ -395,10 +366,11 @@ func (s *SQLLog) startWatch(ctx context.Context) error {
 		return err
 	}
 
-	pollStart, _, err := s.config.Driver.GetCompactRevision(ctx)
+	polllInitialRevision, _, err := s.config.Driver.GetCompactRevision(ctx)
 	if err != nil {
 		return err
 	}
+	s.pollRevision = polllInitialRevision
 
 	// start compaction and polling at the same time to watch starts
 	// at the oldest revision, but compaction doesn't create gaps
@@ -423,15 +395,14 @@ func (s *SQLLog) startWatch(ctx context.Context) error {
 
 	go func() {
 		defer s.wg.Done()
-		s.poll(ctx, pollStart)
+		s.poll(ctx)
 	}()
 
 	return nil
 }
 
-func (s *SQLLog) poll(ctx context.Context, pollStart int64) {
+func (s *SQLLog) poll(ctx context.Context) {
 	var (
-		last        = pollStart
 		skip        int64
 		skipTime    time.Time
 		waitForMore = true
@@ -446,14 +417,14 @@ func (s *SQLLog) poll(ctx context.Context, pollStart int64) {
 			case <-ctx.Done():
 				return
 			case check := <-s.notify:
-				if check <= last {
+				if check <= s.pollRevision {
 					continue
 				}
 			case <-wait.C:
 			}
 		}
 		waitForMore = true
-		events, err := s.getLatestEvents(ctx, last)
+		events, err := s.getLatestEvents(ctx, s.pollRevision)
 		if err != nil {
 			if !errors.Is(err, context.DeadlineExceeded) || !errors.Is(err, context.Canceled) {
 				logrus.Errorf("fail to get latest events: %v", err)
@@ -461,16 +432,11 @@ func (s *SQLLog) poll(ctx context.Context, pollStart int64) {
 			continue
 		}
 
-		if len(events) == 0 {
-			continue
-		}
-
 		waitForMore = len(events) < 100
 
-		rev := last
+		rev := s.pollRevision
 		var (
 			sequential []*limited.Event
-			saveLast   bool
 		)
 
 		for _, event := range events {
@@ -506,7 +472,6 @@ func (s *SQLLog) poll(ctx context.Context, pollStart int64) {
 			// loop right now has no error exit so the next loop shouldn't fail, but if we for some reason add a method
 			// that returns error, that would be a tricky bug to find.  So instead we only save the last revision at
 			// the same time we write to the channel.
-			saveLast = true
 			rev = event.Kv.ModRevision
 			if s.config.Driver.IsFill([]byte(event.Kv.Key)) {
 				logrus.Debugf("NOT TRIGGER FILL %s, revision=%d, delete=%v", event.Kv.Key, event.Kv.ModRevision, event.Type == mvccpb.DELETE)
@@ -516,16 +481,14 @@ func (s *SQLLog) poll(ctx context.Context, pollStart int64) {
 			}
 		}
 
-		if saveLast {
-			last = rev
-			s.publishEvents(rev, sequential)
-		}
+		s.publishEvents(rev, sequential)
 	}
 }
 
 func (s *SQLLog) publishEvents(currentRevision int64, events []*limited.Event) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.pollRevision = currentRevision
 
 	for _, w := range s.watcherGroups {
 		if !w.publish(currentRevision, events) {
@@ -756,6 +719,10 @@ func (w *watcher) update(events []*limited.Event) []*limited.Event {
 	if !w.initialized {
 		w.events = appendEvents(events, w.events, w.key, w.rangeEnd)
 		return nil
+	} else if len(w.events) > 0 {
+		initialEvents := w.events
+		w.events = nil
+		return appendEvents(events, initialEvents, w.key, w.rangeEnd)
 	}
 
 	filtered := make([]*limited.Event, 0, len(events))
@@ -764,7 +731,7 @@ func (w *watcher) update(events []*limited.Event) []*limited.Event {
 
 func appendEvents(src, dst []*limited.Event, key, rangeEnd []byte) []*limited.Event {
 	for _, event := range src {
-		if bytes.Compare(key, event.Kv.Key) >= 0 && bytes.Compare(rangeEnd, event.Kv.Key) < 0 {
+		if bytes.Compare(key, event.Kv.Key) <= 0 && bytes.Compare(rangeEnd, event.Kv.Key) > 0 {
 			dst = append(dst, event)
 		}
 	}
@@ -789,12 +756,12 @@ func (w *watcherGroup) Watch(watchId int64, key, rangeEnd []byte, startRevision 
 
 	w.mu.Lock()
 	w.watchers[watchId] = watcher
-	currentRevision := w.currentRevision
-	w.mu.Unlock()
-
 	if startRevision > 0 {
+		currentRevision := w.currentRevision
+		w.mu.Unlock()
+
 		// TODO: check that this has a time limit
-		initialEvents, err := w.initialEvents(ctx, key, rangeEnd, startRevision, currentRevision)
+		initialEvents, err := w.initialEvents(ctx, key, rangeEnd, startRevision-1, currentRevision)
 		if err != nil {
 			w.mu.Lock()
 			delete(w.watchers, watchId)
@@ -812,9 +779,9 @@ func (w *watcherGroup) Watch(watchId int64, key, rangeEnd []byte, startRevision 
 
 		w.mu.Lock()
 		watcher.events = append(initialEvents, watcher.events...)
-		watcher.initialized = true
-		w.mu.Unlock()
 	}
+	watcher.initialized = true
+	w.mu.Unlock()
 
 	return nil
 }

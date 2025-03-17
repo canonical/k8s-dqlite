@@ -88,10 +88,10 @@ var (
 		FROM kine AS rkv`
 
 	listSQL = `
-		SELECT kv.id, 
-			name, 
+		SELECT kv.id,
+			name,
 			CASE WHEN kv.created THEN kv.id ELSE kv.create_revision END AS create_revision,
-			lease, 
+			lease,
 			value
 		FROM kine AS kv
 		JOIN (
@@ -134,7 +134,7 @@ var (
 		SELECT id, name, created, deleted, create_revision, prev_revision, lease, value, old_value
 		FROM kine
 		WHERE name >= CAST(? AS TEXT) AND name < CAST(? AS TEXT)
-			AND id > ?
+			AND ? < id AND id <= ?
 		ORDER BY id ASC`
 
 	afterSQL = `
@@ -144,8 +144,8 @@ var (
 		ORDER BY id ASC`
 
 	ttlSQL = `
-		SELECT kv.id, 
-			name, 
+		SELECT kv.id,
+			name,
 			lease
 		FROM kine AS kv
 		JOIN (
@@ -168,11 +168,11 @@ var (
 
 	deleteSQL = `
 		INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
-		SELECT 
+		SELECT
 			name,
 			0 AS created,
 			1 AS deleted,
-			CASE 
+			CASE
 				WHEN kine.created THEN id
 				ELSE create_revision
 			END AS create_revision,
@@ -186,14 +186,14 @@ var (
 
 	createSQL = `
 		INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
-		SELECT 
+		SELECT
 			CAST(? AS TEXT) AS name,
 			1 AS created,
 			0 AS deleted,
-			0 AS create_revision, 
-			COALESCE(id, 0) AS prev_revision, 
-			? AS lease, 
-			? AS value, 
+			0 AS create_revision,
+			COALESCE(id, 0) AS prev_revision,
+			? AS lease,
+			? AS value,
 			NULL AS old_value
 		FROM (
 			SELECT MAX(id) AS id, deleted
@@ -204,11 +204,11 @@ var (
 
 	updateSQL = `
 		INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
-		SELECT 
+		SELECT
 			CAST(? AS TEXT) AS name,
 			0 AS created,
 			0 AS deleted,
-			CASE 
+			CASE
 				WHEN kine.created THEN id
 				ELSE create_revision
 			END AS create_revision,
@@ -734,16 +734,11 @@ func (d *Driver) CurrentRevision(ctx context.Context) (int64, error) {
 	return id, nil
 }
 
-func (d *Driver) AfterPrefix(ctx context.Context, key, rangeEnd []byte, rev, limit int64) (*sql.Rows, error) {
+func (d *Driver) AfterPrefix(ctx context.Context, key, rangeEnd []byte, startRevision, endRevision int64) (*sql.Rows, error) {
 	if len(rangeEnd) == 0 {
 		rangeEnd = append(key, 0)
 	}
-	sql := afterSQLPrefix
-	if limit > 0 {
-		sql = fmt.Sprintf("%s LIMIT ?", sql)
-		return d.query(ctx, "after_sql_prefix_limit", sql, key, rangeEnd, rev, limit)
-	}
-	return d.query(ctx, "after_sql_prefix", sql, key, rangeEnd, rev)
+	return d.query(ctx, "after_sql_prefix", afterSQLPrefix, key, rangeEnd, startRevision, endRevision)
 }
 
 func (d *Driver) After(ctx context.Context, rev, limit int64) (*sql.Rows, error) {
