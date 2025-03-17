@@ -183,9 +183,11 @@ def instances(
                 util.setup_k8s_snap(instance, tmp_path, snap_version)
 
             if bootstrap:
-                bootstrap_config = util.add_bootstrap_config_args(
-                    bootstrap_config or ""
-                )
+                if not bootstrap_config:
+                    bootstrap_config = (
+                        config.MANIFESTS_DIR / "bootstrap-all.yaml"
+                    ).read_text()
+                bootstrap_config = util.add_bootstrap_config_args(bootstrap_config)
                 if bootstrap_config:
                     instance.exec(
                         ["k8s", "bootstrap", "--file", "-"],
@@ -265,7 +267,7 @@ def session_instance(
     snap = next(snap_versions(request))
     util.setup_k8s_snap(instance, tmp_path, snap)
 
-    bootstrap_config = (config.MANIFESTS_DIR / "bootstrap-session.yaml").read_text()
+    bootstrap_config = (config.MANIFESTS_DIR / "bootstrap-all.yaml").read_text()
     bootstrap_config = util.add_bootstrap_config_args(bootstrap_config)
 
     instance_default_ip = util.get_default_ip(instance)
