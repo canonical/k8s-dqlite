@@ -377,13 +377,13 @@ def join_cluster(
 def add_bootstrap_config_args(bootstrap_cfg_yaml: str = "") -> str:
     """Extend the bootstrap config based on the test configuration."""
     bootstrap_cfg = collections.defaultdict(dict)
-    bootstrap_cfg.update(yaml.loads(bootstrap_cfg_yaml))
+    bootstrap_cfg.update(yaml.load(bootstrap_cfg_yaml))
 
     k8s_dqlite_args = get_k8s_dqlite_args()
     if k8s_dqlite_args:
         bootstrap_cfg["extra-node-k8s-dqlite-args"].update(k8s_dqlite_args)
 
-    return yaml.dumps(bootstrap_cfg)
+    return yaml.dump(bootstrap_cfg)
 
 
 def tracks_least_risk(track: str, arch: str) -> str:
