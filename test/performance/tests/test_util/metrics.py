@@ -71,14 +71,22 @@ def pull_metrics(instances: List[harness.Instance], test_name: str):
         file_prefix = ""
         if len(instances) > 1:
             file_prefix = f"{i}-of-{len(instances)}-"
-        out_file = os.path.join(out_dir, f"{file_prefix}metrics.log")
 
+        out_file = os.path.join(out_dir, f"{file_prefix}metrics.log")
         instance.pull_file(
             f"/root/{instance.id}_metrics.log",
             out_file,
         )
 
         generate_graphs(out_dir)
+
+        if config.ENABLE_OTEL:
+            for otel_file in ["k8s-dqlite-metrics", "k8s-dqlite-traces"]:
+                out_file = os.path.join(out_dir, f"{file_prefix}-{otel_file}.log")
+                instance.pull_file(
+                    f"/root/{otel_file}.txt",
+                    out_file,
+                )
 
         if config.ENABLE_PROFILING:
             # Stop k8s-dqlite, triggering a pprof data dump. Don't start it back

@@ -1,6 +1,7 @@
 #
 # Copyright 2025 Canonical, Ltd.
 #
+import collections
 import ipaddress
 import json
 import logging
@@ -14,6 +15,7 @@ from pathlib import Path
 from typing import Any, Callable, List, Mapping, Optional, Union
 
 import pytest
+import yaml
 from tenacity import (
     RetryCallState,
     retry,
@@ -326,17 +328,62 @@ def get_join_token(
     return out.stdout.decode().strip()
 
 
+def get_k8s_dqlite_args() -> dict[str, Any]:
+    args = {}
+
+    if config.ENABLE_PROFILING:
+        args["--profiling"] = True
+        args["--profiling-dir"] = "/root"
+
+    if config.ENABLE_OTEL:
+        # For now, we'll dump the OTEL metrics and traces along with the other
+        # perf metrics. In the future, we may allow passing a gRPC endpoint.
+        args["--otel"] = True
+        args["--otel-dir"] = "/root"
+        if config.OTEL_SPAN_NAME_FILTER:
+            args["--otel-span-name-filter"] = config.OTEL_SPAN_NAME_FILTER
+        if config.OTEL_SPAN_MIN_DURATION_FILTER:
+            args["--otel-span-min-duration-filter"] = (
+                config.OTEL_SPAN_MIN_DURATION_FILTER
+            )
+
+    return args
+
+
+def get_default_join_cfg() -> dict[str, Any]:
+    join_cfg = {}
+
+    k8s_dqlite_args = get_k8s_dqlite_args()
+    if k8s_dqlite_args:
+        join_cfg["extra-node-k8s-dqlite-args"] = k8s_dqlite_args
+
+    return join_cfg
+
+
 # Join an existing cluster.
 def join_cluster(
-    instance: harness.Instance, join_token: str, join_cfg: Optional[str] = ""
+    instance: harness.Instance, join_token: str, join_cfg: dict[str, str] = ""
 ):
     if join_cfg:
+        join_cfg_yaml = yaml.dump(join_cfg)
         instance.exec(
             ["k8s", "join-cluster", join_token, "--file", "-"],
-            input=str.encode(join_cfg),
+            input=str.encode(join_cfg_yaml),
         )
     else:
         instance.exec(["k8s", "join-cluster", join_token])
+
+
+def add_bootstrap_config_args(bootstrap_cfg_yaml: str = "") -> str:
+    """Extend the bootstrap config based on the test configuration."""
+    bootstrap_cfg = collections.defaultdict(dict)
+    bootstrap_cfg.update(yaml.loads(bootstrap_cfg_yaml))
+
+    k8s_dqlite_args = get_k8s_dqlite_args()
+    if k8s_dqlite_args:
+        bootstrap_cfg["extra-node-k8s-dqlite-args"].update(k8s_dqlite_args)
+
+    return yaml.dumps(bootstrap_cfg)
 
 
 def tracks_least_risk(track: str, arch: str) -> str:
