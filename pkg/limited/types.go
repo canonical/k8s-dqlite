@@ -3,6 +3,7 @@ package limited
 import (
 	"context"
 
+	"go.etcd.io/etcd/api/v3/mvccpb"
 	"go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 )
 
@@ -19,7 +20,7 @@ type Backend interface {
 	List(ctx context.Context, key, rangeEnd []byte, limit, revision int64) (int64, []*KeyValue, error)
 	Count(ctx context.Context, key, rangeEnd []byte, revision int64) (int64, int64, error)
 	Update(ctx context.Context, key, value []byte, revision, lease int64) (int64, bool, error)
-	Watch(ctx context.Context, key, rangeEnd []byte, startRevision int64) (chan WatchData, error)
+	WatcherGroup(ctx context.Context) (WatcherGroup, error)
 	DbSize(ctx context.Context) (int64, error)
 	CurrentRevision(ctx context.Context) (int64, error)
 	GetCompactRevision(ctx context.Context) (int64, int64, error)
@@ -27,27 +28,27 @@ type Backend interface {
 	Close() error
 }
 
-type KeyValue struct {
-	Key            string
-	CreateRevision int64
-	ModRevision    int64
-	Value          []byte
-	Lease          int64
+type WatcherGroup interface {
+	// Watch will add a watcher to the group. If startRevision is not 0, the first notification
+	// containing an update for this watcher will also contain all events from startRevision
+	// up to that notification.
+	Watch(watchId int64, key, rangeEnd []byte, startRevision int64) error
+	Unwatch(watchId int64)
+	Updates() <-chan WatcherGroupUpdate
 }
 
-type Event struct {
-	Delete bool
-	Create bool
-	KV     *KeyValue
-	PrevKV *KeyValue
+type WatcherGroupUpdate struct {
+	Revision int64
+	Updates  []WatcherUpdate
 }
 
-type Watcher struct {
-	Cancel        context.CancelFunc
-	EventsCh      chan []*Event
-	StartRevision int64
-	Key           []byte
+type WatcherUpdate struct {
+	WatcherId int64
+	Events    []*Event
 }
+
+type KeyValue = mvccpb.KeyValue
+type Event = mvccpb.Event
 
 type WatchData struct {
 	CurrentRevision int64
