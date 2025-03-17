@@ -273,7 +273,7 @@ func newGrpcMetricExporter(ctx context.Context, conn *grpc.ClientConn) (sdkmetri
 
 func newFileMetricExporter(ctx context.Context, file *os.File) (sdkmetric.Exporter, error) {
 	metricExporter, err := stdoutmetric.New(
-		stdoutmetric.WithPrettyPrint(),
+		// stdoutmetric.WithPrettyPrint(),
 		stdoutmetric.WithWriter(file),
 	)
 	if err != nil {
