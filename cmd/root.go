@@ -101,7 +101,7 @@ var (
 				if rootCmdOpts.otelSpanMinDurationFilter != "" {
 					otelSpanMinDuration, err = time.ParseDuration(rootCmdOpts.otelSpanMinDurationFilter)
 					if err != nil {
-						logrus.Fatal("Could not parse span duration %s: %w", rootCmdOpts.otelSpanMinDurationFilter, err)
+						logrus.Fatalf("Could not parse span duration %s: %w", rootCmdOpts.otelSpanMinDurationFilter, err)
 					}
 				}
 
