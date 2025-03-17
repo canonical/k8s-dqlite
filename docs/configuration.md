@@ -13,6 +13,7 @@ The following configuration options are available listed in a table format:
 | `--enable-tls` | Enable TLS | `true` |
 | `--debug` | Enable debug logs | `false` |
 | `--profiling` | Enable debug pprof endpoint | `false` |
+| `--profiling-dir` | Directory to use for profiling data | - |
 | `--profiling-listen` | The address to listen for pprof endpoint | `127.0.0.1:4000` |
 | `--disk-mode` | (Experimental) Run Dqlite store in disk mode | `false` |
 | `--tls-client-session-cache-size` | ClientCacheSession size for dial TLS config | `0` |
@@ -20,6 +21,9 @@ The following configuration options are available listed in a table format:
 | `--metrics` | Enable metrics endpoint | `false` |
 | `--otel` | Enable traces endpoint | `false` |
 | `--otel-listen` | The address to listen for OpenTelemetry endpoint | `127.0.0.1:4317` |
+| `--otel-dir` | Dump OpenTelemetry metrics in the specified directory | - |
+| `--otel-span-name-filter` |drop OpenTelemetry trace spans that do not match the specified regex filter | - |
+| `--otel-span-min-duration-filter` | Drop OpenTelemetry trace spans below the specified time interval (e.g. 10ms) | - |
 | `--metrics-listen` | The address to listen for metrics endpoint | `127.0.0.1:9042` |
 | `--datastore-max-idle-connections` | Maximum number of idle connections retained by datastore | `5` |
 | `--datastore-max-open-connections` | Maximum number of open connections used by datastore | `5` |
