@@ -67,3 +67,10 @@ RAFT_TRACE_LEVEL = os.getenv("TEST_RAFT_TRACE_LEVEL")
 
 # Enable pprof profiling.
 ENABLE_PROFILING = os.getenv("TEST_ENABLE_PROFILING", "1") == "1"
+
+# Enable OpenTelemetry metrics and traces.
+ENABLE_OTEL = os.getenv("TEST_ENABLE_OTEL", "1") == "1"
+# Drop OpenTelemetry trace spans that do not match the specified regex filter.
+OTEL_SPAN_NAME_FILTER = os.getenv("TEST_OTEL_SPAN_NAME_FILTER", "")
+# Filter out OpenTelemetry traces below a given interval threshold.
+OTEL_SPAN_MIN_DURATION_FILTER = os.getenv("TEST_OTEL_SPAN_MIN_DURATION_FILTER", "10ms")
