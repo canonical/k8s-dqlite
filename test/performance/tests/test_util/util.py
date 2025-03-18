@@ -1,7 +1,6 @@
 #
 # Copyright 2025 Canonical, Ltd.
 #
-import collections
 import ipaddress
 import json
 import logging
@@ -157,8 +156,8 @@ def setup_core_dumps(instance: harness.Instance):
     instance.exec(["snap", "set", "system", "system.coredump.enable=true"])
 
 
-def configure_dqlite_logging(instance: harness.Instance):
-    """Configure k8s-dqlite logging (requires restart)."""
+def configure_dqlite(instance: harness.Instance):
+    """Configure k8s-dqlite (requires restart)."""
     if config.DQLITE_TRACE_LEVEL:
         instance.exec(
             [
@@ -179,6 +178,45 @@ def configure_dqlite_logging(instance: harness.Instance):
         )
     if config.K8S_DQLITE_DEBUG:
         instance.exec(["echo", "--debug", ">>", "/var/snap/k8s/common/args/k8s-dqlite"])
+
+    if config.ENABLE_PROFILING:
+        instance.exec(
+            ["echo", "--profiling", ">>", "/var/snap/k8s/common/args/k8s-dqlite"]
+        )
+        instance.exec(
+            [
+                "echo",
+                "--profiling-dir=/root",
+                ">>",
+                "/var/snap/k8s/common/args/k8s-dqlite",
+            ]
+        )
+
+    if config.ENABLE_OTEL:
+        instance.exec(["echo", "--otel", ">>", "/var/snap/k8s/common/args/k8s-dqlite"])
+        instance.exec(
+            ["echo", "--otel-dir=/root", ">>", "/var/snap/k8s/common/args/k8s-dqlite"]
+        )
+
+        if config.OTEL_SPAN_NAME_FILTER:
+            instance.exec(
+                [
+                    "echo",
+                    f"--otel-span-name-filter='{config.OTEL_SPAN_NAME_FILTER}'",
+                    ">>",
+                    "/var/snap/k8s/common/args/k8s-dqlite",
+                ]
+            )
+
+        if config.OTEL_SPAN_MIN_DURATION_FILTER:
+            instance.exec(
+                [
+                    "echo",
+                    f"--otel-span-min-duration-filter={config.OTEL_SPAN_MIN_DURATION_FILTER}",
+                    ">>",
+                    "/var/snap/k8s/common/args/k8s-dqlite",
+                ]
+            )
 
 
 def setup_k8s_snap(
@@ -221,7 +259,7 @@ def setup_k8s_snap(
 
     instance.exec(cmd)
 
-    configure_dqlite_logging(instance)
+    configure_dqlite(instance)
 
     if connect_interfaces:
         LOG.info("Ensure k8s interfaces and network requirements")
@@ -328,38 +366,6 @@ def get_join_token(
     return out.stdout.decode().strip()
 
 
-def get_k8s_dqlite_args() -> dict[str, Any]:
-    args = {}
-
-    if config.ENABLE_PROFILING:
-        args["--profiling"] = True
-        args["--profiling-dir"] = "/root"
-
-    if config.ENABLE_OTEL:
-        # For now, we'll dump the OTEL metrics and traces along with the other
-        # perf metrics. In the future, we may allow passing a gRPC endpoint.
-        args["--otel"] = True
-        args["--otel-dir"] = "/root"
-        if config.OTEL_SPAN_NAME_FILTER:
-            args["--otel-span-name-filter"] = config.OTEL_SPAN_NAME_FILTER
-        if config.OTEL_SPAN_MIN_DURATION_FILTER:
-            args["--otel-span-min-duration-filter"] = (
-                config.OTEL_SPAN_MIN_DURATION_FILTER
-            )
-
-    return args
-
-
-def get_default_join_cfg() -> dict[str, Any]:
-    join_cfg = {}
-
-    k8s_dqlite_args = get_k8s_dqlite_args()
-    if k8s_dqlite_args:
-        join_cfg["extra-node-k8s-dqlite-args"] = k8s_dqlite_args
-
-    return join_cfg
-
-
 # Join an existing cluster.
 def join_cluster(
     instance: harness.Instance,
@@ -374,18 +380,6 @@ def join_cluster(
         )
     else:
         instance.exec(["k8s", "join-cluster", join_token])
-
-
-def add_bootstrap_config_args(bootstrap_cfg_yaml: str = "") -> str:
-    """Extend the bootstrap config based on the test configuration."""
-    bootstrap_cfg = collections.defaultdict(dict)
-    bootstrap_cfg.update(yaml.safe_load(bootstrap_cfg_yaml) or {})
-
-    k8s_dqlite_args = get_k8s_dqlite_args()
-    if k8s_dqlite_args:
-        bootstrap_cfg["extra-node-k8s-dqlite-args"].update(k8s_dqlite_args)
-
-    return yaml.dump(dict(bootstrap_cfg))
 
 
 def tracks_least_risk(track: str, arch: str) -> str:
