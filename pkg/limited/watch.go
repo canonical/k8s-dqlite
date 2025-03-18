@@ -89,8 +89,8 @@ func (ws *watchStream) ServeRequests() error {
 
 func (ws *watchStream) ServeUpdates() error {
 	for update := range ws.watcherGroup.Updates() {
-		ws.revision = update.Revision
-		if err := ws.sendUpdates(update.Updates); err != nil {
+		ws.revision = update.Revision()
+		if err := ws.sendUpdates(update.Watchers()); err != nil {
 			return err
 		}
 	}

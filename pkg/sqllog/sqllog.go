@@ -150,7 +150,7 @@ func (s *SQLLog) Close() error {
 }
 
 func (s *SQLLog) compactStart(ctx context.Context) error {
-	currentRevision, err := s.CurrentRevision(ctx)
+	currentRevision, err := s.config.Driver.CurrentRevision(ctx)
 
 	rows, err := s.config.Driver.AfterPrefix(ctx, []byte("compact_rev_key"), []byte("compact_rev_key\x00"), 0, currentRevision)
 	if err != nil {
@@ -257,14 +257,6 @@ func (s *SQLLog) WatcherGroup(ctx context.Context) (limited.WatcherGroup, error)
 	return wg, nil
 }
 
-func (s *SQLLog) CurrentRevision(ctx context.Context) (int64, error) {
-	return s.config.Driver.CurrentRevision(ctx)
-}
-
-func (s *SQLLog) GetCompactRevision(ctx context.Context) (int64, int64, error) {
-	return s.config.Driver.GetCompactRevision(ctx)
-}
-
 func (s *SQLLog) List(ctx context.Context, key, rangeEnd []byte, limit, revision int64) (int64, []*limited.KeyValue, error) {
 	var err error
 
@@ -349,9 +341,9 @@ func (s *SQLLog) ttl(ctx context.Context) {
 		}
 		group.Watch(1, []byte{0}, []byte{255}, startRevision)
 
-		for pollData := range group.Updates() {
-			for _, group := range pollData.Updates {
-				for _, event := range group.Events {
+		for group := range group.Updates() {
+			for _, watcher := range group.Watchers() {
+				for _, event := range watcher.Events {
 					if event.Kv.Lease > 0 {
 						go run(ctx, []byte(event.Kv.Key), event.Kv.ModRevision, time.Duration(event.Kv.Lease)*time.Second)
 					}
@@ -687,6 +679,14 @@ type watcher struct {
 	events        []*limited.Event
 }
 
+type watcherGroupUpdate struct {
+	revision int64
+	updates  []limited.WatcherUpdate
+}
+
+func (w *watcherGroupUpdate) Revision() int64                   { return w.revision }
+func (w *watcherGroupUpdate) Watchers() []limited.WatcherUpdate { return w.updates }
+
 func (w *watcherGroup) publish(currentRevision int64, events []*limited.Event) bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -703,9 +703,9 @@ func (w *watcherGroup) publish(currentRevision int64, events []*limited.Event) b
 		}
 	}
 
-	groupUpdate := limited.WatcherGroupUpdate{
-		Revision: currentRevision,
-		Updates:  updates,
+	groupUpdate := &watcherGroupUpdate{
+		revision: currentRevision,
+		updates:  updates,
 	}
 	select {
 	case w.updates <- groupUpdate:

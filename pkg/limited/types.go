@@ -22,8 +22,6 @@ type Backend interface {
 	Update(ctx context.Context, key, value []byte, revision, lease int64) (int64, bool, error)
 	WatcherGroup(ctx context.Context) (WatcherGroup, error)
 	DbSize(ctx context.Context) (int64, error)
-	CurrentRevision(ctx context.Context) (int64, error)
-	GetCompactRevision(ctx context.Context) (int64, int64, error)
 	DoCompact(ctx context.Context) error
 	Close() error
 }
@@ -37,9 +35,9 @@ type WatcherGroup interface {
 	Updates() <-chan WatcherGroupUpdate
 }
 
-type WatcherGroupUpdate struct {
-	Revision int64
-	Updates  []WatcherUpdate
+type WatcherGroupUpdate interface {
+	Revision() int64
+	Watchers() []WatcherUpdate
 }
 
 type WatcherUpdate struct {
