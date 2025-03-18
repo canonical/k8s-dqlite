@@ -55,8 +55,6 @@ type Driver interface {
 	DeleteRevision(ctx context.Context, revision int64) error
 	GetCompactRevision(ctx context.Context) (int64, int64, error)
 	Compact(ctx context.Context, revision int64) error
-	Fill(ctx context.Context, revision int64) error
-	IsFill(key []byte) bool
 	GetSize(ctx context.Context) (int64, error)
 	Close() error
 }
@@ -394,15 +392,10 @@ func (s *SQLLog) startWatch(ctx context.Context) error {
 }
 
 func (s *SQLLog) poll(ctx context.Context) {
-	var (
-		skip        int64
-		skipTime    time.Time
-		waitForMore = true
-	)
+	ticker := time.NewTicker(s.config.PollInterval)
+	defer ticker.Stop()
 
-	wait := time.NewTicker(s.config.PollInterval)
-	defer wait.Stop()
-
+	waitForMore := true
 	for {
 		if waitForMore {
 			select {
@@ -412,7 +405,7 @@ func (s *SQLLog) poll(ctx context.Context) {
 				if check <= s.pollRevision {
 					continue
 				}
-			case <-wait.C:
+			case <-ticker.C:
 			}
 		}
 		waitForMore = true
@@ -425,55 +418,7 @@ func (s *SQLLog) poll(ctx context.Context) {
 		}
 
 		waitForMore = len(events) < 100
-
-		rev := s.pollRevision
-		var (
-			sequential []*limited.Event
-		)
-
-		for _, event := range events {
-			next := rev + 1
-			// Ensure that we are notifying events in a sequential fashion. For example if we find row 4 before 3
-			// we don't want to notify row 4 because 3 is essentially dropped forever.
-			if event.Kv.ModRevision != next {
-				logrus.Tracef("MODREVISION GAP: expected %v, got %v", next, event.Kv.ModRevision)
-				if canSkipRevision(next, skip, skipTime) {
-					// This situation should never happen, but we have it here as a fallback just for unknown reasons
-					// we don't want to pause all watches forever
-					logrus.Errorf("GAP %s, revision=%d, delete=%v, next=%d", event.Kv.Key, event.Kv.ModRevision, event.Type == mvccpb.DELETE, next)
-				} else if skip != next {
-					// This is the first time we have encountered this missing revision, so record time start
-					// and trigger a quick retry for simple out of order events
-					skip = next
-					skipTime = time.Now()
-					s.notifyWatcherPoll(next)
-					break
-				} else {
-					if err := s.config.Driver.Fill(ctx, next); err == nil {
-						logrus.Debugf("FILL, revision=%d, err=%v", next, err)
-						s.notifyWatcherPoll(next)
-					} else {
-						logrus.Debugf("FILL FAILED, revision=%d, err=%v", next, err)
-					}
-					break
-				}
-			}
-
-			// we have done something now that we should save the last revision.  We don't save here now because
-			// the next loop could fail leading to saving the reported revision without reporting it.  In practice this
-			// loop right now has no error exit so the next loop shouldn't fail, but if we for some reason add a method
-			// that returns error, that would be a tricky bug to find.  So instead we only save the last revision at
-			// the same time we write to the channel.
-			rev = event.Kv.ModRevision
-			if s.config.Driver.IsFill([]byte(event.Kv.Key)) {
-				logrus.Debugf("NOT TRIGGER FILL %s, revision=%d, delete=%v", event.Kv.Key, event.Kv.ModRevision, event.Type == mvccpb.DELETE)
-			} else {
-				sequential = append(sequential, event)
-				logrus.Debugf("TRIGGERED %s, revision=%d, delete=%v", event.Kv.Key, event.Kv.ModRevision, event.Type == mvccpb.DELETE)
-			}
-		}
-
-		s.publishEvents(rev, sequential)
+		s.publishEvents(s.pollRevision, events)
 	}
 }
 
