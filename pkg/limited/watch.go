@@ -27,7 +27,7 @@ func (s *KVServerBridge) Watch(ws etcdserverpb.Watch_WatchServer) error {
 		watcherGroup:   watcherGroup,
 		notifyInterval: s.limited.notifyInterval,
 		server:         ws,
-		watches:        make(map[int64]*watch),
+		watchers:       make(map[int64]*watcher),
 	}
 
 	eg.Go(stream.ServeUpdates)
@@ -43,15 +43,15 @@ type watchStream struct {
 	notifyInterval time.Duration
 	revision       int64
 	server         etcdserverpb.Watch_WatchServer
-	watches        map[int64]*watch
+	watchers       map[int64]*watcher
 }
 
-type watch struct {
+type watcher struct {
 	reportProgress bool
 }
 
 func (ws *watchStream) ServeRequests() error {
-	nextWatchId := int64(1)
+	nextWatcherId := int64(1)
 	for {
 		msg, err := ws.server.Recv()
 		if err != nil {
@@ -67,10 +67,10 @@ func (ws *watchStream) ServeRequests() error {
 				rangeEnd = append(cr.Key, 0)
 			}
 			// TODO: return error on compaction error
-			if err := ws.Create(nextWatchId, cr.Key, rangeEnd, cr.StartRevision); err != nil {
+			if err := ws.Create(nextWatcherId, cr.Key, rangeEnd, cr.StartRevision); err != nil {
 				return nil
 			}
-			nextWatchId++
+			nextWatcherId++
 		}
 
 		if cr := msg.GetCancelRequest(); cr != nil {
@@ -102,7 +102,7 @@ func (ws *watchStream) sendUpdates(updates []WatcherUpdate) error {
 	defer ws.mu.Unlock()
 
 	for _, watcherUpdate := range updates {
-		ws.watches[watcherUpdate.WatcherId].reportProgress = false
+		ws.watchers[watcherUpdate.WatcherId].reportProgress = false
 		err := ws.server.Send(&etcdserverpb.WatchResponse{
 			Header:  txnHeader(ws.revision),
 			WatchId: watcherUpdate.WatcherId,
@@ -136,7 +136,7 @@ func (ws *watchStream) sendProgress() error {
 	ws.mu.Lock()
 	defer ws.mu.Unlock()
 
-	for id, watch := range ws.watches {
+	for id, watch := range ws.watchers {
 		if watch.reportProgress {
 			err := ws.server.Send(&etcdserverpb.WatchResponse{
 				Header:  txnHeader(ws.revision),
@@ -160,7 +160,7 @@ func (ws *watchStream) Create(id int64, key, rangeEnd []byte, startRevision int6
 	if err := ws.watcherGroup.Watch(id, key, rangeEnd, startRevision); err != nil {
 		return err
 	}
-	ws.watches[id] = &watch{
+	ws.watchers[id] = &watcher{
 		reportProgress: true,
 	}
 
@@ -176,7 +176,7 @@ func (ws *watchStream) Close(id int64) {
 
 	ws.mu.Lock()
 	defer ws.mu.Unlock()
-	delete(ws.watches, id)
+	delete(ws.watchers, id)
 }
 
 func (ws *watchStream) RequestProgress() error {

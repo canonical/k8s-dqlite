@@ -32,8 +32,8 @@ type WatcherGroup interface {
 	// Watch will add a watcher to the group. If startRevision is not 0, the first notification
 	// containing an update for this watcher will also contain all events from startRevision
 	// up to that notification.
-	Watch(watchId int64, key, rangeEnd []byte, startRevision int64) error
-	Unwatch(watchId int64)
+	Watch(watcherId int64, key, rangeEnd []byte, startRevision int64) error
+	Unwatch(watcherId int64)
 	Updates() <-chan WatcherGroupUpdate
 }
 
@@ -49,8 +49,3 @@ type WatcherUpdate struct {
 
 type KeyValue = mvccpb.KeyValue
 type Event = mvccpb.Event
-
-type WatchData struct {
-	CurrentRevision int64
-	Events          []*Event
-}
