@@ -104,3 +104,27 @@ To find the Dqlite leader run `.leader` in the dqlite shell.
 Sometimes it is helpful to get insights into what is happening in the dqlite layer.
 To do this, you can enable debug logs. Add debug logs by editing
 `/var/snap/k8s/common/args/k8s-dqlite-env` or `/var/snap/microk8s/current/args/k8s-dqlite-env` and uncomment `LIBDQLITE_TRACE=1` and `LIBRAFT_TRACE=1`. Then restart the k8s-dqlite service and check the k8s-dqlite logs.
+
+To enable k8s-dqlite debug logging, add ``--debug`` to
+``/var/snap/k8s/common/args/k8s-dqlite``.
+
+Profiling data can help identify k8s-dqlite bottlenecks. Use the ``--profiling``
+and ``--profiling-dir`` k8s-dqlite arguments to obtain ``pprof`` profiling data,
+which will be stored in the specified directory when the k8s-dqlite service
+stops.
+
+k8s-dqlite also provides various OpenTelemetry metrics and traces. Use ``--otel``
+to enable OpenTelemetry.
+
+The OpenTelemetry data can be pushed to a gRPC service such as Jaeger using the
+``--otel-listen`` setting. Alternatively, use ``--otel-dir`` to specify a
+directory that will be used to store OTEL data.
+
+The following arguments can be used to filter OTEL trace spans:
+
+* ``--otel-span-name-filter`` - use a regex to filter spans by name
+* ``--otel-span-min-duration-filter`` -- filter out spans below a given
+threshold interval
+
+A Prometheus endpoint can also be enabled using the ``--metrics-listen``
+setting.
