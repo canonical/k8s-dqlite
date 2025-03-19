@@ -422,17 +422,18 @@ func (s *SQLLog) poll(ctx context.Context) {
 		}
 
 		waitForMore = len(events) < 100
-		s.publishEvents(s.pollRevision, events)
+		s.publishEvents(events)
 	}
 }
 
-func (s *SQLLog) publishEvents(currentRevision int64, events []*limited.Event) {
+func (s *SQLLog) publishEvents(events []*limited.Event) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.pollRevision = currentRevision
-
+	if len(events) > 0 {
+		s.pollRevision = events[len(events)-1].Kv.ModRevision
+	}
 	for _, w := range s.watcherGroups {
-		if !w.publish(currentRevision, events) {
+		if !w.publish(s.pollRevision, events) {
 			if w.stop() {
 				delete(s.watcherGroups, w)
 				close(w.updates)
@@ -441,11 +442,11 @@ func (s *SQLLog) publishEvents(currentRevision int64, events []*limited.Event) {
 	}
 }
 
-func (s *SQLLog) getLatestEvents(ctx context.Context, last int64) ([]*limited.Event, error) {
+func (s *SQLLog) getLatestEvents(ctx context.Context, pollRevision int64) ([]*limited.Event, error) {
 	watchCtx, cancel := context.WithTimeout(ctx, s.config.WatchQueryTimeout)
 	defer cancel()
 
-	rows, err := s.config.Driver.After(watchCtx, last, pollBatchSize)
+	rows, err := s.config.Driver.After(watchCtx, pollRevision, pollBatchSize)
 	if err != nil {
 		return nil, err
 	}
@@ -455,10 +456,6 @@ func (s *SQLLog) getLatestEvents(ctx context.Context, last int64) ([]*limited.Ev
 		return nil, err
 	}
 	return events, nil
-}
-
-func canSkipRevision(rev, skip int64, skipTime time.Time) bool {
-	return rev == skip && time.Since(skipTime) > time.Second
 }
 
 func (s *SQLLog) Count(ctx context.Context, key, rangeEnd []byte, revision int64) (int64, int64, error) {
