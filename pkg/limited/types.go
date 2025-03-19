@@ -12,6 +12,14 @@ var (
 	ErrGRPCUnhealthy = rpctypes.ErrGRPCUnhealthy
 )
 
+type CompactedError struct {
+	CompactRevision, CurrentRevision int64
+}
+
+func (e *CompactedError) Error() string {
+	return ErrCompacted.Error()
+}
+
 type Backend interface {
 	Start(ctx context.Context) error
 	Stop() error

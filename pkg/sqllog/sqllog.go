@@ -706,7 +706,15 @@ func (w *watcherGroup) Watch(watchId int64, key, rangeEnd []byte, startRevision 
 		currentRevision := w.currentRevision
 		w.mu.Unlock()
 
-		// TODO: check that this has a time limit
+		compactRev, rev, err := w.driver.GetCompactRevision(ctx)
+		if err != nil {
+			span.RecordError(err)
+			logrus.Errorf("Failed to get compact revision: %v", err)
+		}
+		if startRevision < compactRev {
+			return &limited.CompactedError{CompactRevision: compactRev, CurrentRevision: rev}
+		}
+
 		initialEvents, err := w.initialEvents(ctx, key, rangeEnd, startRevision-1, currentRevision)
 		if err != nil {
 			w.mu.Lock()

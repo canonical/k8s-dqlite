@@ -67,7 +67,6 @@ func (ws *watchStream) ServeRequests() error {
 			if len(rangeEnd) == 0 {
 				rangeEnd = append(cr.Key, 0)
 			}
-			// TODO: return error on compaction error
 			if err := ws.Create(nextWatcherId, cr.Key, rangeEnd, cr.StartRevision); err != nil {
 				return nil
 			}
@@ -159,23 +158,23 @@ func (ws *watchStream) Create(id int64, key, rangeEnd []byte, startRevision int6
 	defer ws.mu.Unlock()
 
 	if err := ws.watcherGroup.Watch(id, key, rangeEnd, startRevision); err != nil {
-		if err == ErrCompacted {
-			reason := err.Error()
-			compactRev, revision, lerr := ws.limited.backend.GetCompactRevision(ws.server.Context())
-			if lerr != nil {
-				logrus.Errorf("Failed to get compact and current revision for cancel response %v", err)
-			}
-			serr := ws.server.Send(&etcdserverpb.WatchResponse{
-				Header:          txnHeader(revision),
+		if compactErr, ok := err.(*CompactedError); ok {
+			return ws.server.Send(&etcdserverpb.WatchResponse{
+				Header:          txnHeader(compactErr.CurrentRevision),
 				Canceled:        true,
-				CancelReason:    reason,
-				CompactRevision: compactRev,
+				CancelReason:    err.Error(),
+				CompactRevision: compactErr.CompactRevision,
 			})
-			if serr != nil && !clientv3.IsConnCanceled(serr) {
-				logrus.Errorf("WATCH Failed to send cancel response due to compaction for watch: %v", err)
-			}
+		} else {
+			// Return an error message that the api-server understands:
+			logrus.WithError(err).Errorf("WATCH Failed to create watcher: %v", err)
+			err = ErrGRPCUnhealthy
+			return ws.server.Send(&etcdserverpb.WatchResponse{
+				Header:       txnHeader(ws.revision),
+				Canceled:     true,
+				CancelReason: err.Error(),
+			})
 		}
-		return err
 	}
 	ws.watchers[id] = &watcher{
 		reportProgress: true,
