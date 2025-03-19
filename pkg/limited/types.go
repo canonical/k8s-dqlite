@@ -22,6 +22,7 @@ type Backend interface {
 	Update(ctx context.Context, key, value []byte, revision, lease int64) (int64, bool, error)
 	WatcherGroup(ctx context.Context) (WatcherGroup, error)
 	DbSize(ctx context.Context) (int64, error)
+	GetCompactRevision(ctx context.Context) (int64, int64, error)
 	DoCompact(ctx context.Context) error
 	Close() error
 }

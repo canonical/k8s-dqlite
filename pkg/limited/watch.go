@@ -44,6 +44,7 @@ type watchStream struct {
 	revision       int64
 	server         etcdserverpb.Watch_WatchServer
 	watchers       map[int64]*watcher
+	limited        LimitedServer
 }
 
 type watcher struct {
@@ -158,6 +159,22 @@ func (ws *watchStream) Create(id int64, key, rangeEnd []byte, startRevision int6
 	defer ws.mu.Unlock()
 
 	if err := ws.watcherGroup.Watch(id, key, rangeEnd, startRevision); err != nil {
+		if err == ErrCompacted {
+			reason := err.Error()
+			compactRev, revision, lerr := ws.limited.backend.GetCompactRevision(ws.server.Context())
+			if lerr != nil {
+				logrus.Errorf("Failed to get compact and current revision for cancel response %v", err)
+			}
+			serr := ws.server.Send(&etcdserverpb.WatchResponse{
+				Header:          txnHeader(revision),
+				Canceled:        true,
+				CancelReason:    reason,
+				CompactRevision: compactRev,
+			})
+			if serr != nil && !clientv3.IsConnCanceled(serr) {
+				logrus.Errorf("WATCH Failed to send cancel response due to compaction for watch: %v", err)
+			}
+		}
 		return err
 	}
 	ws.watchers[id] = &watcher{

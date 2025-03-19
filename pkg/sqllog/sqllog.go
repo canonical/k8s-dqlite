@@ -255,6 +255,10 @@ func (s *SQLLog) WatcherGroup(ctx context.Context) (limited.WatcherGroup, error)
 	return wg, nil
 }
 
+func (s *SQLLog) GetCompactRevision(ctx context.Context) (int64, int64, error) {
+	return s.config.Driver.GetCompactRevision(ctx)
+}
+
 func (s *SQLLog) List(ctx context.Context, key, rangeEnd []byte, limit, revision int64) (int64, []*limited.KeyValue, error) {
 	var err error
 
