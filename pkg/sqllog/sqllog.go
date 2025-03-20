@@ -353,7 +353,7 @@ func (s *SQLLog) ttl(ctx context.Context) {
 		// TODO needs to be restarted, never cancelled/dropped
 		group, err := s.WatcherGroup(ctx)
 		if err != nil {
-			logrus.Errorf("failed to create watch groupw for ttl: %v", err)
+			logrus.Errorf("failed to create watch group for ttl: %v", err)
 			return
 		}
 		group.Watch(1, []byte{0}, []byte{255}, startRevision)
@@ -375,11 +375,11 @@ func (s *SQLLog) startWatch(ctx context.Context) error {
 		return err
 	}
 
-	polllInitialRevision, _, err := s.config.Driver.GetCompactRevision(ctx)
+	pollInitialRevision, _, err := s.config.Driver.GetCompactRevision(ctx)
 	if err != nil {
 		return err
 	}
-	s.pollRevision = polllInitialRevision
+	s.pollRevision = pollInitialRevision
 
 	// start compaction and polling at the same time to watch starts
 	// at the oldest revision, but compaction doesn't create gaps
