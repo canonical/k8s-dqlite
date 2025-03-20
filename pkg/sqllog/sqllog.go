@@ -26,9 +26,10 @@ const (
 )
 
 var (
-	otelTracer trace.Tracer
-	otelMeter  metric.Meter
-	compactCnt metric.Int64Counter
+	otelTracer      trace.Tracer
+	otelMeter       metric.Meter
+	compactCnt      metric.Int64Counter
+	watcherGroupCnt metric.Int64Counter
 )
 
 func init() {
@@ -37,6 +38,10 @@ func init() {
 	otelMeter = otel.Meter(otelName)
 
 	compactCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.compact", otelName), metric.WithDescription("Number of compact requests"))
+	if err != nil {
+		logrus.WithError(err).Warning("Otel failed to create create counter")
+	}
+	watcherGroupCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.watcherGroup", otelName), metric.WithDescription("Number of watcherGroup requests"))
 	if err != nil {
 		logrus.WithError(err).Warning("Otel failed to create create counter")
 	}
@@ -233,6 +238,16 @@ func (s *SQLLog) DoCompact(ctx context.Context) (err error) {
 }
 
 func (s *SQLLog) WatcherGroup(ctx context.Context) (limited.WatcherGroup, error) {
+	var err error
+
+	watcherGroupCnt.Add(ctx, 1)
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.WatcherGroup", otelName))
+	span.SetAttributes(attribute.Int64("currentRevision", s.pollRevision))
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -443,8 +458,16 @@ func (s *SQLLog) publishEvents(events []*limited.Event) {
 }
 
 func (s *SQLLog) getLatestEvents(ctx context.Context, pollRevision int64) ([]*limited.Event, error) {
+	var err error
 	watchCtx, cancel := context.WithTimeout(ctx, s.config.WatchQueryTimeout)
 	defer cancel()
+
+	watchCtx, span := otelTracer.Start(watchCtx, fmt.Sprintf("%s.getLatestEvents", otelName))
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+	span.SetAttributes(attribute.Int64("pollRevision", pollRevision))
 
 	rows, err := s.config.Driver.After(watchCtx, pollRevision, pollBatchSize)
 	if err != nil {
@@ -455,6 +478,7 @@ func (s *SQLLog) getLatestEvents(ctx context.Context, pollRevision int64) ([]*li
 	if err != nil {
 		return nil, err
 	}
+	span.SetAttributes(attribute.Int("events", len(events)))
 	return events, nil
 }
 
@@ -634,6 +658,12 @@ func (w *watcherGroupUpdate) Revision() int64                   { return w.revis
 func (w *watcherGroupUpdate) Watchers() []limited.WatcherUpdate { return w.updates }
 
 func (w *watcherGroup) publish(currentRevision int64, events []*limited.Event) bool {
+	_, span := otelTracer.Start(w.ctx, fmt.Sprintf("%s.publish", otelName))
+	span.SetAttributes(attribute.Int64("currentRevision", currentRevision))
+	span.SetAttributes(attribute.Int("events", len(events)))
+	span.SetAttributes(attribute.Int("watchers", len(w.watchers)))
+	span.SetAttributes(attribute.Int("updates", len(w.updates)))
+	defer span.End()
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -685,13 +715,18 @@ func appendEvents(src, dst []*limited.Event, key, rangeEnd []byte) []*limited.Ev
 }
 
 func (w *watcherGroup) Watch(watchId int64, key, rangeEnd []byte, startRevision int64) error {
+	var err error
 	ctx, span := otelTracer.Start(w.ctx, fmt.Sprintf("%s.Watch", otelName))
-	defer span.End()
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 
 	span.SetAttributes(
 		attribute.String("key", string(key)),
 		attribute.String("rangeEnd", string(rangeEnd)),
 		attribute.Int64("startRevision", startRevision),
+		attribute.Int64("watchId", watchId),
 	)
 
 	watcher := &watcher{
@@ -708,8 +743,8 @@ func (w *watcherGroup) Watch(watchId int64, key, rangeEnd []byte, startRevision 
 
 		compactRev, rev, err := w.driver.GetCompactRevision(ctx)
 		if err != nil {
-			span.RecordError(err)
 			logrus.Errorf("Failed to get compact revision: %v", err)
+			return err
 		}
 		if startRevision < compactRev {
 			return &limited.CompactedError{CompactRevision: compactRev, CurrentRevision: rev}
@@ -721,12 +756,7 @@ func (w *watcherGroup) Watch(watchId int64, key, rangeEnd []byte, startRevision 
 			delete(w.watchers, watchId)
 			w.mu.Unlock()
 			if !errors.Is(err, context.Canceled) {
-				span.RecordError(err)
 				logrus.Errorf("Failed to list %s for revision %d: %v", key, startRevision, err)
-				// We return an error message that the api-server understands: limited.ErrGRPCUnhealthy
-				if err != limited.ErrCompacted {
-					err = limited.ErrGRPCUnhealthy
-				}
 			}
 			return err
 		}
@@ -741,11 +771,27 @@ func (w *watcherGroup) Watch(watchId int64, key, rangeEnd []byte, startRevision 
 }
 
 func (w *watcherGroup) initialEvents(ctx context.Context, key, rangeEnd []byte, fromRevision, toRevision int64) ([]*limited.Event, error) {
+	var err error
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.initialEvents", otelName))
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+	span.SetAttributes(
+		attribute.String("key", string(key)),
+		attribute.String("rangeEnd", string(rangeEnd)),
+		attribute.Int64("fromRevision", fromRevision),
+		attribute.Int64("toRevision", toRevision),
+	)
+
 	rows, err := w.driver.AfterPrefix(ctx, key, rangeEnd, fromRevision, toRevision)
 	if err != nil {
 		return nil, err
 	}
-	return ScanAll(rows, scanEvent)
+
+	events, err := ScanAll(rows, scanEvent)
+	span.SetAttributes(attribute.Int("events", len(events)))
+	return events, err
 }
 
 func (w *watcherGroup) Unwatch(watchId int64) {

@@ -16,9 +16,9 @@ type CompactedError struct {
 	CompactRevision, CurrentRevision int64
 }
 
-func (e *CompactedError) Error() string {
-	return ErrCompacted.Error()
-}
+func (e *CompactedError) Error() string { return ErrCompacted.Error() }
+
+func (e *CompactedError) Is(target error) bool { return target == ErrCompacted }
 
 type Backend interface {
 	Start(ctx context.Context) error
