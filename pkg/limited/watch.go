@@ -160,10 +160,11 @@ func (ws *watchStream) Create(id int64, key, rangeEnd []byte, startRevision int6
 	if err := ws.watcherGroup.Watch(id, key, rangeEnd, startRevision); err != nil {
 		if compactErr, ok := err.(*CompactedError); ok {
 			return ws.server.Send(&etcdserverpb.WatchResponse{
-				Header:          txnHeader(compactErr.CurrentRevision),
-				Canceled:        true,
-				CancelReason:    err.Error(),
-				CompactRevision: compactErr.CompactRevision,
+				Header:       txnHeader(compactErr.CurrentRevision),
+				WatchId:      clientv3.InvalidWatchID,
+				Canceled:     true,
+				Created:      true,
+				CancelReason: err.Error(),
 			})
 		} else {
 			// Return an error message that the api-server understands:
