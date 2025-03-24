@@ -429,9 +429,10 @@ func (s *SQLLog) poll(ctx context.Context) {
 		}
 		events, err := s.getLatestEvents(ctx, s.pollRevision)
 		if err != nil {
-			if !errors.Is(err, context.DeadlineExceeded) || !errors.Is(err, context.Canceled) {
-				logrus.Errorf("fail to get latest events: %v", err)
+			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+				return
 			}
+			logrus.Errorf("fail to get latest events: %v", err)
 			continue
 		}
 
