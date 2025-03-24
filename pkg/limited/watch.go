@@ -68,7 +68,7 @@ func (ws *watchStream) ServeRequests() error {
 				rangeEnd = append(cr.Key, 0)
 			}
 			if err := ws.Create(nextWatcherId, cr.Key, rangeEnd, cr.StartRevision); err != nil {
-				return nil
+				return err
 			}
 			nextWatcherId++
 		}
