@@ -24,10 +24,10 @@ func (s *KVServerBridge) Watch(ws etcdserverpb.Watch_WatchServer) error {
 	}
 
 	stream := &watchStream{
-		watcherGroup:   watcherGroup,
-		notifyInterval: s.limited.notifyInterval,
-		server:         ws,
-		watchers:       make(map[int64]*watcher),
+		watcherGroup:       watcherGroup,
+		notifyInterval:     s.limited.notifyInterval,
+		server:             ws,
+		sendProgressReport: make(map[int64]bool),
 	}
 
 	eg.Go(stream.ServeUpdates)
@@ -38,17 +38,13 @@ func (s *KVServerBridge) Watch(ws etcdserverpb.Watch_WatchServer) error {
 }
 
 type watchStream struct {
-	mu             sync.Mutex
-	watcherGroup   WatcherGroup
-	notifyInterval time.Duration
-	revision       int64
-	server         etcdserverpb.Watch_WatchServer
-	watchers       map[int64]*watcher
-	limited        LimitedServer
-}
-
-type watcher struct {
-	reportProgress bool
+	mu                 sync.Mutex
+	watcherGroup       WatcherGroup
+	notifyInterval     time.Duration
+	revision           int64
+	server             etcdserverpb.Watch_WatchServer
+	sendProgressReport map[int64]bool
+	limited            LimitedServer
 }
 
 func (ws *watchStream) ServeRequests() error {
@@ -102,7 +98,7 @@ func (ws *watchStream) sendUpdates(updates []WatcherUpdate) error {
 	defer ws.mu.Unlock()
 
 	for _, watcherUpdate := range updates {
-		ws.watchers[watcherUpdate.WatcherId].reportProgress = false
+		ws.sendProgressReport[watcherUpdate.WatcherId] = false
 		err := ws.server.Send(&etcdserverpb.WatchResponse{
 			Header:  txnHeader(ws.revision),
 			WatchId: watcherUpdate.WatcherId,
@@ -136,8 +132,8 @@ func (ws *watchStream) sendProgress() error {
 	ws.mu.Lock()
 	defer ws.mu.Unlock()
 
-	for id, watch := range ws.watchers {
-		if watch.reportProgress {
+	for id, sendProgressReport := range ws.sendProgressReport {
+		if sendProgressReport {
 			err := ws.server.Send(&etcdserverpb.WatchResponse{
 				Header:  txnHeader(ws.revision),
 				WatchId: id,
@@ -147,7 +143,7 @@ func (ws *watchStream) sendProgress() error {
 				return err
 			}
 		} else {
-			watch.reportProgress = true
+			sendProgressReport = true
 		}
 	}
 	return nil
@@ -177,9 +173,7 @@ func (ws *watchStream) Create(id int64, key, rangeEnd []byte, startRevision int6
 			})
 		}
 	}
-	ws.watchers[id] = &watcher{
-		reportProgress: true,
-	}
+	ws.sendProgressReport[id] = true
 
 	return ws.server.Send(&etcdserverpb.WatchResponse{
 		Header:  &etcdserverpb.ResponseHeader{},
@@ -193,7 +187,7 @@ func (ws *watchStream) Close(id int64) {
 
 	ws.mu.Lock()
 	defer ws.mu.Unlock()
-	delete(ws.watchers, id)
+	delete(ws.sendProgressReport, id)
 }
 
 func (ws *watchStream) RequestProgress() error {
