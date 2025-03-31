@@ -2,9 +2,11 @@ package test
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 	"time"
 
+	"github.com/canonical/k8s-dqlite/pkg/sqllog"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/types"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -14,7 +16,7 @@ import (
 func TestWatch(t *testing.T) {
 	const (
 		// pollTimeout is the timeout for waiting to receive an event.
-		pollTimeout = 50 * time.Millisecond
+		pollTimeout = 2 * time.Second
 
 		// progressNotifyTimeout is the timeout for waiting to receive a progress notify.
 		progressNotifyTimeout = 1 * time.Second
@@ -29,12 +31,24 @@ func TestWatch(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			server := newK8sDqliteServer(ctx, t, &k8sDqliteConfig{backendType: backendType})
+			server := newK8sDqliteServer(ctx, t, &k8sDqliteConfig{
+				backendType: backendType,
+				setup: func(ctx context.Context, tx *sql.Tx) error {
+					// Make sure there are enough rows deleted to have a compaction.
+					if _, err := insertMany(ctx, tx, "key", 100, sqllog.SupersededCount); err != nil {
+						return err
+					}
+					if _, err := deleteMany(ctx, tx, "key", sqllog.SupersededCount); err != nil {
+						return err
+					}
+					return nil
+				},
+			})
 
 			// start watching for events on key
 			const watchedPrefix = "watched/"
 			const ingnoredPrefix = "ignored/"
-			watchCh := server.client.Watch(ctx, watchedPrefix)
+			watchCh := server.client.Watch(ctx, watchedPrefix, clientv3.WithPrefix())
 
 			t.Run("ReceiveNothingUntilActivity", func(t *testing.T) {
 				g := NewWithT(t)
@@ -115,6 +129,22 @@ func TestWatch(t *testing.T) {
 
 				g.Consistently(watchCh, idleTimeout).ShouldNot(Receive())
 			})
+
+			t.Run("Compacted", func(t *testing.T) {
+				ctx, cancel := context.WithCancel(ctx)
+				defer cancel()
+				g := NewWithT(t)
+
+				server.backend.DoCompact(ctx)
+
+				key := watchedPrefix + "compacted"
+				createValue := "testValue1"
+				createKey(ctx, g, server.client, key, createValue)
+
+				watchCh := server.client.Watch(ctx, key, clientv3.WithRev(1))
+				g.Eventually(watchCh, pollTimeout).Should(BeClosed())
+			})
+
 			t.Run("ProgressNotify", func(t *testing.T) {
 				ctx, cancel := context.WithCancel(ctx)
 				defer cancel()
@@ -124,7 +154,6 @@ func TestWatch(t *testing.T) {
 
 				g.Eventually(watchCh, progressNotifyTimeout).Should(ReceiveProgressNotify(g))
 			})
-
 		})
 	}
 }

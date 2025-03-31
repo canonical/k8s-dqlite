@@ -22,7 +22,6 @@ func TestCreate(t *testing.T) {
 			server := newK8sDqliteServer(ctx, t, &k8sDqliteConfig{backendType: backendType})
 
 			createKey(ctx, g, server.client, "testKey", "testValue")
-
 			resp, err := server.client.Txn(ctx).
 				If(clientv3.Compare(clientv3.ModRevision("testKey"), "=", 0)).
 				Then(clientv3.OpPut("testKey", "testValue2")).
