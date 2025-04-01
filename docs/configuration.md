@@ -59,6 +59,12 @@ OpenTelemetry trace spans can be filtered using the following arguments:
 * ``--otel-span-name-filter`` - use a regex to filter spans by name
 * ``--otel-span-min-duration-filter`` -- filter out spans below a given threshold interval
 
+Profiling data can also help identify k8s-dqlite bottlenecks. Use the ``--profiling``
+and ``--profiling-dir`` k8s-dqlite arguments to obtain ``pprof`` profiling data,
+which will be stored in the specified directory when the k8s-dqlite service
+stops.
+
+
 ## Connection Pool Configuration
 
 The connection pool configuration options are available to control the connections to Dqlite:

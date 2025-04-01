@@ -107,8 +107,3 @@ To do this, you can enable debug logs. Add debug logs by editing
 
 To enable k8s-dqlite debug logging, add ``--debug`` to
 ``/var/snap/k8s/common/args/k8s-dqlite``.
-
-Profiling data can help identify k8s-dqlite bottlenecks. Use the ``--profiling``
-and ``--profiling-dir`` k8s-dqlite arguments to obtain ``pprof`` profiling data,
-which will be stored in the specified directory when the k8s-dqlite service
-stops.
