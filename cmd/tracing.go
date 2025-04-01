@@ -205,7 +205,7 @@ func initConn(otelEndpoint string) (*grpc.ClientConn, error) {
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create gRPC connection to collector: %w", err)
+		return nil, fmt.Errorf("failed to create otel gRPC connection to collector: %w", err)
 	}
 
 	return conn, nil
@@ -214,7 +214,7 @@ func initConn(otelEndpoint string) (*grpc.ClientConn, error) {
 func newGrpcTraceExporter(ctx context.Context, conn *grpc.ClientConn) (trace.SpanExporter, error) {
 	exporter, err := otlptracegrpc.New(ctx, otlptracegrpc.WithGRPCConn(conn))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create gRPC trace exporter: %w", err)
+		return nil, fmt.Errorf("failed to create otel gRPC trace exporter: %w", err)
 	}
 	return exporter, nil
 }
@@ -225,7 +225,7 @@ func newFileTraceExporter(ctx context.Context, file *os.File) (trace.SpanExporte
 		stdouttrace.WithWriter(file),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create file trace exporter: %w", err)
+		return nil, fmt.Errorf("failed to create otel file trace exporter: %w", err)
 	}
 	return exporter, nil
 }
@@ -266,18 +266,17 @@ func newTraceProvider(traceExporter trace.SpanExporter, res *resource.Resource, 
 func newGrpcMetricExporter(ctx context.Context, conn *grpc.ClientConn) (sdkmetric.Exporter, error) {
 	metricExporter, err := otlpmetricgrpc.New(ctx, otlpmetricgrpc.WithGRPCConn(conn))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create metric exporter: %w", err)
+		return nil, fmt.Errorf("failed to create otel gRPC metric exporter: %w", err)
 	}
 	return metricExporter, nil
 }
 
 func newFileMetricExporter(ctx context.Context, file *os.File) (sdkmetric.Exporter, error) {
 	metricExporter, err := stdoutmetric.New(
-		// stdoutmetric.WithPrettyPrint(),
 		stdoutmetric.WithWriter(file),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create metric exporter: %w", err)
+		return nil, fmt.Errorf("failed to create otel file metric exporter: %w", err)
 	}
 	return metricExporter, nil
 }

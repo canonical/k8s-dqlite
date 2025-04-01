@@ -29,6 +29,9 @@ LOG = logging.getLogger(__name__)
 RISKS = ["stable", "candidate", "beta", "edge"]
 TRACK_RE = re.compile(r"^(\d+)\.(\d+)(\S*)$")
 
+K8S_DQLITE_ENV_FILE = "/var/snap/k8s/common/args/k8s-dqlite-env"
+K8S_DQLITE_ARGS_FILE = "/var/snap/k8s/common/args/k8s-dqlite"
+
 
 def run(command: list, **kwargs) -> subprocess.CompletedProcess:
     """Log and run command."""
@@ -164,7 +167,7 @@ def configure_dqlite(instance: harness.Instance):
                 "echo",
                 f"LIBDQLITE_TRACE={config.DQLITE_TRACE_LEVEL}",
                 ">>",
-                "/var/snap/k8s/common/args/k8s-dqlite-env",
+                K8S_DQLITE_ENV_FILE,
             ]
         )
     if config.RAFT_TRACE_LEVEL:
@@ -173,30 +176,26 @@ def configure_dqlite(instance: harness.Instance):
                 "echo",
                 f"LIBRAFT_TRACE={config.RAFT_TRACE_LEVEL}",
                 ">>",
-                "/var/snap/k8s/common/args/k8s-dqlite-env",
+                K8S_DQLITE_ENV_FILE,
             ]
         )
     if config.K8S_DQLITE_DEBUG:
-        instance.exec(["echo", "--debug", ">>", "/var/snap/k8s/common/args/k8s-dqlite"])
+        instance.exec(["echo", "--debug", ">>", K8S_DQLITE_ARGS_FILE])
 
     if config.ENABLE_PROFILING:
-        instance.exec(
-            ["echo", "--profiling", ">>", "/var/snap/k8s/common/args/k8s-dqlite"]
-        )
+        instance.exec(["echo", "--profiling", ">>", K8S_DQLITE_ARGS_FILE])
         instance.exec(
             [
                 "echo",
                 "--profiling-dir=/root",
                 ">>",
-                "/var/snap/k8s/common/args/k8s-dqlite",
+                K8S_DQLITE_ARGS_FILE,
             ]
         )
 
-    if config.ENABLE_OTEL:
-        instance.exec(["echo", "--otel", ">>", "/var/snap/k8s/common/args/k8s-dqlite"])
-        instance.exec(
-            ["echo", "--otel-dir=/root", ">>", "/var/snap/k8s/common/args/k8s-dqlite"]
-        )
+    if config.OTEL_ENABLED:
+        instance.exec(["echo", "--otel", ">>", K8S_DQLITE_ARGS_FILE])
+        instance.exec(["echo", "--otel-dir=/root", ">>", K8S_DQLITE_ARGS_FILE])
 
         if config.OTEL_SPAN_NAME_FILTER:
             instance.exec(
@@ -204,7 +203,7 @@ def configure_dqlite(instance: harness.Instance):
                     "echo",
                     f"--otel-span-name-filter='{config.OTEL_SPAN_NAME_FILTER}'",
                     ">>",
-                    "/var/snap/k8s/common/args/k8s-dqlite",
+                    K8S_DQLITE_ARGS_FILE,
                 ]
             )
 
@@ -214,7 +213,7 @@ def configure_dqlite(instance: harness.Instance):
                     "echo",
                     f"--otel-span-min-duration-filter={config.OTEL_SPAN_MIN_DURATION_FILTER}",
                     ">>",
-                    "/var/snap/k8s/common/args/k8s-dqlite",
+                    K8S_DQLITE_ARGS_FILE,
                 ]
             )
 

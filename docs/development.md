@@ -112,19 +112,3 @@ Profiling data can help identify k8s-dqlite bottlenecks. Use the ``--profiling``
 and ``--profiling-dir`` k8s-dqlite arguments to obtain ``pprof`` profiling data,
 which will be stored in the specified directory when the k8s-dqlite service
 stops.
-
-k8s-dqlite also provides various OpenTelemetry metrics and traces. Use ``--otel``
-to enable OpenTelemetry.
-
-The OpenTelemetry data can be pushed to a gRPC service such as Jaeger using the
-``--otel-listen`` setting. Alternatively, use ``--otel-dir`` to specify a
-directory that will be used to store OTEL data.
-
-The following arguments can be used to filter OTEL trace spans:
-
-* ``--otel-span-name-filter`` - use a regex to filter spans by name
-* ``--otel-span-min-duration-filter`` -- filter out spans below a given
-threshold interval
-
-A Prometheus endpoint can also be enabled using the ``--metrics-listen``
-setting.
