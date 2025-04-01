@@ -71,29 +71,15 @@ jobs:
         shell: sudo Rscript {0}
       - name: Install lxd
         uses: canonical/k8s-snap/.github/actions/install-lxd@main
-      - name: Download latest k8s-snap
-        run: |
-          sudo snap download k8s --channel=latest/edge --basename k8s
-      - name: Unpack Snap
-        run: |
-          sudo unsquashfs -d snap-unpack-dir k8s.snap
-      - name: Create snap with k8s-dqlite ${{ github.head_ref }} code
-        run: |
-          make static
-          sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
-          sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
-          sudo mksquashfs snap-unpack-dir head.snap -noappend -comp lzo -no-fragments
-      - name: Create snap with k8s-dqlite base-code
-        run: |
-          set -o pipefail
-          git fetch origin $BASE_BRANCH
-          git reset --hard $BASE_SHA
-          make static
-          sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
-          sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
-          sudo mksquashfs snap-unpack-dir base-code.snap -noappend -comp lzo -no-fragments
-      - name: Switch back to target branch
-        run: git reset --hard $TARGET_SHA
+      - name: Patch k8s snap (head)
+        uses: ./.github/actions/patch-k8s-snap
+        with:
+          out-snap-path: head.snap
+      - name: Patch k8s snap (base)
+        uses: ./.github/actions/patch-k8s-snap
+        with:
+          out-snap-path: base-code.snap
+          build-commit: $BASE_SHA
       - name: Run Performance test ${{ github.head_ref }} snap
         env:
           TEST_SNAP: ${{ github.workspace }}/head.snap
