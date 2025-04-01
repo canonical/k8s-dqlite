@@ -4,14 +4,9 @@
 from typing import List
 
 import pytest
-from test_util import config, harness, metrics, util
+from test_util import harness, metrics, util
 
 
-@pytest.mark.bootstrap_config(
-    (config.MANIFESTS_DIR / "bootstrap-profiling.yaml").read_text()
-    if config.ENABLE_PROFILING
-    else None
-)
 @pytest.mark.node_count(3)
 def test_three_node_load(instances: List[harness.Instance]):
     cluster_node = instances[0]
@@ -23,13 +18,8 @@ def test_three_node_load(instances: List[harness.Instance]):
 
     assert join_token != join_token_2
 
-    if config.ENABLE_PROFILING:
-        cp_join_cfg = (config.MANIFESTS_DIR / "join-cp-profiling.yaml").read_text()
-    else:
-        cp_join_cfg = ""
-
-    util.join_cluster(joining_node, join_token, cp_join_cfg)
-    util.join_cluster(joining_node_2, join_token_2, cp_join_cfg)
+    util.join_cluster(joining_node, join_token)
+    util.join_cluster(joining_node_2, join_token_2)
 
     util.wait_until_k8s_ready(cluster_node, instances)
     nodes = util.ready_nodes(cluster_node)

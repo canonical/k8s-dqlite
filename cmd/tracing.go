@@ -4,11 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
+	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
 	"go.opentelemetry.io/otel/sdk/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -19,16 +25,107 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-var (
+const (
 	resourceName = "k8s-dqlite"
 )
 
+// NameFilter is a SpanProcessor that filters trace spans based on the span name.
+type NameFilter struct {
+	// Next is the next SpanProcessor in the chain.
+	Next trace.SpanProcessor
+
+	// AllowedPattern is a regex that will be used to filter spans,
+	// dropping the the spans in case of mismatching span names.
+	AllowedPattern *regexp.Regexp
+}
+
+func (f NameFilter) OnStart(parent context.Context, s trace.ReadWriteSpan) {
+	f.Next.OnStart(parent, s)
+}
+func (f NameFilter) Shutdown(ctx context.Context) error   { return f.Next.Shutdown(ctx) }
+func (f NameFilter) ForceFlush(ctx context.Context) error { return f.Next.ForceFlush(ctx) }
+func (f NameFilter) OnEnd(s trace.ReadOnlySpan) {
+	if f.AllowedPattern != nil && !f.AllowedPattern.MatchString(s.Name()) {
+		return
+	}
+	f.Next.OnEnd(s)
+}
+
+// DurationFilter is a SpanProcessor that filters spans that have lifetimes
+// outside of a defined range.
+type DurationFilter struct {
+	// Next is the next SpanProcessor in the chain.
+	Next trace.SpanProcessor
+
+	// Min is the duration under which spans are dropped.
+	Min time.Duration
+}
+
+func (f DurationFilter) OnStart(parent context.Context, s trace.ReadWriteSpan) {
+	f.Next.OnStart(parent, s)
+}
+func (f DurationFilter) Shutdown(ctx context.Context) error   { return f.Next.Shutdown(ctx) }
+func (f DurationFilter) ForceFlush(ctx context.Context) error { return f.Next.ForceFlush(ctx) }
+func (f DurationFilter) OnEnd(s trace.ReadOnlySpan) {
+	if f.Min > 0 && s.EndTime().Sub(s.StartTime()) < f.Min {
+		// Drop short lived spans.
+		return
+	}
+	f.Next.OnEnd(s)
+}
+
 // setupOTelSDK bootstraps the OpenTelemetry pipeline.
 // If it does not return an error, make sure to call shutdown for proper cleanup.
-func setupOTelSDK(ctx context.Context, otelEndpoint string) (shutdown func(context.Context) error, err error) {
-	conn, err := initConn(otelEndpoint)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create gRPC connection to collector: %w", err)
+func setupOTelSDK(
+	ctx context.Context, otelEndpoint string,
+	otelDir string, spanNameFilter string,
+	spanMinDurationFilter time.Duration) (shutdown func(context.Context) error, err error) {
+	var grpcConn *grpc.ClientConn
+	var traceExporter trace.SpanExporter
+	var traceProvider *trace.TracerProvider
+	var metricExporter sdkmetric.Exporter
+	var meterProvider *metric.MeterProvider
+	var metricFile *os.File
+	var traceFile *os.File
+
+	shutdown = func(ctx context.Context) error {
+		var shutdownErrs error
+		if meterProvider != nil {
+			err = meterProvider.Shutdown(ctx)
+			if err != nil {
+				logrus.WithError(err).Warning("Failed to shut down otel meter provider")
+				shutdownErrs = errors.Join(shutdownErrs, err)
+			}
+		}
+		if traceProvider != nil {
+			err = traceProvider.Shutdown(ctx)
+			if err != nil {
+				logrus.WithError(err).Warning("Failed to shut down otel trace provider")
+				shutdownErrs = errors.Join(shutdownErrs, err)
+			}
+		}
+		if grpcConn != nil {
+			err = grpcConn.Close()
+			if err != nil {
+				logrus.WithError(err).Warning("Failed to shut down otel gRPC connection")
+				shutdownErrs = errors.Join(shutdownErrs, err)
+			}
+		}
+		if metricFile != nil {
+			err = metricFile.Close()
+			if err != nil {
+				logrus.WithError(err).Warning("Failed to close otel meter file")
+				shutdownErrs = errors.Join(shutdownErrs, err)
+			}
+		}
+		if traceFile != nil {
+			err = traceFile.Close()
+			if err != nil {
+				logrus.WithError(err).Warning("Failed to close otel trace file")
+				shutdownErrs = errors.Join(shutdownErrs, err)
+			}
+		}
+		return shutdownErrs
 	}
 
 	res, err := resource.New(ctx,
@@ -38,55 +135,66 @@ func setupOTelSDK(ctx context.Context, otelEndpoint string) (shutdown func(conte
 	)
 	if err != nil {
 		logrus.WithError(err).Warning("Otel failed to create resource")
+		return nil, err
 	}
 
-	traceExporter, err := newTraceExporter(ctx, conn)
-	if err != nil {
-		connErr := conn.Close()
-		if connErr != nil {
-			logrus.WithError(connErr).Warning("Failed to shut down otel gRPC connection")
+	if otelDir != "" {
+		traceFilePath := filepath.Join(otelDir, "k8s-dqlite-traces.txt")
+		traceFile, err = os.OpenFile(traceFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			shutdown(ctx)
+			return nil, fmt.Errorf("failed to open otel trace file %s: %w", traceFilePath, err)
 		}
-		return nil, fmt.Errorf("failed to create trace exporter: %w", err)
+		metricFilePath := filepath.Join(otelDir, "k8s-dqlite-metrics.txt")
+		metricFile, err = os.OpenFile(metricFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			shutdown(ctx)
+			return nil, fmt.Errorf("failed to open otel metric file %s: %w", traceFilePath, err)
+		}
+	} else {
+		grpcConn, err = initConn(otelEndpoint)
+		if err != nil {
+			shutdown(ctx)
+			return nil, err
+		}
 	}
 
-	tracerProvider := newTraceProvider(traceExporter, res)
+	// Initialize trace exporter.
+	if otelDir != "" {
+		traceExporter, err = newFileTraceExporter(ctx, traceFile)
+	} else {
+		traceExporter, err = newGrpcTraceExporter(ctx, grpcConn)
+	}
+	if err != nil {
+		shutdown(ctx)
+		return nil, err
+	}
+
+	tracerProvider, err := newTraceProvider(traceExporter, res, spanNameFilter, spanMinDurationFilter)
+	if err != nil {
+		shutdown(ctx)
+		return nil, err
+	}
 	otel.SetTracerProvider(tracerProvider)
 
-	meterExporter, err := newMeterExporter(ctx, conn)
-	if err != nil {
-		var shutdownErrs error
-		shutdownErr := tracerProvider.Shutdown(ctx)
-		if shutdownErr != nil {
-			shutdownErrs = errors.Join(shutdownErrs, shutdownErr)
-		}
-		shutdownErr = conn.Close()
-		if shutdownErr != nil {
-			shutdownErrs = errors.Join(shutdownErrs, shutdownErr)
-		}
-		if shutdownErrs != nil {
-			logrus.WithError(shutdownErrs).Warning("Failed to shutdown OpenTelemetry SDK")
-			return nil, fmt.Errorf("failed to create meter provider: %w", err)
-		}
+	// Initialize meter exporter.
+	if otelDir != "" {
+		metricExporter, err = newFileMetricExporter(ctx, metricFile)
+	} else {
+		metricExporter, err = newGrpcMetricExporter(ctx, grpcConn)
 	}
-	meterProvider, err := newMeterProvider(meterExporter, res)
+	if err != nil {
+		shutdown(ctx)
+		return nil, err
+	}
+
+	meterProvider, err = newMeterProvider(metricExporter, res)
+	if err != nil {
+		shutdown(ctx)
+		return nil, err
+	}
 	otel.SetMeterProvider(meterProvider)
 
-	shutdown = func(ctx context.Context) error {
-		var shutdownErrs error
-		err = meterProvider.Shutdown(ctx)
-		if err != nil {
-			shutdownErrs = errors.Join(shutdownErrs, err)
-		}
-		err = tracerProvider.Shutdown(ctx)
-		if err != nil {
-			shutdownErrs = errors.Join(shutdownErrs, err)
-		}
-		err = conn.Close()
-		if err != nil {
-			shutdownErrs = errors.Join(shutdownErrs, err)
-		}
-		return shutdownErrs
-	}
 	return shutdown, nil
 }
 
@@ -97,39 +205,83 @@ func initConn(otelEndpoint string) (*grpc.ClientConn, error) {
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create gRPC connection to collector: %w", err)
+		return nil, fmt.Errorf("failed to create otel gRPC connection to collector: %w", err)
 	}
 
 	return conn, nil
 }
 
-func newTraceExporter(ctx context.Context, conn *grpc.ClientConn) (trace.SpanExporter, error) {
+func newGrpcTraceExporter(ctx context.Context, conn *grpc.ClientConn) (trace.SpanExporter, error) {
 	exporter, err := otlptracegrpc.New(ctx, otlptracegrpc.WithGRPCConn(conn))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create trace exporter: %w", err)
+		return nil, fmt.Errorf("failed to create otel gRPC trace exporter: %w", err)
 	}
 	return exporter, nil
 }
 
-func newTraceProvider(traceExporter trace.SpanExporter, res *resource.Resource) *trace.TracerProvider {
+func newFileTraceExporter(ctx context.Context, file *os.File) (trace.SpanExporter, error) {
+	exporter, err := stdouttrace.New(
+		// stdouttrace.WithPrettyPrint(),
+		stdouttrace.WithWriter(file),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create otel file trace exporter: %w", err)
+	}
+	return exporter, nil
+}
+
+func newTraceProvider(traceExporter trace.SpanExporter, res *resource.Resource, spanNameFilter string, spanMinDurationFilter time.Duration) (*trace.TracerProvider, error) {
+	var sp sdktrace.SpanProcessor
 	bsp := sdktrace.NewBatchSpanProcessor(traceExporter)
+	sp = bsp
+
+	if spanNameFilter != "" {
+		allowedPattern, err := regexp.Compile(spanNameFilter)
+		if err != nil {
+			return nil, fmt.Errorf("invalid span filter regex %s: %w", spanNameFilter, err)
+		}
+		filter := NameFilter{
+			Next:           bsp,
+			AllowedPattern: allowedPattern,
+		}
+		sp = filter
+	}
+
+	if spanMinDurationFilter > 0 {
+		filter := DurationFilter{
+			Next: sp,
+			Min:  spanMinDurationFilter,
+		}
+		sp = filter
+	}
+
 	traceProvider := sdktrace.NewTracerProvider(
 		sdktrace.WithSampler(sdktrace.AlwaysSample()),
 		sdktrace.WithResource(res),
-		sdktrace.WithSpanProcessor(bsp),
+		sdktrace.WithSpanProcessor(sp),
 	)
-	return traceProvider
+	return traceProvider, nil
 }
 
-func newMeterExporter(ctx context.Context, conn *grpc.ClientConn) (*otlpmetricgrpc.Exporter, error) {
+func newGrpcMetricExporter(ctx context.Context, conn *grpc.ClientConn) (sdkmetric.Exporter, error) {
 	metricExporter, err := otlpmetricgrpc.New(ctx, otlpmetricgrpc.WithGRPCConn(conn))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create metric exporter: %w", err)
+		return nil, fmt.Errorf("failed to create otel gRPC metric exporter: %w", err)
 	}
 	return metricExporter, nil
 }
 
-func newMeterProvider(metricExporter *otlpmetricgrpc.Exporter, res *resource.Resource) (*metric.MeterProvider, error) {
+func newFileMetricExporter(ctx context.Context, file *os.File) (sdkmetric.Exporter, error) {
+	metricExporter, err := stdoutmetric.New(
+		stdoutmetric.WithWriter(file),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create otel file metric exporter: %w", err)
+	}
+	return metricExporter, nil
+}
+
+func newMeterProvider(metricExporter sdkmetric.Exporter, res *resource.Resource) (*metric.MeterProvider, error) {
 	meterProvider := sdkmetric.NewMeterProvider(
 		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(metricExporter)),
 		sdkmetric.WithResource(res),

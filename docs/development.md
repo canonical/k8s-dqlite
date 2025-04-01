@@ -104,3 +104,6 @@ To find the Dqlite leader run `.leader` in the dqlite shell.
 Sometimes it is helpful to get insights into what is happening in the dqlite layer.
 To do this, you can enable debug logs. Add debug logs by editing
 `/var/snap/k8s/common/args/k8s-dqlite-env` or `/var/snap/microk8s/current/args/k8s-dqlite-env` and uncomment `LIBDQLITE_TRACE=1` and `LIBRAFT_TRACE=1`. Then restart the k8s-dqlite service and check the k8s-dqlite logs.
+
+To enable k8s-dqlite debug logging, add ``--debug`` to
+``/var/snap/k8s/common/args/k8s-dqlite``.

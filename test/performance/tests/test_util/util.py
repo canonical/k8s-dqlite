@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Callable, List, Mapping, Optional, Union
 
 import pytest
+import yaml
 from tenacity import (
     RetryCallState,
     retry,
@@ -27,6 +28,9 @@ from test_util import config, harness
 LOG = logging.getLogger(__name__)
 RISKS = ["stable", "candidate", "beta", "edge"]
 TRACK_RE = re.compile(r"^(\d+)\.(\d+)(\S*)$")
+
+K8S_DQLITE_ENV_FILE = "/var/snap/k8s/common/args/k8s-dqlite-env"
+K8S_DQLITE_ARGS_FILE = "/var/snap/k8s/common/args/k8s-dqlite"
 
 
 def run(command: list, **kwargs) -> subprocess.CompletedProcess:
@@ -155,15 +159,15 @@ def setup_core_dumps(instance: harness.Instance):
     instance.exec(["snap", "set", "system", "system.coredump.enable=true"])
 
 
-def configure_dqlite_logging(instance: harness.Instance):
-    """Configure k8s-dqlite logging (requires restart)."""
+def configure_dqlite(instance: harness.Instance):
+    """Configure k8s-dqlite (requires restart)."""
     if config.DQLITE_TRACE_LEVEL:
         instance.exec(
             [
                 "echo",
                 f"LIBDQLITE_TRACE={config.DQLITE_TRACE_LEVEL}",
                 ">>",
-                "/var/snap/k8s/common/args/k8s-dqlite-env",
+                K8S_DQLITE_ENV_FILE,
             ]
         )
     if config.RAFT_TRACE_LEVEL:
@@ -172,11 +176,46 @@ def configure_dqlite_logging(instance: harness.Instance):
                 "echo",
                 f"LIBRAFT_TRACE={config.RAFT_TRACE_LEVEL}",
                 ">>",
-                "/var/snap/k8s/common/args/k8s-dqlite-env",
+                K8S_DQLITE_ENV_FILE,
             ]
         )
     if config.K8S_DQLITE_DEBUG:
-        instance.exec(["echo", "--debug", ">>", "/var/snap/k8s/common/args/k8s-dqlite"])
+        instance.exec(["echo", "--debug", ">>", K8S_DQLITE_ARGS_FILE])
+
+    if config.ENABLE_PROFILING:
+        instance.exec(["echo", "--profiling", ">>", K8S_DQLITE_ARGS_FILE])
+        instance.exec(
+            [
+                "echo",
+                "--profiling-dir=/root",
+                ">>",
+                K8S_DQLITE_ARGS_FILE,
+            ]
+        )
+
+    if config.OTEL_ENABLED:
+        instance.exec(["echo", "--otel", ">>", K8S_DQLITE_ARGS_FILE])
+        instance.exec(["echo", "--otel-dir=/root", ">>", K8S_DQLITE_ARGS_FILE])
+
+        if config.OTEL_SPAN_NAME_FILTER:
+            instance.exec(
+                [
+                    "echo",
+                    f"--otel-span-name-filter='{config.OTEL_SPAN_NAME_FILTER}'",
+                    ">>",
+                    K8S_DQLITE_ARGS_FILE,
+                ]
+            )
+
+        if config.OTEL_SPAN_MIN_DURATION_FILTER:
+            instance.exec(
+                [
+                    "echo",
+                    f"--otel-span-min-duration-filter={config.OTEL_SPAN_MIN_DURATION_FILTER}",
+                    ">>",
+                    K8S_DQLITE_ARGS_FILE,
+                ]
+            )
 
 
 def setup_k8s_snap(
@@ -219,7 +258,7 @@ def setup_k8s_snap(
 
     instance.exec(cmd)
 
-    configure_dqlite_logging(instance)
+    configure_dqlite(instance)
 
     if connect_interfaces:
         LOG.info("Ensure k8s interfaces and network requirements")
@@ -328,12 +367,15 @@ def get_join_token(
 
 # Join an existing cluster.
 def join_cluster(
-    instance: harness.Instance, join_token: str, join_cfg: Optional[str] = ""
+    instance: harness.Instance,
+    join_token: str,
+    join_cfg: Optional[dict[str, str]] = None,
 ):
     if join_cfg:
+        join_cfg_yaml = yaml.dump(dict(join_cfg))
         instance.exec(
             ["k8s", "join-cluster", join_token, "--file", "-"],
-            input=str.encode(join_cfg),
+            input=str.encode(join_cfg_yaml),
         )
     else:
         instance.exec(["k8s", "join-cluster", join_token])
