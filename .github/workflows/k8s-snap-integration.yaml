@@ -4,6 +4,8 @@ on:
   push:
     branches: ["master"]
   pull_request:
+  schedule:
+    - cron: "0 0 * * *" # Runs every midnight
 
 permissions:
   contents: read
@@ -13,9 +15,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  get-e2e-tags:
+    name: Get e2e test tags
+    runs-on: ubuntu-latest
+    outputs:
+      test-tags: ${{ steps.get-e2e-tags.outputs.test-tags }}
+    steps:
+      - name: Get e2e test tags
+        id: get-e2e-tags
+        run: |
+          set -x
+
+          tags="up_to_weekly"
+          has_cnfc_label=${{ contains(github.event.pull_request.labels.*.name, 'cncf-conformance') }}
+
+          if [[ ${{ github.event_name }} == "schedule" || "$has_cnfc_label" == "true" ]]; then
+            tags+=" conformance_tests"
+          fi
+
+          echo "test-tags=$tags" >> "$GITHUB_OUTPUT"
+
   build:
     name: K8s-snap Integration Test
     runs-on: self-hosted-linux-amd64-jammy-large
+    needs: [get-e2e-tags]
 
     steps:
       - name: Checking out repo
@@ -56,7 +79,7 @@ jobs:
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
         run: |
           git clone https://github.com/canonical/k8s-snap.git      
-          cd k8s-snap/tests/integration && sg lxd -c 'tox -e integration -- --tags up_to_weekly'
+          cd k8s-snap/tests/integration && sg lxd -c "tox -e integration -- --tags ${{ needs.get-e2e-tags.outputs.test-tags }}"
       - name: Prepare inspection reports
         if: failure()
         run: |
@@ -67,3 +90,9 @@ jobs:
         with:
           name: inspection-reports
           path: ${{ github.workspace }}/inspection-reports.tar.gz
+      - name: Upload CNCF conformance report artifact
+        if: ${{ failure() && contains(needs.get-e2e-tags.outputs.test-tags, 'conformance_tests') }}
+        uses: actions/upload-artifact@v4
+        with:
+         name: sonobuoy-e2e-${{ env.artifact_name }}
+         path: k8s-snap/tests/integration/sonobuoy_e2e.tar.gz
