@@ -20,6 +20,49 @@ Tags: watch, synchronization, architecture
 
 We will implement a WatcherGroup interface to manage watchers dynamically and ensure that all watchers within the group remain synchronized to the same "current revision". This approach removes the previous broadcaster component and avoids unnecessary event reordering associated with fan-out/fan-in patterns. We will also remove the sequentializing of events and filling of event gaps, which were specific requirements for PostgreSQL in kine.
 
+This flow diagram illustrates the new architecture:
+
+```mermaid
+graph LR
+    subgraph K8s API Server
+        A[K8s API Server];
+    end
+        A -- WatchReq --> B[Watch Server: 
+        start watch stream];
+        A -- CancelReq --> B;
+        A -- ProgressReq --> B;
+        B -- WatchResp --> A;
+
+    subgraph Watch Server
+        B;
+        B --> D[[Serve Updates: iterate over WatchGroup.Updates]];
+        D -- WatchResp: new events --> B;
+        
+        B --> E[[Serve Progress: 
+        report on tick 
+        only if no events were sent already]];
+        E -- Progress WatchResp--> B;
+        B -- WatchReq--> F[[Serve Requests: create/cancel/progress]];
+        F -- Cancel/Create/Progress WatchResp --> B;
+    end
+        D -- Updates --> G;
+        F -- Watch: key  --> G;
+        F -- UnWatch: key --> G;
+    subgraph Sqllog
+        G[WatchGroup];
+        L[WatcherGroupUpdate: currentRev, WatchUpdate: watcherId, filtered events ];
+        J[Create/Update/Delete]-- notify --> K[Poll events];
+        K[[Poll events]]
+        K -- Publish all events and filter on key --> L; 
+    end
+        H[Dqlit/Sqlite driver] -- query --> I[(Datastore)];
+        K -- After query --> H;
+    subgraph Driver
+        G -- initial Events: After query--> H;
+        G -- Updates --> L;
+    end
+```
+
 ## Consequences
 
 **Positive:**
@@ -52,9 +95,11 @@ We will implement a WatcherGroup interface to manage watchers dynamically and en
   * Avoids unnecessary event reordering and gap filling.
   * Improves maintainability by removing the complex broadcaster component.
 * **Cons:**
-  * Large architectural change that requires thorough testing efforts in order to avoid introduce bugs into our product.
+  * Large architectural change that requires thorough testing efforts in order to avoid introduction of bugs into our product.
 
 ## Links
+
+K8s-dqlite PRs:
 
 * bug: fix missing event by rm broadcaster and implementing WatchGroups  [PR](https://github.com/canonical/k8s-dqlite/pull/264)
 * Use watch poll Rev as "current rev" for watch progress [PR](https://github.com/canonical/k8s-dqlite/pull/263)
