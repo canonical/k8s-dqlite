@@ -10,7 +10,44 @@ Tags: watch, synchronization, architecture
 
 **Problem Statement:** We need to ensure that the watch synchronization mechanism in our system is efficient, effective and reliable.
 
-**Previous Implementation (Brief):** The previous implementation handling Kubernetes watch events inherited from Kine was not designed for a single synchronization point of all watch streams. The system used a broadcaster to manage watch stream subscriptions and forward events from a poll loop. It follows the fan-out and fan-in go pattern for distributing the watch events to the watchers which send the watched events to the API server. After the WatchList feature in Kubernetes upstream required an additional watch progress notification a patch was made on top of the event implementation waiting on events to achieve this synchronization point. An issue with a missing event caused us to revisit the implementation
+**Previous Implementation (Brief):** The previous implementation handling Kubernetes watch events inherited from Kine was not designed for a single synchronization point of all watch streams. The system used a broadcaster to manage watch stream subscriptions and forward events from a poll loop. It follows the fan-out and fan-in go pattern for distributing the watch events to the watchers which send the watched events to the API server. After the WatchList feature in Kubernetes upstream required an additional watch progress notification a patch was made on top of the event implementation waiting on events to achieve this synchronization point. An issue with a missing event caused us to revisit the implementation.
+This diagram illustrates the previous architecture:
+
+```mermaid
+graph LR
+    subgraph Kubernetes
+        A[K8s API Server];
+    end
+        A -- WatchReq --> B[Watch Server: 
+        start watch stream];
+        A -- CancelReq --> B;
+        A -- ProgressReq --> B;
+        B -- WatchResp --> A;
+    subgraph Watch Server
+        B;
+        B -- start --> C[[Progress Ticker]]
+        C -- tick --> D;
+        B -- WatchReq --> D[[Watch: handles event and progress notifications channels]];
+    end
+        D -- watch --> E[Watch];
+        E -- initial events --> H;
+        D -- get currentRev --> F[Current Revision];
+    subgraph Sqllog
+        E;
+        F;
+        E -- subscribes --> G[Broadcaster];
+        G -- []100 events --> E
+        J[Create/Update/Delete]-- notify --> K[Poll events];
+        L[[ticker]] -- tick --> K;
+        K -- all events --> G;
+        G -- Publish all events and filter on key --> E;
+    end
+        H[Dqlit/Sqlite driver] -- query --> I[(Datastore)];
+    subgraph Driver
+        H;
+    end
+        K -- After query --> H;
+```
 
 **Limitations of the Previous Implementation:** An issue with a missing event caused us to revisit the implementation as the "current revision" from the datastore was not in sync with the current revision from the event poll. The biggest issue with the implementation was the inefficient wait after the fan-out and fan-in of events that was introduced to get all watchers synchronized to the same point.
 
@@ -24,7 +61,7 @@ This flow diagram illustrates the new architecture:
 
 ```mermaid
 graph LR
-    subgraph K8s API Server
+    subgraph Kubernetes
         A[K8s API Server];
     end
         A -- WatchReq --> B[Watch Server: 
