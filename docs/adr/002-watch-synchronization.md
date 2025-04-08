@@ -11,6 +11,7 @@ Tags: watch, synchronization, architecture
 **Problem Statement:** We need to ensure that the watch synchronization mechanism in our system is efficient, effective and reliable.
 
 **Previous Implementation (Brief):** The previous implementation handling Kubernetes watch events inherited from Kine was not designed for a single synchronization point of all watch streams. The system used a broadcaster to manage watch stream subscriptions and forward events from a poll loop. It follows the fan-out and fan-in go pattern for distributing the watch events to the watchers which send the watched events to the API server. After the WatchList feature in Kubernetes upstream required an additional watch progress notification a patch was made on top of the event implementation waiting on events to achieve this synchronization point. An issue with a missing event caused us to revisit the implementation.
+
 This diagram illustrates the previous architecture:
 
 ```mermaid
@@ -29,19 +30,20 @@ graph LR
         C -- tick --> D;
         B -- WatchReq --> D[[Watch: handles event and progress notifications channels]];
     end
-        D -- watch --> E[Watch];
+        D -- watch --> E[[Watch]];
         E -- initial events --> H;
         D -- get currentRev --> F[Current Revision];
     subgraph Sqllog
         E;
         F;
-        E -- subscribes --> G[Broadcaster];
+        E -- subscribes --> G[[Broadcaster]];
         G -- []100 events --> E
-        J[Create/Update/Delete]-- notify --> K[Poll events];
+        J[Create/Update/Delete]-- notify --> K[[Poll events]];
         L[[ticker]] -- tick --> K;
         K -- all events --> G;
         G -- Publish all events and filter on key --> E;
     end
+        F -- get currentRev --> H;
         H[Dqlit/Sqlite driver] -- query --> I[(Datastore)];
     subgraph Driver
         H;
@@ -89,6 +91,7 @@ graph LR
         G[WatchGroup];
         L[WatcherGroupUpdate: currentRev, WatchUpdate: watcherId, filtered events ];
         J[Create/Update/Delete]-- notify --> K[Poll events];
+        N[[ticker]] -- tick --> K;
         K[[Poll events]]
         K -- Publish all events and filter on key --> L; 
     end
