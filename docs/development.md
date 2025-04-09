@@ -71,6 +71,18 @@ Follow the guide for MicroK8s steps 1-5 while changing the snap name to `k8s`.
     --listen unix:///var/snap/k8s/common/var/lib/k8s-dqlite/k8s-dqlite.sock
     ```
 
+## Running unit tests
+
+In order to run the unit tests `make go.test`, you need to have the correct Dqlite dependencies installed.
+Otherwise, during code compilation you will run into C binding errors.
+
+```
+sudo add-apt-repository ppa:dqlite/dev
+sudo apt install libdqlite-dev libdqlite0
+sudo apt install golang-canonical-go-dqlite-v3-dev
+sudo apt install dqlite-tools-v3
+```
+
 ## Viewing logs and debugging
 
 To view k8s-dqlite logs, you can use the `journalctl` command:
