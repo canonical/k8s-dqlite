@@ -25,7 +25,7 @@ func (s *KVServerBridge) Watch(ws etcdserverpb.Watch_WatchServer) error {
 
 	stream := &watchStream{
 		watcherGroup:       watcherGroup,
-		notifyInterval:     s.limited.notifyInterval,
+		notifyInterval:     s.notifyInterval,
 		server:             ws,
 		sendProgressReport: make(map[int64]bool),
 	}
@@ -44,7 +44,6 @@ type watchStream struct {
 	revision           int64
 	server             etcdserverpb.Watch_WatchServer
 	sendProgressReport map[int64]bool
-	limited            LimitedServer
 }
 
 func (ws *watchStream) ServeRequests() error {

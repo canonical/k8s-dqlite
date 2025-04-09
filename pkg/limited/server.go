@@ -16,7 +16,8 @@ var (
 )
 
 type KVServerBridge struct {
-	limited *LimitedServer
+	notifyInterval time.Duration
+	limited        *LimitedServer
 }
 
 var _ etcdserverpb.LeaseServer = &KVServerBridge{}
@@ -26,9 +27,9 @@ var _ etcdserverpb.MaintenanceServer = &KVServerBridge{}
 
 func New(backend Backend, notifyInterval time.Duration) *KVServerBridge {
 	return &KVServerBridge{
+		notifyInterval: notifyInterval,
 		limited: &LimitedServer{
-			backend:        backend,
-			notifyInterval: notifyInterval,
+			backend: backend,
 		},
 	}
 }
