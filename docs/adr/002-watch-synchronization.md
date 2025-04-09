@@ -10,7 +10,14 @@ Tags: watch, synchronization, architecture
 
 **Problem Statement:** We need to ensure that the watch synchronization mechanism in our system is efficient, effective and reliable.
 
-**Previous Implementation (Brief):** The previous implementation handling Kubernetes watch events inherited from Kine was not designed for a single synchronization point of all watch streams. The system used a broadcaster to manage watch stream subscriptions and forward events from a poll loop. It follows the fan-out and fan-in go pattern for distributing the watch events to the watchers which send the watched events to the API server. After the WatchList feature in Kubernetes upstream required an additional watch progress notification a patch was made on top of the event implementation waiting on events to achieve this synchronization point. An issue with a missing event caused us to revisit the implementation.
+**Previous Implementation (Brief):** The previous implementation handling Kubernetes watch events inherited from Kine was not designed
+for a single synchronization point of all watch streams. The system used a broadcaster to manage watch stream subscriptions and forward
+events from a poll loop. It follows the fan-out and fan-in Go pattern for distributing the watch events to the watchers which in turn
+send the watched events to the API server. After the WatchList feature in Kubernetes upstream required an additional watch progress
+notification, instead of re-implementing the watchers a fix was made on top of the existing event implementation. This fix introduces
+a blocking wait point to get all watchers synced to the same revision.
+An issue with a missing event caused us to revisit the implementation and the ultimate inefficiency caused us to re-write the
+watch implementation.
 
 This diagram illustrates the previous architecture:
 
@@ -51,13 +58,20 @@ graph LR
         K -- After query --> H;
 ```
 
-**Limitations of the Previous Implementation:** An issue with a missing event caused us to revisit the implementation as the "current revision" from the datastore was not in sync with the current revision from the event poll. The biggest issue with the implementation was the inefficient wait after the fan-out and fan-in of events that was introduced to get all watchers synchronized to the same point.
+**Limitations of the Previous Implementation:** An issue with a missing event caused us to revisit the implementation as
+the "current revision" from the datastore was not in sync with the current revision from the event poll. The biggest
+issue with the implementation was the inefficient wait after the fan-out and fan-in of events that was introduced to get
+all watchers synchronized to the same point.
 
-**New Requirement:** Implement a robust synchronization mechanism to ensure all watchers are aligned to the same "current revision" for accurate progress notifications to the Kubernetes API server.
+**New Requirement:** Implement a robust synchronization mechanism to ensure all watchers are aligned to the same "current
+revision" for accurate progress notifications to the Kubernetes API server.
 
 ## Decision
 
-We will implement a WatcherGroup interface to manage watchers dynamically and ensure that all watchers within the group remain synchronized to the same "current revision". This approach removes the previous broadcaster component and avoids unnecessary event reordering associated with fan-out/fan-in patterns. We will also remove the sequentializing of events and filling of event gaps, which were specific requirements for PostgreSQL in kine.
+We will implement a WatcherGroup interface to manage watchers dynamically and ensure that all watchers within the group
+remain synchronized to the same "current revision". This approach removes the previous broadcaster component and avoids
+unnecessary event reordering associated with fan-out/fan-in patterns. We will also remove the sequentializing of events
+and filling of event gaps, which were specific requirements for PostgreSQL in kine.
 
 This flow diagram illustrates the new architecture:
 
@@ -154,7 +168,7 @@ Kine References:
 
 ## Notes
 
-Upstream Features supported by the synchronization point:
+Upstream features supported by the synchronization point:
 
 * **ConsistentListFromCache**: Enhance Kubernetes API server performance by serving consistent list requests directly from its watch cache, improving scalability and response times.
 * **WatchList**: Enable support for streaming initial state of objects in watch requests.
