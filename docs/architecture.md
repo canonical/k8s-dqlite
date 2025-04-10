@@ -8,7 +8,7 @@ The upstream [Kubernetes API server](https://kubernetes.io/docs/reference/comman
 
 ## Parent project: kine
 
-Kine serves both as a translation layer of the Kubernetes API server requests tailored for etcd. Kine serves as a logical layer that implements features supported by etcd natively but not by the SQL backends (MySQL, NATS, PostgreSQL, SQLite). An example here would be the compaction management or the watcher and time-to-live (TTL) implementation. This logical layer has no “fine-tuning” to optimize it for the datastore backend.
+Kine serves as a translation layer of the Kubernetes API server requests tailored for etcd. The project also serves as a logical layer that implements features supported by etcd natively but not by the SQL backends (MySQL, NATS, PostgreSQL, SQLite). An example here would be the compaction management or the watcher and time-to-live (TTL) implementation. This logical layer has no “fine-tuning” to optimize it for the datastore backend.
 
 Kine supports a subset of API server requests - create, update, delete, range(get, list), database compaction and ttl. Kine tries to use a generic template to forward the requests to the datastore. A little bit of tuning is done for each database driver which handles "how data is fetched" for a database backend.
 
