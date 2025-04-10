@@ -52,8 +52,10 @@ type LimitedServer struct {
 
 func NewLimitedServer(config *LimitedServerConfig) *LimitedServer {
 	return &LimitedServer{
-		driver: config.Driver,
-		config: config,
+		driver:        config.Driver,
+		config:        config,
+		notify:        make(chan int64, 100),
+		watcherGroups: make(map[*watcherGroup]*watcherGroup),
 	}
 }
 
