@@ -22,7 +22,7 @@ func (l *LimitedServer) Count(ctx context.Context, key, rangeEnd []byte, revisio
 		attribute.Int64("revision", revision),
 	)
 
-	compactRevision, currentRevision, err := l.driver.GetCompactRevision(ctx)
+	compactRevision, currentRevision, err := l.config.Driver.GetCompactRevision(ctx)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -31,7 +31,7 @@ func (l *LimitedServer) Count(ctx context.Context, key, rangeEnd []byte, revisio
 	} else if revision < compactRevision {
 		return currentRevision, 0, ErrCompacted
 	}
-	count, err := l.driver.Count(ctx, key, rangeEnd, revision)
+	count, err := l.config.Driver.Count(ctx, key, rangeEnd, revision)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -53,7 +53,7 @@ func (l *LimitedServer) InternalList(ctx context.Context, key, rangeEnd []byte, 
 		attribute.Int64("revision", revision),
 	)
 
-	compactRevision, currentRevision, err := l.driver.GetCompactRevision(ctx)
+	compactRevision, currentRevision, err := l.config.Driver.GetCompactRevision(ctx)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -63,7 +63,7 @@ func (l *LimitedServer) InternalList(ctx context.Context, key, rangeEnd []byte, 
 		return currentRevision, nil, ErrCompacted
 	}
 
-	rows, err := l.driver.List(ctx, key, rangeEnd, limit, revision)
+	rows, err := l.config.Driver.List(ctx, key, rangeEnd, limit, revision)
 	if err != nil {
 		return 0, nil, err
 	}

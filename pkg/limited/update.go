@@ -26,7 +26,7 @@ func isUpdate(txn *etcdserverpb.TxnRequest) (int64, []byte, []byte, int64, bool)
 }
 
 func (l *LimitedServer) internalUpdate(ctx context.Context, key []byte, value []byte, prevRev, lease int64) (rev int64, updated bool, err error) {
-	rev, updated, err = l.driver.Update(ctx, key, value, prevRev, lease)
+	rev, updated, err = l.config.Driver.Update(ctx, key, value, prevRev, lease)
 	if err != nil {
 		return 0, false, err
 	}

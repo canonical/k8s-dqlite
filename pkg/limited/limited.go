@@ -46,13 +46,10 @@ type LimitedServer struct {
 	pollRevision  int64
 
 	notify chan int64
-
-	driver Driver
 }
 
 func NewLimitedServer(config *LimitedServerConfig) *LimitedServer {
 	return &LimitedServer{
-		driver:        config.Driver,
 		config:        config,
 		notify:        make(chan int64, 100),
 		watcherGroups: make(map[*watcherGroup]*watcherGroup),
@@ -97,9 +94,9 @@ func (l *LimitedServer) Start(ctx context.Context) error {
 }
 
 func (l *LimitedServer) compactStart(ctx context.Context) error {
-	currentRevision, err := l.driver.CurrentRevision(ctx)
+	currentRevision, err := l.config.Driver.CurrentRevision(ctx)
 
-	rows, err := l.driver.AfterPrefix(ctx, []byte("compact_rev_key"), []byte("compact_rev_key\x00"), 0, currentRevision)
+	rows, err := l.config.Driver.AfterPrefix(ctx, []byte("compact_rev_key"), []byte("compact_rev_key\x00"), 0, currentRevision)
 	if err != nil {
 		return err
 	}
@@ -130,7 +127,7 @@ func (l *LimitedServer) compactStart(ctx context.Context) error {
 		if event.Kv.ModRevision == maxID {
 			continue
 		}
-		if err := l.driver.DeleteRevision(ctx, event.Kv.ModRevision); err != nil {
+		if err := l.config.Driver.DeleteRevision(ctx, event.Kv.ModRevision); err != nil {
 			return err
 		}
 	}
@@ -157,7 +154,7 @@ func (l *LimitedServer) DoCompact(ctx context.Context) (err error) {
 	// small batches. Given that this logic runs every second,
 	// on regime it should take usually just a couple batches
 	// to keep the pace.
-	start, target, err := l.driver.GetCompactRevision(ctx)
+	start, target, err := l.config.Driver.GetCompactRevision(ctx)
 	if err != nil {
 		return err
 	}
@@ -173,7 +170,7 @@ func (l *LimitedServer) DoCompact(ctx context.Context) (err error) {
 		if batchRevision > target {
 			batchRevision = target
 		}
-		if err := l.driver.Compact(ctx, batchRevision); err != nil {
+		if err := l.config.Driver.Compact(ctx, batchRevision); err != nil {
 			return err
 		}
 		start = batchRevision
@@ -197,7 +194,7 @@ func (l *LimitedServer) WatcherGroup(ctx context.Context) (WatcherGroup, error) 
 
 	wg := &watcherGroup{
 		ctx:             ctx,
-		driver:          l.driver,
+		driver:          l.config.Driver,
 		currentRevision: l.pollRevision,
 		watchers:        make(map[int64]*watcher),
 		updates:         make(chan WatcherGroupUpdate, 100),
@@ -228,13 +225,13 @@ func (l *LimitedServer) ttl(ctx context.Context) {
 	go func() {
 		defer l.wg.Done()
 
-		startRevision, err := l.driver.CurrentRevision(ctx)
+		startRevision, err := l.config.Driver.CurrentRevision(ctx)
 		if err != nil {
 			logrus.Errorf("failed to read old events for ttl: %v", err)
 			return
 		}
 
-		rows, err := l.driver.ListTTL(ctx, startRevision)
+		rows, err := l.config.Driver.ListTTL(ctx, startRevision)
 		if err != nil {
 			logrus.Errorf("failed to read old events for ttl: %v", err)
 			return
@@ -277,7 +274,7 @@ func (l *LimitedServer) startWatch(ctx context.Context) error {
 		return err
 	}
 
-	pollInitialRevision, _, err := l.driver.GetCompactRevision(ctx)
+	pollInitialRevision, _, err := l.config.Driver.GetCompactRevision(ctx)
 	if err != nil {
 		return err
 	}
@@ -371,7 +368,7 @@ func (l *LimitedServer) getLatestEvents(ctx context.Context, pollRevision int64)
 	}()
 	span.SetAttributes(attribute.Int64("pollRevision", pollRevision))
 
-	rows, err := l.driver.After(watchCtx, pollRevision, pollBatchSize)
+	rows, err := l.config.Driver.After(watchCtx, pollRevision, pollBatchSize)
 	if err != nil {
 		return nil, err
 	}
@@ -400,7 +397,7 @@ func (l *LimitedServer) Stop() error {
 
 func (l *LimitedServer) Close() error {
 	stopErr := l.Stop()
-	closeErr := l.driver.Close()
+	closeErr := l.config.Driver.Close()
 
 	return errors.Join(stopErr, closeErr)
 }

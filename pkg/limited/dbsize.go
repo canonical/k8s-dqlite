@@ -14,7 +14,7 @@ func (l *LimitedServer) DbSize(ctx context.Context) (int64, error) {
 		span.RecordError(err)
 		span.End()
 	}()
-	size, err := l.driver.GetSize(ctx)
+	size, err := l.config.Driver.GetSize(ctx)
 	span.SetAttributes(attribute.Int64("size", size))
 	return size, err
 }

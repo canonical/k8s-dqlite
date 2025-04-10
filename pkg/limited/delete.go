@@ -22,7 +22,7 @@ func isDelete(txn *etcdserverpb.TxnRequest) (int64, []byte, bool) {
 }
 
 func (l *LimitedServer) internalDelete(ctx context.Context, key []byte, revision int64) (rev int64, deleted bool, err error) {
-	rev, deleted, err = l.driver.Delete(ctx, key, revision)
+	rev, deleted, err = l.config.Driver.Delete(ctx, key, revision)
 	if err != nil {
 		return 0, false, err
 	}

@@ -22,7 +22,7 @@ func isCreate(txn *etcdserverpb.TxnRequest) *etcdserverpb.PutRequest {
 }
 
 func (l *LimitedServer) internalCreate(ctx context.Context, key, value []byte, lease int64) (int64, bool, error) {
-	rev, created, err := l.driver.Create(ctx, key, value, lease)
+	rev, created, err := l.config.Driver.Create(ctx, key, value, lease)
 	if err != nil {
 		return 0, false, err
 	}
