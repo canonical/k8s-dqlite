@@ -9,6 +9,73 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
+func (l *LimitedServer) Count(ctx context.Context, key, rangeEnd []byte, revision int64) (int64, int64, error) {
+	var err error
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Count", otelName))
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+	span.SetAttributes(
+		attribute.String("key", string(key)),
+		attribute.String("rangeEnd", string(rangeEnd)),
+		attribute.Int64("revision", revision),
+	)
+
+	compactRevision, currentRevision, err := l.driver.GetCompactRevision(ctx)
+	if err != nil {
+		return 0, 0, err
+	}
+	if revision == 0 || revision > currentRevision {
+		revision = currentRevision
+	} else if revision < compactRevision {
+		return currentRevision, 0, ErrCompacted
+	}
+	count, err := l.driver.Count(ctx, key, rangeEnd, revision)
+	if err != nil {
+		return 0, 0, err
+	}
+	return currentRevision, count, nil
+}
+
+func (l *LimitedServer) InternalList(ctx context.Context, key, rangeEnd []byte, limit, revision int64) (int64, []*KeyValue, error) {
+	var err error
+
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.List", otelName))
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+	span.SetAttributes(
+		attribute.String("key", string(key)),
+		attribute.String("rangeEnd", string(rangeEnd)),
+		attribute.Int64("limit", limit),
+		attribute.Int64("revision", revision),
+	)
+
+	compactRevision, currentRevision, err := l.driver.GetCompactRevision(ctx)
+	if err != nil {
+		return 0, nil, err
+	}
+	if revision == 0 || revision > currentRevision {
+		revision = currentRevision
+	} else if revision < compactRevision {
+		return currentRevision, nil, ErrCompacted
+	}
+
+	rows, err := l.driver.List(ctx, key, rangeEnd, limit, revision)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	result, err := ScanAll(rows, scanKeyValue)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	return currentRevision, result, err
+}
+
 func (l *LimitedServer) list(ctx context.Context, r *etcdserverpb.RangeRequest) (*RangeResponse, error) {
 	var err error
 	listCnt.Add(ctx, 1)
@@ -29,7 +96,7 @@ func (l *LimitedServer) list(ctx context.Context, r *etcdserverpb.RangeRequest) 
 	}
 
 	if r.CountOnly {
-		rev, count, err := l.backend.Count(ctx, r.Key, r.RangeEnd, revision)
+		rev, count, err := l.Count(ctx, r.Key, r.RangeEnd, revision)
 		if err != nil {
 			return nil, err
 		}
@@ -48,7 +115,7 @@ func (l *LimitedServer) list(ctx context.Context, r *etcdserverpb.RangeRequest) 
 	}
 	span.SetAttributes(attribute.Int64("limit", limit))
 
-	rev, kvs, err := l.backend.List(ctx, r.Key, r.RangeEnd, limit, revision)
+	rev, kvs, err := l.InternalList(ctx, r.Key, r.RangeEnd, limit, revision)
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +137,7 @@ func (l *LimitedServer) list(ctx context.Context, r *etcdserverpb.RangeRequest) 
 		}
 
 		// count the actual number of results if there are more items in the db.
-		rev, resp.Count, err = l.backend.Count(ctx, r.Key, r.RangeEnd, revision)
+		rev, resp.Count, err = l.Count(ctx, r.Key, r.RangeEnd, revision)
 		if err != nil {
 			return nil, err
 		}

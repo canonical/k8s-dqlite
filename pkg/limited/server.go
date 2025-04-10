@@ -25,12 +25,10 @@ var _ etcdserverpb.WatchServer = &KVServerBridge{}
 var _ etcdserverpb.KVServer = &KVServerBridge{}
 var _ etcdserverpb.MaintenanceServer = &KVServerBridge{}
 
-func New(backend Backend, notifyInterval time.Duration) *KVServerBridge {
+func New(limited *LimitedServer, notifyInterval time.Duration) *KVServerBridge {
 	return &KVServerBridge{
 		notifyInterval: notifyInterval,
-		limited: &LimitedServer{
-			backend: backend,
-		},
+		limited:        limited,
 	}
 }
 

@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"testing"
 
-	"github.com/canonical/k8s-dqlite/pkg/sqllog"
+	"github.com/canonical/k8s-dqlite/pkg/limited"
 	. "github.com/onsi/gomega"
 )
 
@@ -34,13 +34,13 @@ func TestCompaction(t *testing.T) {
 					},
 				})
 
-				initialSize, err := server.backend.DbSize(ctx)
+				initialSize, err := server.ls.DbSize(ctx)
 				g.Expect(err).To(BeNil())
 
-				err = server.backend.DoCompact(ctx)
+				err = server.ls.DoCompact(ctx)
 				g.Expect(err).To(BeNil())
 
-				finalSize, err := server.backend.DbSize(ctx)
+				finalSize, err := server.ls.DbSize(ctx)
 				g.Expect(err).To(BeNil())
 				g.Expect(finalSize).To(BeNumerically("==", initialSize)) // Expecting no compaction.
 			})
@@ -67,24 +67,24 @@ func TestCompaction(t *testing.T) {
 					},
 				})
 
-				initialSize, err := server.backend.DbSize(ctx)
+				initialSize, err := server.ls.DbSize(ctx)
 				g.Expect(err).To(BeNil())
 
-				err = server.backend.DoCompact(ctx)
+				err = server.ls.DoCompact(ctx)
 				g.Expect(err).To(BeNil())
 
 				// Expect compaction to reduce the size.
-				finalSize, err := server.backend.DbSize(ctx)
+				finalSize, err := server.ls.DbSize(ctx)
 				g.Expect(err).To(BeNil())
 				g.Expect(finalSize).To(BeNumerically("<", initialSize))
 
 				// Expect for keys to still be there.
-				rev, count, err := server.backend.Count(ctx, []byte("key/"), []byte("key0"), 0)
+				rev, count, err := server.ls.Count(ctx, []byte("key/"), []byte("key0"), 0)
 				g.Expect(err).To(BeNil())
 				g.Expect(count).To(Equal(int64(10_000 - 500)))
 
 				// Expect old revisions not to be there anymore.
-				_, _, err = server.backend.List(ctx, []byte("key/"), []byte("key0"), 0, rev-400)
+				_, _, err = server.ls.InternalList(ctx, []byte("key/"), []byte("key0"), 0, rev-400)
 				g.Expect(err).To(Not(BeNil()))
 			})
 		})
@@ -102,7 +102,7 @@ func BenchmarkCompaction(b *testing.B) {
 				setup: func(ctx context.Context, tx *sql.Tx) error {
 					// Make sure there are enough rows deleted to have
 					// b.N rows to compact.
-					delCount := b.N + sqllog.SupersededCount
+					delCount := b.N + limited.SupersededCount
 
 					// Also, make sure there are uncollectable data, so
 					// that the deleted rows are about 5% of the total.
@@ -119,7 +119,7 @@ func BenchmarkCompaction(b *testing.B) {
 			})
 			server.ResetMetrics()
 			b.StartTimer()
-			if err := server.backend.DoCompact(ctx); err != nil {
+			if err := server.ls.DoCompact(ctx); err != nil {
 				b.Fatal(err)
 			}
 			server.ReportMetrics(b)

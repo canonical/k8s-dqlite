@@ -21,6 +21,17 @@ func isCreate(txn *etcdserverpb.TxnRequest) *etcdserverpb.PutRequest {
 	return nil
 }
 
+func (l *LimitedServer) internalCreate(ctx context.Context, key, value []byte, lease int64) (int64, bool, error) {
+	rev, created, err := l.driver.Create(ctx, key, value, lease)
+	if err != nil {
+		return 0, false, err
+	}
+	if created {
+		l.notifyWatcherPoll(rev)
+	}
+	return rev, created, nil
+}
+
 func (l *LimitedServer) create(ctx context.Context, put *etcdserverpb.PutRequest) (*etcdserverpb.TxnResponse, error) {
 	var err error
 	createCnt.Add(ctx, 1)
@@ -42,7 +53,7 @@ func (l *LimitedServer) create(ctx context.Context, put *etcdserverpb.PutRequest
 		return nil, unsupported("prevKv")
 	}
 
-	rev, created, err := l.backend.Create(ctx, put.Key, put.Value, put.Lease)
+	rev, created, err := l.internalCreate(ctx, put.Key, put.Value, put.Lease)
 	if err != nil {
 		return nil, err
 	}

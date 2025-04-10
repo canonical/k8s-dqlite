@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/canonical/k8s-dqlite/pkg/sqllog"
+	"github.com/canonical/k8s-dqlite/pkg/limited"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/types"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -35,10 +35,10 @@ func TestWatch(t *testing.T) {
 				backendType: backendType,
 				setup: func(ctx context.Context, tx *sql.Tx) error {
 					// Make sure there are enough rows deleted to have a compaction.
-					if _, err := insertMany(ctx, tx, "key", 100, sqllog.SupersededCount); err != nil {
+					if _, err := insertMany(ctx, tx, "key", 100, limited.SupersededCount); err != nil {
 						return err
 					}
-					if _, err := deleteMany(ctx, tx, "key", sqllog.SupersededCount); err != nil {
+					if _, err := deleteMany(ctx, tx, "key", limited.SupersededCount); err != nil {
 						return err
 					}
 					return nil
@@ -135,7 +135,7 @@ func TestWatch(t *testing.T) {
 				defer cancel()
 				g := NewWithT(t)
 
-				server.backend.DoCompact(ctx)
+				server.ls.DoCompact(ctx)
 
 				key := watchedPrefix + "compacted"
 				createValue := "testValue1"

@@ -1,4 +1,4 @@
-package sqllog
+package limited
 
 import (
 	"context"

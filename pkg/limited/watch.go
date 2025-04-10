@@ -18,7 +18,7 @@ func (s *KVServerBridge) Watch(ws etcdserverpb.Watch_WatchServer) error {
 	eg, ctx := errgroup.WithContext(ws.Context())
 	eg.SetLimit(3)
 
-	watcherGroup, err := s.limited.backend.WatcherGroup(ctx)
+	watcherGroup, err := s.limited.WatcherGroup(ctx)
 	if err != nil {
 		return err
 	}

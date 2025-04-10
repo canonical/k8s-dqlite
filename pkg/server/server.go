@@ -18,7 +18,6 @@ import (
 	dqliteDriver "github.com/canonical/k8s-dqlite/pkg/drivers/dqlite"
 	"github.com/canonical/k8s-dqlite/pkg/endpoint"
 	"github.com/canonical/k8s-dqlite/pkg/limited"
-	"github.com/canonical/k8s-dqlite/pkg/sqllog"
 	k8s_dqlite_tls "github.com/canonical/k8s-dqlite/pkg/tls"
 	"github.com/sirupsen/logrus"
 )
@@ -28,7 +27,7 @@ type Server struct {
 	// app is the dqlite application driving the server.
 	app *app.App
 
-	backend limited.Backend
+	stop func() error
 
 	serverConfig         *ServerConfig
 	connectionPoolConfig *ConnectionPoolConfig
@@ -431,22 +430,23 @@ func (s *Server) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to create dqlite driver: %w", err)
 	}
 
-	backend := sqllog.New(&sqllog.SQLLogConfig{
+	ls := limited.NewLimitedServer(&limited.LimitedServerConfig{
 		Driver:            driver,
 		CompactInterval:   s.serverConfig.CompactInterval,
 		PollInterval:      s.serverConfig.PollInterval,
 		WatchQueryTimeout: s.serverConfig.WatchQueryTimeout,
 	})
-	if err := backend.Start(ctx); err != nil {
-		backend.Close()
+
+	if err := ls.Start(ctx); err != nil {
+		ls.Close()
 		return fmt.Errorf("failed to start k8s-dqlite backend: %w", err)
 	}
 
-	s.backend = backend
+	s.stop = ls.Close
 
 	_, err = endpoint.Listen(ctx, &endpoint.EndpointConfig{
 		ListenAddress: s.serverConfig.ListenAddress,
-		Server:        limited.New(backend, s.serverConfig.NotifyInterval),
+		Server:        limited.New(ls, s.serverConfig.NotifyInterval),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to start k8s-dqlite: %w", err)
@@ -500,7 +500,7 @@ func (s *Server) openAndTestDb(ctx context.Context) (*sql.DB, error) {
 
 // Shutdown cleans up any resources and attempts to hand-over and shutdown the dqlite application.
 func (s *Server) Shutdown(ctx context.Context) error {
-	if err := s.backend.Close(); err != nil {
+	if err := s.stop(); err != nil {
 		return err
 	}
 

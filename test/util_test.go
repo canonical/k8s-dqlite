@@ -18,7 +18,6 @@ import (
 	"github.com/canonical/k8s-dqlite/pkg/endpoint"
 	"github.com/canonical/k8s-dqlite/pkg/instrument"
 	"github.com/canonical/k8s-dqlite/pkg/limited"
-	"github.com/canonical/k8s-dqlite/pkg/sqllog"
 	"github.com/sirupsen/logrus"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
@@ -35,7 +34,7 @@ const (
 
 type k8sDqliteServer struct {
 	client         *clientv3.Client
-	backend        limited.Backend
+	ls             *limited.LimitedServer
 	dqliteListener *instrument.Listener
 }
 
@@ -59,7 +58,7 @@ func newK8sDqliteServer(ctx context.Context, tb testing.TB, config *k8sDqliteCon
 	}
 	tb.Cleanup(func() { instrument.StopSQLiteMonitoring() })
 
-	var driver sqllog.Driver
+	var driver limited.Driver
 	var db *sql.DB
 	var dqliteListener *instrument.Listener
 	switch config.backendType {
@@ -95,18 +94,18 @@ func newK8sDqliteServer(ctx context.Context, tb testing.TB, config *k8sDqliteCon
 		}
 	}
 
-	backend := sqllog.New(&sqllog.SQLLogConfig{
+	ls := limited.NewLimitedServer(&limited.LimitedServerConfig{
 		Driver:            driver,
 		CompactInterval:   5 * time.Minute,
 		PollInterval:      1 * time.Second,
 		WatchQueryTimeout: 20 * time.Second,
 	})
 	tb.Cleanup(func() {
-		if err := backend.Close(); err != nil {
+		if err := ls.Close(); err != nil {
 			tb.Error("cannot close backend", err)
 		}
 	})
-	if err := backend.Start(ctx); err != nil {
+	if err := ls.Start(ctx); err != nil {
 		tb.Fatal(err)
 	}
 
@@ -117,7 +116,7 @@ func newK8sDqliteServer(ctx context.Context, tb testing.TB, config *k8sDqliteCon
 
 	_, err := endpoint.Listen(ctx, &endpoint.EndpointConfig{
 		ListenAddress: listenUrl,
-		Server:        limited.New(backend, 5*time.Second),
+		Server:        limited.New(ls, 5*time.Second),
 	})
 	if err != nil {
 		tb.Fatal(err)
@@ -136,7 +135,7 @@ func newK8sDqliteServer(ctx context.Context, tb testing.TB, config *k8sDqliteCon
 
 	return &k8sDqliteServer{
 		client:         client,
-		backend:        backend,
+		ls:             ls,
 		dqliteListener: dqliteListener,
 	}
 }

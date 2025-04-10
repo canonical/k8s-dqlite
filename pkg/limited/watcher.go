@@ -1,32 +1,34 @@
-package sqllog
+package limited
 
 import (
+	"bytes"
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"sync"
 
-	"github.com/canonical/k8s-dqlite/pkg/limited"
 	"github.com/sirupsen/logrus"
+	"go.etcd.io/etcd/api/v3/mvccpb"
 	"go.opentelemetry.io/otel/attribute"
 )
 
 type watcherGroupUpdate struct {
 	revision int64
-	updates  []limited.WatcherUpdate
+	updates  []WatcherUpdate
 }
 
-func (w *watcherGroupUpdate) Revision() int64                   { return w.revision }
-func (w *watcherGroupUpdate) Watchers() []limited.WatcherUpdate { return w.updates }
+func (w *watcherGroupUpdate) Revision() int64           { return w.revision }
+func (w *watcherGroupUpdate) Watchers() []WatcherUpdate { return w.updates }
 
 type watcher struct {
 	watchId       int64
 	key, rangeEnd []byte
 	initialized   bool
-	events        []*limited.Event
+	events        []*Event
 }
 
-func (w *watcher) update(events []*limited.Event) []*limited.Event {
+func (w *watcher) update(events []*Event) []*Event {
 	if !w.initialized {
 		w.events = appendEvents(events, w.events, w.key, w.rangeEnd)
 		return nil
@@ -36,7 +38,7 @@ func (w *watcher) update(events []*limited.Event) []*limited.Event {
 		return appendEvents(events, initialEvents, w.key, w.rangeEnd)
 	}
 
-	filtered := make([]*limited.Event, 0, len(events))
+	filtered := make([]*Event, 0, len(events))
 	return appendEvents(events, filtered, w.key, w.rangeEnd)
 }
 
@@ -46,11 +48,11 @@ type watcherGroup struct {
 	driver          Driver
 	currentRevision int64
 	watchers        map[int64]*watcher
-	updates         chan limited.WatcherGroupUpdate
+	updates         chan WatcherGroupUpdate
 	stop            func() bool
 }
 
-func (w *watcherGroup) publish(currentRevision int64, events []*limited.Event) bool {
+func (w *watcherGroup) publish(currentRevision int64, events []*Event) bool {
 	_, span := otelTracer.Start(w.ctx, fmt.Sprintf("%s.publish", otelName))
 	span.SetAttributes(attribute.Int64("currentRevision", currentRevision))
 	span.SetAttributes(attribute.Int("events", len(events)))
@@ -61,11 +63,11 @@ func (w *watcherGroup) publish(currentRevision int64, events []*limited.Event) b
 	defer w.mu.Unlock()
 
 	w.currentRevision = currentRevision
-	updates := []limited.WatcherUpdate{}
+	updates := []WatcherUpdate{}
 	for watchId, watcher := range w.watchers {
 		events := watcher.update(events)
 		if len(events) > 0 {
-			updates = append(updates, limited.WatcherUpdate{
+			updates = append(updates, WatcherUpdate{
 				WatcherId: watchId,
 				Events:    events,
 			})
@@ -117,7 +119,7 @@ func (w *watcherGroup) Watch(watchId int64, key, rangeEnd []byte, startRevision 
 			return err
 		}
 		if startRevision < compactRev {
-			return &limited.CompactedError{CompactRevision: compactRev, CurrentRevision: rev}
+			return &CompactedError{CompactRevision: compactRev, CurrentRevision: rev}
 		}
 
 		initialEvents, err := w.initialEvents(ctx, key, rangeEnd, startRevision-1, currentRevision)
@@ -140,7 +142,7 @@ func (w *watcherGroup) Watch(watchId int64, key, rangeEnd []byte, startRevision 
 	return nil
 }
 
-func (w *watcherGroup) initialEvents(ctx context.Context, key, rangeEnd []byte, fromRevision, toRevision int64) ([]*limited.Event, error) {
+func (w *watcherGroup) initialEvents(ctx context.Context, key, rangeEnd []byte, fromRevision, toRevision int64) ([]*Event, error) {
 	var err error
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.initialEvents", otelName))
 	defer func() {
@@ -171,6 +173,84 @@ func (w *watcherGroup) Unwatch(watchId int64) {
 	delete(w.watchers, watchId)
 }
 
-func (w *watcherGroup) Updates() <-chan limited.WatcherGroupUpdate { return w.updates }
+func (w *watcherGroup) Updates() <-chan WatcherGroupUpdate { return w.updates }
 
-var _ limited.WatcherGroup = &watcherGroup{}
+var _ WatcherGroup = &watcherGroup{}
+
+func appendEvents(src, dst []*Event, key, rangeEnd []byte) []*Event {
+	for _, event := range src {
+		if bytes.Compare(key, event.Kv.Key) <= 0 && bytes.Compare(rangeEnd, event.Kv.Key) > 0 {
+			dst = append(dst, event)
+		}
+	}
+	return dst
+}
+
+func ScanAll[T any](rows *sql.Rows, scanOne func(*sql.Rows) (T, error)) ([]T, error) {
+	var result []T
+	defer rows.Close()
+
+	for rows.Next() {
+		item, err := scanOne(rows)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, item)
+	}
+
+	return result, nil
+}
+
+func scanEvent(rows *sql.Rows) (*Event, error) {
+	// Bundle in a single allocation
+	row := &struct {
+		event            Event
+		kv, prevKv       KeyValue
+		created, deleted bool
+	}{}
+	event := &row.event
+
+	err := rows.Scan(
+		&row.kv.ModRevision,
+		&row.kv.Key,
+		&row.created,
+		&row.deleted,
+		&row.kv.CreateRevision,
+		&row.prevKv.ModRevision,
+		&row.kv.Lease,
+		&row.kv.Value,
+		&row.prevKv.Value,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	event.Kv = &row.kv
+	if row.deleted {
+		row.event.Type = mvccpb.DELETE
+	}
+	if row.created {
+		event.Kv.CreateRevision = event.Kv.ModRevision
+	} else {
+		event.PrevKv = &row.prevKv
+		event.PrevKv.Key = event.Kv.Key
+		event.PrevKv.CreateRevision = event.Kv.CreateRevision
+		event.PrevKv.Lease = event.Kv.Lease
+	}
+	return event, nil
+}
+
+func scanKeyValue(rows *sql.Rows) (*KeyValue, error) {
+	kv := &KeyValue{}
+	err := rows.Scan(
+		&kv.ModRevision,
+		&kv.Key,
+		&kv.CreateRevision,
+		&kv.Lease,
+		&kv.Value,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return kv, nil
+}
