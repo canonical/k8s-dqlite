@@ -94,7 +94,9 @@ func (l *LimitedServer) Start(ctx context.Context) error {
 }
 
 func (l *LimitedServer) compactStart(ctx context.Context) error {
-	currentRevision, err := l.config.Driver.CurrentRevision(ctx)
+	// This function grabs the current-revision of our database
+	// If there is any error fetching this revision it returns id=0
+	currentRevision, _ := l.config.Driver.CurrentRevision(ctx)
 
 	rows, err := l.config.Driver.AfterPrefix(ctx, []byte("compact_rev_key"), []byte("compact_rev_key\x00"), 0, currentRevision)
 	if err != nil {
