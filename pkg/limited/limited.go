@@ -71,7 +71,7 @@ func (l *LimitedServer) Start(ctx context.Context) error {
 		return nil
 	}
 
-	_, _, err := l.internalCreate(ctx, []byte("/registry/health"), []byte(`{"health":"true"}`), 0)
+	_, _, err := l.create(ctx, []byte("/registry/health"), []byte(`{"health":"true"}`), 0)
 	if err != nil {
 		return err
 	}
@@ -109,7 +109,7 @@ func (l *LimitedServer) compactStart(ctx context.Context) error {
 	}
 
 	if len(events) == 0 {
-		_, _, err := l.internalCreate(ctx, []byte("compact_rev_key"), nil, 0)
+		_, _, err := l.create(ctx, []byte("compact_rev_key"), nil, 0)
 		return err
 	} else if len(events) == 1 {
 		return nil
@@ -219,7 +219,7 @@ func (l *LimitedServer) ttl(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-time.After(timeout):
-			l.internalDelete(ctx, key, revision)
+			l.delete(ctx, key, revision)
 		}
 	}
 
@@ -404,35 +404,10 @@ func (l *LimitedServer) Close() error {
 	return errors.Join(stopErr, closeErr)
 }
 
-func (l *LimitedServer) Range(ctx context.Context, r *etcdserverpb.RangeRequest) (*RangeResponse, error) {
-	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Range", otelName))
-	defer span.End()
-	if len(r.RangeEnd) == 0 {
-		return l.get(ctx, r)
-	}
-	return l.list(ctx, r)
-}
-
 func txnHeader(rev int64) *etcdserverpb.ResponseHeader {
 	return &etcdserverpb.ResponseHeader{
 		Revision: rev,
 	}
-}
-
-func (l *LimitedServer) Txn(ctx context.Context, txn *etcdserverpb.TxnRequest) (*etcdserverpb.TxnResponse, error) {
-	if put := isCreate(txn); put != nil {
-		return l.create(ctx, put)
-	}
-	if rev, key, ok := isDelete(txn); ok {
-		return l.delete(ctx, key, rev)
-	}
-	if rev, key, value, lease, ok := isUpdate(txn); ok {
-		return l.update(ctx, rev, key, value, lease)
-	}
-	if isCompact(txn) {
-		return l.compact(ctx)
-	}
-	return nil, fmt.Errorf("unsupported transaction: %v", txn)
 }
 
 type ResponseHeader struct {

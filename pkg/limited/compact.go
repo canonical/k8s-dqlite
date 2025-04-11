@@ -19,7 +19,7 @@ func isCompact(txn *etcdserverpb.TxnRequest) bool {
 		string(txn.Compare[0].Key) == "compact_rev_key"
 }
 
-func (l *LimitedServer) compact(ctx context.Context) (*etcdserverpb.TxnResponse, error) {
+func (k *KVServerBridge) compact(ctx context.Context) (*etcdserverpb.TxnResponse, error) {
 	// return comparison failure so that the apiserver does not bother compacting
 	return &etcdserverpb.TxnResponse{
 		Header:    &etcdserverpb.ResponseHeader{},
@@ -34,6 +34,14 @@ func (l *LimitedServer) compact(ctx context.Context) (*etcdserverpb.TxnResponse,
 					},
 				},
 			},
+		},
+	}, nil
+}
+
+func (k *KVServerBridge) Compact(ctx context.Context, r *etcdserverpb.CompactionRequest) (*etcdserverpb.CompactionResponse, error) {
+	return &etcdserverpb.CompactionResponse{
+		Header: &etcdserverpb.ResponseHeader{
+			Revision: r.Revision,
 		},
 	}, nil
 }

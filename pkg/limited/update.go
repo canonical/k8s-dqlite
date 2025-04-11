@@ -25,7 +25,7 @@ func isUpdate(txn *etcdserverpb.TxnRequest) (int64, []byte, []byte, int64, bool)
 	return 0, nil, nil, 0, false
 }
 
-func (l *LimitedServer) internalUpdate(ctx context.Context, key []byte, value []byte, prevRev, lease int64) (rev int64, updated bool, err error) {
+func (l *LimitedServer) update(ctx context.Context, key []byte, value []byte, prevRev, lease int64) (rev int64, updated bool, err error) {
 	rev, updated, err = l.config.Driver.Update(ctx, key, value, prevRev, lease)
 	if err != nil {
 		return 0, false, err
@@ -36,7 +36,7 @@ func (l *LimitedServer) internalUpdate(ctx context.Context, key []byte, value []
 	return rev, updated, nil
 }
 
-func (l *LimitedServer) update(ctx context.Context, rev int64, key, value []byte, lease int64) (_ *etcdserverpb.TxnResponse, err error) {
+func (k *KVServerBridge) update(ctx context.Context, rev int64, key, value []byte, lease int64) (_ *etcdserverpb.TxnResponse, err error) {
 	updateCnt.Add(ctx, 1)
 
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.update", otelName))
@@ -52,9 +52,9 @@ func (l *LimitedServer) update(ctx context.Context, rev int64, key, value []byte
 
 	var succeeded bool
 	if rev == 0 {
-		rev, succeeded, err = l.internalCreate(ctx, key, value, lease)
+		rev, succeeded, err = k.limited.create(ctx, key, value, lease)
 	} else {
-		rev, succeeded, err = l.internalUpdate(ctx, key, value, rev, lease)
+		rev, succeeded, err = k.limited.update(ctx, key, value, rev, lease)
 	}
 	if err != nil {
 		return nil, err
@@ -77,7 +77,7 @@ func (l *LimitedServer) update(ctx context.Context, rev int64, key, value []byte
 			},
 		}
 	} else {
-		rev, kv, err := l.InternalList(ctx, key, nil, 1, rev)
+		rev, kv, err := k.limited.List(ctx, key, nil, 1, rev)
 		if err != nil {
 			return nil, err
 		}

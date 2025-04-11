@@ -21,7 +21,7 @@ func isDelete(txn *etcdserverpb.TxnRequest) (int64, []byte, bool) {
 	return 0, nil, false
 }
 
-func (l *LimitedServer) internalDelete(ctx context.Context, key []byte, revision int64) (rev int64, deleted bool, err error) {
+func (l *LimitedServer) delete(ctx context.Context, key []byte, revision int64) (rev int64, deleted bool, err error) {
 	rev, deleted, err = l.config.Driver.Delete(ctx, key, revision)
 	if err != nil {
 		return 0, false, err
@@ -32,7 +32,7 @@ func (l *LimitedServer) internalDelete(ctx context.Context, key []byte, revision
 	return rev, deleted, nil
 }
 
-func (l *LimitedServer) delete(ctx context.Context, key []byte, revision int64) (_ *etcdserverpb.TxnResponse, err error) {
+func (k *KVServerBridge) delete(ctx context.Context, key []byte, revision int64) (_ *etcdserverpb.TxnResponse, err error) {
 	deleteCnt.Add(ctx, 1)
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.delete", otelName))
 	defer func() {
@@ -44,7 +44,7 @@ func (l *LimitedServer) delete(ctx context.Context, key []byte, revision int64) 
 		attribute.Int64("revision", revision),
 	)
 
-	rev, deleted, err := l.internalDelete(ctx, key, revision)
+	rev, deleted, err := k.limited.delete(ctx, key, revision)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +67,7 @@ func (l *LimitedServer) delete(ctx context.Context, key []byte, revision int64) 
 			},
 		}
 	} else {
-		rev, kv, err := l.InternalList(ctx, key, nil, 1, rev)
+		rev, kv, err := k.limited.List(ctx, key, nil, 1, rev)
 		if err != nil {
 			return nil, err
 		}

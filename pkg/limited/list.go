@@ -38,7 +38,7 @@ func (l *LimitedServer) Count(ctx context.Context, key, rangeEnd []byte, revisio
 	return currentRevision, count, nil
 }
 
-func (l *LimitedServer) InternalList(ctx context.Context, key, rangeEnd []byte, limit, revision int64) (int64, []*KeyValue, error) {
+func (l *LimitedServer) List(ctx context.Context, key, rangeEnd []byte, limit, revision int64) (int64, []*KeyValue, error) {
 	var err error
 
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.List", otelName))
@@ -76,7 +76,7 @@ func (l *LimitedServer) InternalList(ctx context.Context, key, rangeEnd []byte, 
 	return currentRevision, result, err
 }
 
-func (l *LimitedServer) list(ctx context.Context, r *etcdserverpb.RangeRequest) (*RangeResponse, error) {
+func (k *KVServerBridge) list(ctx context.Context, r *etcdserverpb.RangeRequest) (*RangeResponse, error) {
 	var err error
 	listCnt.Add(ctx, 1)
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.list", otelName))
@@ -96,7 +96,7 @@ func (l *LimitedServer) list(ctx context.Context, r *etcdserverpb.RangeRequest) 
 	}
 
 	if r.CountOnly {
-		rev, count, err := l.Count(ctx, r.Key, r.RangeEnd, revision)
+		rev, count, err := k.limited.Count(ctx, r.Key, r.RangeEnd, revision)
 		if err != nil {
 			return nil, err
 		}
@@ -115,7 +115,7 @@ func (l *LimitedServer) list(ctx context.Context, r *etcdserverpb.RangeRequest) 
 	}
 	span.SetAttributes(attribute.Int64("limit", limit))
 
-	rev, kvs, err := l.InternalList(ctx, r.Key, r.RangeEnd, limit, revision)
+	rev, kvs, err := k.limited.List(ctx, r.Key, r.RangeEnd, limit, revision)
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +137,7 @@ func (l *LimitedServer) list(ctx context.Context, r *etcdserverpb.RangeRequest) 
 		}
 
 		// count the actual number of results if there are more items in the db.
-		rev, resp.Count, err = l.Count(ctx, r.Key, r.RangeEnd, revision)
+		rev, resp.Count, err = k.limited.Count(ctx, r.Key, r.RangeEnd, revision)
 		if err != nil {
 			return nil, err
 		}

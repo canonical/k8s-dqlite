@@ -73,7 +73,21 @@ func (k *KVServerBridge) Range(ctx context.Context, r *etcdserverpb.RangeRequest
 		return nil, unsupported("maxModRevision")
 	}
 
-	resp, err := k.limited.Range(ctx, r)
+	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.Range", otelName))
+	defer span.End()
+
+	var (
+		resp *RangeResponse
+		err  error
+	)
+
+	if len(r.RangeEnd) == 0 {
+		resp, err = k.get(ctx, r)
+	} else {
+		resp, err = k.list(ctx, r)
+
+	}
+
 	if err != nil {
 		logrus.Errorf("error while range on %s %s: %v", r.Key, r.RangeEnd, err)
 		return nil, err
@@ -87,6 +101,34 @@ func (k *KVServerBridge) Range(ctx context.Context, r *etcdserverpb.RangeRequest
 	}
 
 	return rangeResponse, nil
+}
+
+func (k *KVServerBridge) Put(ctx context.Context, r *etcdserverpb.PutRequest) (*etcdserverpb.PutResponse, error) {
+	return nil, fmt.Errorf("put is not supported")
+}
+
+func (k *KVServerBridge) DeleteRange(ctx context.Context, r *etcdserverpb.DeleteRangeRequest) (*etcdserverpb.DeleteRangeResponse, error) {
+	return nil, fmt.Errorf("delete is not supported")
+}
+
+func (k *KVServerBridge) Txn(ctx context.Context, txn *etcdserverpb.TxnRequest) (*etcdserverpb.TxnResponse, error) {
+	if put := isCreate(txn); put != nil {
+		return k.create(ctx, put)
+	}
+	if rev, key, ok := isDelete(txn); ok {
+		return k.delete(ctx, key, rev)
+	}
+	if rev, key, value, lease, ok := isUpdate(txn); ok {
+		return k.update(ctx, rev, key, value, lease)
+	}
+	if isCompact(txn) {
+		return k.compact(ctx)
+	}
+	return nil, fmt.Errorf("unsupported transaction: %v", txn)
+}
+
+func unsupported(field string) error {
+	return fmt.Errorf("%s is unsupported", field)
 }
 
 func toKVs(kvs ...*KeyValue) []*mvccpb.KeyValue {
@@ -115,32 +157,4 @@ func toKV(kv *KeyValue) *mvccpb.KeyValue {
 		CreateRevision: kv.CreateRevision,
 		ModRevision:    kv.ModRevision,
 	}
-}
-
-func (k *KVServerBridge) Put(ctx context.Context, r *etcdserverpb.PutRequest) (*etcdserverpb.PutResponse, error) {
-	return nil, fmt.Errorf("put is not supported")
-}
-
-func (k *KVServerBridge) DeleteRange(ctx context.Context, r *etcdserverpb.DeleteRangeRequest) (*etcdserverpb.DeleteRangeResponse, error) {
-	return nil, fmt.Errorf("delete is not supported")
-}
-
-func (k *KVServerBridge) Txn(ctx context.Context, r *etcdserverpb.TxnRequest) (*etcdserverpb.TxnResponse, error) {
-	res, err := k.limited.Txn(ctx, r)
-	if err != nil {
-		logrus.Errorf("error in txn: %v", err)
-	}
-	return res, err
-}
-
-func (k *KVServerBridge) Compact(ctx context.Context, r *etcdserverpb.CompactionRequest) (*etcdserverpb.CompactionResponse, error) {
-	return &etcdserverpb.CompactionResponse{
-		Header: &etcdserverpb.ResponseHeader{
-			Revision: r.Revision,
-		},
-	}, nil
-}
-
-func unsupported(field string) error {
-	return fmt.Errorf("%s is unsupported", field)
 }

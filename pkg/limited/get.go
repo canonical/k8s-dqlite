@@ -8,7 +8,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
-func (l *LimitedServer) get(ctx context.Context, r *etcdserverpb.RangeRequest) (*RangeResponse, error) {
+func (k *KVServerBridge) get(ctx context.Context, r *etcdserverpb.RangeRequest) (*RangeResponse, error) {
 	var err error
 	getCnt.Add(ctx, 1)
 	ctx, span := otelTracer.Start(ctx, fmt.Sprintf("%s.get", otelName))
@@ -23,7 +23,7 @@ func (l *LimitedServer) get(ctx context.Context, r *etcdserverpb.RangeRequest) (
 		attribute.Int64("revision", r.Revision),
 	)
 
-	rev, kv, err := l.InternalList(ctx, r.Key, nil, 1, r.Revision)
+	rev, kv, err := k.limited.List(ctx, r.Key, nil, 1, r.Revision)
 	if err != nil {
 		return nil, err
 	}
