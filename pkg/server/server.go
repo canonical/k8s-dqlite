@@ -16,9 +16,9 @@ import (
 	"github.com/canonical/go-dqlite/v3/client"
 	"github.com/canonical/k8s-dqlite/pkg/database"
 	dqliteDriver "github.com/canonical/k8s-dqlite/pkg/drivers/dqlite"
+	"github.com/canonical/k8s-dqlite/pkg/drivers/sqlite"
 	"github.com/canonical/k8s-dqlite/pkg/endpoint"
 	"github.com/canonical/k8s-dqlite/pkg/limited"
-	"github.com/canonical/k8s-dqlite/pkg/sqllog"
 	k8s_dqlite_tls "github.com/canonical/k8s-dqlite/pkg/tls"
 	"github.com/sirupsen/logrus"
 )
@@ -423,20 +423,22 @@ func (s *Server) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
 
-	driver, err := dqliteDriver.NewDriver(ctx, &dqliteDriver.DriverConfig{
-		DB:  database.NewBatched(database.NewPrepared(db)),
-		App: s.app,
+	backend, err := dqliteDriver.NewBackend(ctx, &dqliteDriver.BackendConfig{
+		DriverConfig: &dqliteDriver.DriverConfig{
+			DB:  database.NewBatched(database.NewPrepared(db)),
+			App: s.app,
+		},
+		BaseBackendConfig: &sqlite.BaseBackendConfig{
+			CompactInterval:   s.serverConfig.CompactInterval,
+			PollInterval:      s.serverConfig.PollInterval,
+			WatchQueryTimeout: s.serverConfig.WatchQueryTimeout,
+		},
 	})
+
 	if err != nil {
-		return fmt.Errorf("failed to create dqlite driver: %w", err)
+		return fmt.Errorf("failed to create dqlite backend: %w", err)
 	}
 
-	backend := sqllog.New(&sqllog.SQLLogConfig{
-		Driver:            driver,
-		CompactInterval:   s.serverConfig.CompactInterval,
-		PollInterval:      s.serverConfig.PollInterval,
-		WatchQueryTimeout: s.serverConfig.WatchQueryTimeout,
-	})
 	if err := backend.Start(ctx); err != nil {
 		backend.Close()
 		return fmt.Errorf("failed to start k8s-dqlite backend: %w", err)
