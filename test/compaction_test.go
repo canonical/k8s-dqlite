@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"testing"
 
-	"github.com/canonical/k8s-dqlite/pkg/sqllog"
+	"github.com/canonical/k8s-dqlite/pkg/drivers/sqlite"
 	. "github.com/onsi/gomega"
 )
 
@@ -102,7 +102,7 @@ func BenchmarkCompaction(b *testing.B) {
 				setup: func(ctx context.Context, tx *sql.Tx) error {
 					// Make sure there are enough rows deleted to have
 					// b.N rows to compact.
-					delCount := b.N + sqllog.SupersededCount
+					delCount := b.N + sqlite.SupersededCount
 
 					// Also, make sure there are uncollectable data, so
 					// that the deleted rows are about 5% of the total.
