@@ -96,8 +96,7 @@ var (
 		) AS maxkv
 	    	ON maxkv.id = kv.id
 		WHERE (kv.deleted = 0 OR ?)
-		ORDER BY kv.name ASC, kv.id ASC
-	`
+		ORDER BY kv.name ASC, kv.id ASC`
 
 	revisionIntervalSQL = `
 		SELECT (
