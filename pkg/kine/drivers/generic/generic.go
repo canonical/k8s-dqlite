@@ -84,7 +84,7 @@ var (
 		FROM kine AS rkv`
 
 	listSQL = `
-		SELECT id, name, created, deleted, create_revision, prev_revision, lease, value, old_value
+		SELECT kv.id, kv.name, kv.created, kv.deleted, kv.create_revision, kv.prev_revision, kv.lease, kv.value, kv.old_value
 		FROM kine AS kv
 		JOIN (
 			SELECT MAX(mkv.id) as id
@@ -117,7 +117,7 @@ var (
 		)`, listSQL)
 
 	afterSQLPrefix = `
-		SELECT id, name, created, deleted, create_revision, prev_revision, lease, value, old_value
+		SELECT kv.id, kv.name, kv.created, kv.deleted, kv.create_revision, kv.prev_revision, kv.lease, kv.value, kv.old_value
 		FROM kine AS kv
 		WHERE
 			kv.name >= ? AND kv.name < ?
@@ -125,7 +125,7 @@ var (
 		ORDER BY kv.id ASC`
 
 	afterSQL = `
-		SELECT id, name, created, deleted, create_revision, prev_revision, lease, value, old_value
+		SELECT kv.id, kv.name, kv.created, kv.deleted, kv.create_revision, kv.prev_revision, kv.lease, kv.value, kv.old_value
 		FROM kine AS kv
 		WHERE kv.id > ?
 		ORDER BY kv.id ASC`
