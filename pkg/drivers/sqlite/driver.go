@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 	"unicode"
 
@@ -248,15 +247,12 @@ func (s Stripped) String() string {
 }
 
 type Driver struct {
-	mu sync.Mutex
-
 	config *DriverConfig
 }
 
 type DriverConfig struct {
-	DB      database.Interface
-	Retry   func(error) bool
-	ErrCode func(error) string
+	DB    database.Interface
+	Retry func(error) bool
 }
 
 func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
@@ -267,9 +263,6 @@ func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
 	}
 	if config.DB == nil {
 		return nil, errors.New("db cannot be nil")
-	}
-	if config.ErrCode == nil {
-		config.ErrCode = error.Error
 	}
 	if config.Retry == nil {
 		config.Retry = func(err error) bool {

@@ -31,9 +31,8 @@ type Driver struct {
 }
 
 type DriverConfig struct {
-	DB      database.Interface
-	ErrCode func(error) string
-	App     *app.App
+	DB  database.Interface
+	App *app.App
 }
 
 func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
