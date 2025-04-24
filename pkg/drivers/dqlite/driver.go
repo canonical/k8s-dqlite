@@ -3,6 +3,7 @@ package dqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -13,14 +14,15 @@ import (
 	"github.com/canonical/k8s-dqlite/pkg/database"
 	"github.com/canonical/k8s-dqlite/pkg/drivers/sqlite"
 	"github.com/mattn/go-sqlite3"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
+
+const ()
 
 func init() {
 	// We assume SQLite will be used multi-threaded
 	if err := dqlite.ConfigMultiThread(); err != nil {
-		panic(errors.Wrap(err, "failed to set dqlite multithreaded mode"))
+		panic(fmt.Errorf("failed to set dqlite multithreaded mode: %v", err))
 	}
 }
 
@@ -51,7 +53,7 @@ func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
 	}
 
 	if err := migrate(ctx, config.DB); err != nil {
-		return nil, errors.Wrap(err, "failed to migrate DB from sqlite")
+		return nil, fmt.Errorf("failed to migrate DB from sqlite: %w", err)
 	}
 
 	return &Driver{
@@ -73,14 +75,13 @@ func (d *Driver) Compact(ctx context.Context, revision int64) (err error) {
 }
 
 func dqliteRetry(err error) bool {
-	// get the inner-most error if possible
-	err = errors.Cause(err)
+	var e driver.Error
 
-	if err, ok := err.(driver.Error); ok {
-		return err.Code == driver.ErrBusy
+	if errors.As(err, &e) {
+		return e.Code == driver.ErrBusy
 	}
 
-	if err == sqlite3.ErrLocked || err == sqlite3.ErrBusy {
+	if errors.Is(err, sqlite3.ErrLocked) || errors.Is(err, sqlite3.ErrBusy) {
 		return true
 	}
 

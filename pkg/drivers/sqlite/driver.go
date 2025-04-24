@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -10,7 +11,6 @@ import (
 
 	"github.com/canonical/k8s-dqlite/pkg/database"
 	"github.com/mattn/go-sqlite3"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -324,7 +324,7 @@ func setup(ctx context.Context, db database.Interface) error {
 	defer txn.Rollback()
 
 	if err := migrate(ctx, txn); err != nil {
-		return errors.Wrap(err, "migration failed")
+		return fmt.Errorf("migration failed: %w", err)
 	}
 
 	return txn.Commit()
