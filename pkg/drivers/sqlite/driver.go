@@ -3,15 +3,14 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 	"unicode"
 
 	"github.com/canonical/k8s-dqlite/pkg/database"
 	"github.com/mattn/go-sqlite3"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -248,15 +247,12 @@ func (s Stripped) String() string {
 }
 
 type Driver struct {
-	mu sync.Mutex
-
 	config *DriverConfig
 }
 
 type DriverConfig struct {
-	DB      database.Interface
-	Retry   func(error) bool
-	ErrCode func(error) string
+	DB    database.Interface
+	Retry func(error) bool
 }
 
 func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
@@ -267,9 +263,6 @@ func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
 	}
 	if config.DB == nil {
 		return nil, errors.New("db cannot be nil")
-	}
-	if config.ErrCode == nil {
-		config.ErrCode = error.Error
 	}
 	if config.Retry == nil {
 		config.Retry = func(err error) bool {
@@ -331,7 +324,7 @@ func setup(ctx context.Context, db database.Interface) error {
 	defer txn.Rollback()
 
 	if err := migrate(ctx, txn); err != nil {
-		return errors.Wrap(err, "migration failed")
+		return fmt.Errorf("migration failed: %w", err)
 	}
 
 	return txn.Commit()
