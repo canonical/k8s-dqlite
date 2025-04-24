@@ -17,8 +17,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-const ()
-
 func init() {
 	// We assume SQLite will be used multi-threaded
 	if err := dqlite.ConfigMultiThread(); err != nil {
