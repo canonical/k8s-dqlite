@@ -13,7 +13,7 @@ import (
 
 // TestDelete is unit testing for the delete operation.
 func TestDelete(t *testing.T) {
-	for _, backendType := range []string{SQLiteBackend, DQLiteBackend} {
+	for _, backendType := range []string{SQLiteBackend, DQLiteBackend, SQLiteBackendV2, DQLiteBackendV2} {
 		t.Run(backendType, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -65,7 +65,7 @@ func TestDelete(t *testing.T) {
 
 // BenchmarkDelete is a benchmark for the delete operation.
 func BenchmarkDelete(b *testing.B) {
-	for _, backendType := range []string{SQLiteBackend, DQLiteBackend} {
+	for _, backendType := range []string{SQLiteBackend, DQLiteBackend, SQLiteBackendV2, DQLiteBackendV2} {
 		for _, workers := range []int{1, 4, 16, 64, 128} {
 			b.Run(fmt.Sprintf("%s/%d-workers", backendType, workers), func(b *testing.B) {
 				b.StopTimer()

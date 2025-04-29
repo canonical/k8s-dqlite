@@ -25,7 +25,7 @@ func TestWatch(t *testing.T) {
 		idleTimeout = 100 * time.Millisecond
 	)
 
-	for _, backendType := range []string{SQLiteBackend, DQLiteBackend} {
+	for _, backendType := range []string{SQLiteBackend, DQLiteBackend, SQLiteBackendV2, DQLiteBackendV2} {
 		t.Run(backendType, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()

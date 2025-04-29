@@ -12,7 +12,7 @@ import (
 
 // TestGet is unit testing for the Get operation.
 func TestGet(t *testing.T) {
-	for _, backendType := range []string{SQLiteBackend, DQLiteBackend} {
+	for _, backendType := range []string{SQLiteBackend, DQLiteBackend, SQLiteBackendV2, DQLiteBackendV2} {
 		t.Run(backendType, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -115,7 +115,7 @@ func TestGet(t *testing.T) {
 
 // BenchmarkGet is a benchmark for the Get operation.
 func BenchmarkGet(b *testing.B) {
-	for _, backendType := range []string{SQLiteBackend, DQLiteBackend} {
+	for _, backendType := range []string{SQLiteBackend, DQLiteBackend, SQLiteBackendV2, DQLiteBackendV2} {
 		b.Run(backendType, func(b *testing.B) {
 			b.StopTimer()
 			g := NewWithT(b)

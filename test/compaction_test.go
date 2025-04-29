@@ -13,7 +13,7 @@ import (
 const supersededCount = 100
 
 func TestCompaction(t *testing.T) {
-	for _, backendType := range []string{SQLiteBackend, DQLiteBackend} {
+	for _, backendType := range []string{SQLiteBackend, DQLiteBackend, SQLiteBackendV2, DQLiteBackendV2} {
 		t.Run(backendType, func(t *testing.T) {
 			t.Run("SmallDatabaseDeleteEntry", func(t *testing.T) {
 				g := NewWithT(t)
@@ -95,7 +95,7 @@ func TestCompaction(t *testing.T) {
 }
 
 func BenchmarkCompaction(b *testing.B) {
-	for _, backendType := range []string{SQLiteBackend, DQLiteBackend} {
+	for _, backendType := range []string{SQLiteBackend, DQLiteBackend, SQLiteBackendV2, DQLiteBackendV2} {
 		b.Run(backendType, func(b *testing.B) {
 			b.StopTimer()
 			ctx, cancel := context.WithCancel(context.Background())

@@ -12,7 +12,7 @@ import (
 
 // TestCreate is unit testing for the create operation.
 func TestCreate(t *testing.T) {
-	for _, backendType := range []string{SQLiteBackend, DQLiteBackend} {
+	for _, backendType := range []string{SQLiteBackend, DQLiteBackend, SQLiteBackendV2, DQLiteBackendV2} {
 		t.Run(backendType, func(t *testing.T) {
 			g := NewWithT(t)
 
@@ -35,7 +35,7 @@ func TestCreate(t *testing.T) {
 
 // BenchmarkCreate is a benchmark for the Create operation.
 func BenchmarkCreate(b *testing.B) {
-	for _, backendType := range []string{SQLiteBackend, DQLiteBackend} {
+	for _, backendType := range []string{SQLiteBackend, DQLiteBackend, SQLiteBackendV2, DQLiteBackendV2} {
 		for _, workers := range []int{1, 4, 16, 64, 128} {
 			b.Run(fmt.Sprintf("%s/%d-workers", backendType, workers), func(b *testing.B) {
 				b.StopTimer()

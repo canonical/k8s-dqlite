@@ -12,7 +12,7 @@ import (
 
 // TestList is the unit test for List operation.
 func TestList(t *testing.T) {
-	for _, backendType := range []string{SQLiteBackend, DQLiteBackend} {
+	for _, backendType := range []string{SQLiteBackend, DQLiteBackend, SQLiteBackendV2, DQLiteBackendV2} {
 		t.Run(backendType, func(t *testing.T) {
 			g := NewWithT(t)
 
@@ -190,7 +190,7 @@ func BenchmarkList(b *testing.B) {
 		}
 		return nil
 	}
-	backends := []string{SQLiteBackend, DQLiteBackend}
+	backends := []string{SQLiteBackend, DQLiteBackend, SQLiteBackendV2, DQLiteBackendV2}
 	for _, backendType := range backends {
 		payloads := []struct {
 			name string
