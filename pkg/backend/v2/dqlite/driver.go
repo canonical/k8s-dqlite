@@ -1,4 +1,4 @@
-package dqlitev2
+package dqlite
 
 import (
 	"context"

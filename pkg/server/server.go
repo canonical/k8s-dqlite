@@ -15,9 +15,7 @@ import (
 	"github.com/canonical/go-dqlite/v3/app"
 	"github.com/canonical/go-dqlite/v3/client"
 	dqliteDriver "github.com/canonical/k8s-dqlite/pkg/backend/v1/dqlite"
-	"github.com/canonical/k8s-dqlite/pkg/backend/v1/sqlite"
 	dqliteDriverV2 "github.com/canonical/k8s-dqlite/pkg/backend/v2/dqlite"
-	sqlitev2 "github.com/canonical/k8s-dqlite/pkg/backend/v2/sqlite"
 	"github.com/canonical/k8s-dqlite/pkg/database"
 	"github.com/canonical/k8s-dqlite/pkg/endpoint"
 	"github.com/canonical/k8s-dqlite/pkg/limited"
@@ -439,7 +437,7 @@ func (s *Server) Start(ctx context.Context) error {
 				DB:  database.NewBatched(database.NewPrepared(db)),
 				App: s.app,
 			},
-			Config: &sqlite.Config{
+			Config: limited.Config{
 				CompactInterval:   s.serverConfig.CompactInterval,
 				PollInterval:      s.serverConfig.PollInterval,
 				WatchQueryTimeout: s.serverConfig.WatchQueryTimeout,
@@ -452,7 +450,7 @@ func (s *Server) Start(ctx context.Context) error {
 				DB:  database.NewBatched(database.NewPrepared(db)),
 				App: s.app,
 			},
-			Config: &sqlitev2.Config{
+			Config: limited.Config{
 				CompactInterval:   s.serverConfig.CompactInterval,
 				PollInterval:      s.serverConfig.PollInterval,
 				WatchQueryTimeout: s.serverConfig.WatchQueryTimeout,

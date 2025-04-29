@@ -1,4 +1,4 @@
-package sqlitev2_test
+package sqlite_test
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"path"
 	"testing"
 
-	sqlite "github.com/canonical/k8s-dqlite/pkg/backend/v2/sqlite"
+	sqlite "github.com/canonical/k8s-dqlite/pkg/backend/v1/sqlite"
 	"github.com/canonical/k8s-dqlite/pkg/database"
 	"github.com/sirupsen/logrus"
 )

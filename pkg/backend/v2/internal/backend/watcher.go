@@ -1,4 +1,4 @@
-package sqlitev2
+package internal
 
 import (
 	"context"
@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/canonical/k8s-dqlite/pkg/backend/v2/internal/backend"
 	"github.com/canonical/k8s-dqlite/pkg/limited"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/attribute"
@@ -16,7 +15,7 @@ import (
 type WatcherGroup struct {
 	mu              sync.Mutex
 	ctx             context.Context
-	driver          backend.Driver
+	driver          Driver
 	currentRevision int64
 	watchers        map[int64]*watcher
 	updates         chan limited.WatcherGroupUpdate
@@ -177,14 +176,14 @@ func (w *WatcherGroup) Updates() <-chan limited.WatcherGroupUpdate { return w.up
 
 var _ limited.WatcherGroup = &WatcherGroup{}
 
-func (s *Backend) notifyWatcherPoll(revision int64) {
+func (s Backend) notifyWatcherPoll(revision int64) {
 	select {
 	case s.Notify <- revision:
 	default:
 	}
 }
 
-func (s *Backend) poll(ctx context.Context) {
+func (s Backend) poll(ctx context.Context) {
 	ticker := time.NewTicker(s.Config.PollInterval)
 	defer ticker.Stop()
 
@@ -215,7 +214,7 @@ func (s *Backend) poll(ctx context.Context) {
 	}
 }
 
-func (s *Backend) publishEvents(events []*limited.Event) {
+func (s Backend) publishEvents(events []*limited.Event) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if len(events) > 0 {
@@ -231,7 +230,7 @@ func (s *Backend) publishEvents(events []*limited.Event) {
 	}
 }
 
-func (s *Backend) getLatestEvents(ctx context.Context, pollRevision int64) ([]*limited.Event, error) {
+func (s Backend) getLatestEvents(ctx context.Context, pollRevision int64) ([]*limited.Event, error) {
 	var err error
 	watchCtx, cancel := context.WithTimeout(ctx, s.Config.WatchQueryTimeout)
 	defer cancel()
@@ -256,7 +255,7 @@ func (s *Backend) getLatestEvents(ctx context.Context, pollRevision int64) ([]*l
 	return events, nil
 }
 
-func (s *Backend) WatcherGroup(ctx context.Context) (limited.WatcherGroup, error) {
+func (s Backend) WatcherGroup(ctx context.Context) (limited.WatcherGroup, error) {
 	var err error
 
 	watcherGroupCnt.Add(ctx, 1)

@@ -1,4 +1,4 @@
-package sqlitev2
+package internal
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func (s *Backend) ttl(ctx context.Context) {
+func (s Backend) ttl(ctx context.Context) {
 	run := func(ctx context.Context, key []byte, revision int64, timeout time.Duration) {
 		select {
 		case <-ctx.Done():

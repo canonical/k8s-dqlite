@@ -1,4 +1,4 @@
-package sqlitev2
+package sqlite
 
 import (
 	"time"

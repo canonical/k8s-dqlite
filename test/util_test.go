@@ -172,7 +172,7 @@ func startSqlite(ctx context.Context, tb testing.TB, dir string, backendType str
 	var backend limited.Backend
 	if backendType == SQLiteBackend {
 		backend, err = sqlite.NewBackend(ctx, &sqlite.BackendConfig{
-			Config: &sqlite.Config{
+			Config: limited.Config{
 				CompactInterval:   5 * time.Minute,
 				PollInterval:      1 * time.Second,
 				WatchQueryTimeout: 20 * time.Second,
@@ -183,7 +183,7 @@ func startSqlite(ctx context.Context, tb testing.TB, dir string, backendType str
 		})
 	} else {
 		backend, err = sqlitev2.NewBackend(ctx, &sqlitev2.BackendConfig{
-			Config: &sqlitev2.Config{
+			Config: limited.Config{
 				CompactInterval:   5 * time.Minute,
 				PollInterval:      1 * time.Second,
 				WatchQueryTimeout: 20 * time.Second,
@@ -232,7 +232,7 @@ func startDqlite(ctx context.Context, tb testing.TB, dir string, listener *instr
 	var backend limited.Backend
 	if backendType == DQLiteBackend {
 		backend, err = dqlite.NewBackend(ctx, &dqlite.BackendConfig{
-			Config: &sqlite.Config{
+			Config: limited.Config{
 				CompactInterval:   5 * time.Minute,
 				PollInterval:      1 * time.Second,
 				WatchQueryTimeout: 20 * time.Second,
@@ -244,7 +244,7 @@ func startDqlite(ctx context.Context, tb testing.TB, dir string, listener *instr
 		})
 	} else {
 		backend, err = dqlitev2.NewBackend(ctx, &dqlitev2.BackendConfig{
-			Config: &sqlitev2.Config{
+			Config: limited.Config{
 				CompactInterval:   5 * time.Minute,
 				PollInterval:      1 * time.Second,
 				WatchQueryTimeout: 20 * time.Second,

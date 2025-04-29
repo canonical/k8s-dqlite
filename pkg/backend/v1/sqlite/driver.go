@@ -10,7 +10,6 @@ import (
 	"unicode"
 
 	"github.com/canonical/k8s-dqlite/pkg/database"
-	"github.com/canonical/k8s-dqlite/pkg/limited"
 	"github.com/mattn/go-sqlite3"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
@@ -722,39 +721,6 @@ func (d *Driver) CurrentRevision(ctx context.Context) (int64, error) {
 	}
 	span.SetAttributes(attribute.Int64("id", id))
 	return id, nil
-}
-
-func (s *Backend) WatcherGroup(ctx context.Context) (limited.WatcherGroup, error) {
-	var err error
-
-	watcherGroupCnt.Add(ctx, 1)
-	ctx, span := backendOtelTracer.Start(ctx, fmt.Sprintf("%s.WatcherGroup", backendOtelName))
-	span.SetAttributes(attribute.Int64("currentRevision", s.pollRevision))
-	defer func() {
-		span.RecordError(err)
-		span.End()
-	}()
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	wg := &WatcherGroup{
-		ctx:             ctx,
-		driver:          s.Driver,
-		currentRevision: s.pollRevision,
-		watchers:        make(map[int64]*watcher),
-		updates:         make(chan limited.WatcherGroupUpdate, 100),
-	}
-	stop := context.AfterFunc(ctx, func() {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		delete(s.WatcherGroups, wg)
-		close(wg.updates)
-	})
-	wg.stop = stop
-	s.WatcherGroups[wg] = wg
-	logrus.Debugf("created new WatcherGroup.")
-	return wg, nil
 }
 
 func (d *Driver) AfterPrefix(ctx context.Context, key, rangeEnd []byte, startRevision, endRevision int64) (*sql.Rows, error) {
