@@ -176,14 +176,14 @@ func (w *WatcherGroup) Updates() <-chan limited.WatcherGroupUpdate { return w.up
 
 var _ limited.WatcherGroup = &WatcherGroup{}
 
-func (s Backend) notifyWatcherPoll(revision int64) {
+func (s *Backend) notifyWatcherPoll(revision int64) {
 	select {
 	case s.Notify <- revision:
 	default:
 	}
 }
 
-func (s Backend) poll(ctx context.Context) {
+func (s *Backend) poll(ctx context.Context) {
 	ticker := time.NewTicker(s.Config.PollInterval)
 	defer ticker.Stop()
 
@@ -214,7 +214,7 @@ func (s Backend) poll(ctx context.Context) {
 	}
 }
 
-func (s Backend) publishEvents(events []*limited.Event) {
+func (s *Backend) publishEvents(events []*limited.Event) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if len(events) > 0 {
@@ -230,7 +230,7 @@ func (s Backend) publishEvents(events []*limited.Event) {
 	}
 }
 
-func (s Backend) getLatestEvents(ctx context.Context, pollRevision int64) ([]*limited.Event, error) {
+func (s *Backend) getLatestEvents(ctx context.Context, pollRevision int64) ([]*limited.Event, error) {
 	var err error
 	watchCtx, cancel := context.WithTimeout(ctx, s.Config.WatchQueryTimeout)
 	defer cancel()
@@ -255,7 +255,7 @@ func (s Backend) getLatestEvents(ctx context.Context, pollRevision int64) ([]*li
 	return events, nil
 }
 
-func (s Backend) WatcherGroup(ctx context.Context) (limited.WatcherGroup, error) {
+func (s *Backend) WatcherGroup(ctx context.Context) (limited.WatcherGroup, error) {
 	var err error
 
 	watcherGroupCnt.Add(ctx, 1)

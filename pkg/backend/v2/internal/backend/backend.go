@@ -79,7 +79,7 @@ type Backend struct {
 	wg     sync.WaitGroup
 }
 
-func (s Backend) Start(startCtx context.Context) error {
+func (s *Backend) Start(startCtx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -109,7 +109,7 @@ func (s Backend) Start(startCtx context.Context) error {
 	return nil
 }
 
-func (s Backend) Stop() error {
+func (s *Backend) Stop() error {
 	s.mu.Lock()
 
 	if !s.started {
@@ -123,14 +123,14 @@ func (s Backend) Stop() error {
 	return nil
 }
 
-func (s Backend) Close() error {
+func (s *Backend) Close() error {
 	stopErr := s.Stop()
 	closeErr := s.Driver.Close()
 
 	return errors.Join(stopErr, closeErr)
 }
 
-func (s Backend) compactStart(ctx context.Context) error {
+func (s *Backend) compactStart(ctx context.Context) error {
 	currentRevision, err := s.Driver.CurrentRevision(ctx)
 
 	rows, err := s.Driver.AfterPrefix(ctx, []byte("compact_rev_key"), []byte("compact_rev_key\x00"), 0, currentRevision)
@@ -174,7 +174,7 @@ func (s Backend) compactStart(ctx context.Context) error {
 
 // DoCompact makes a single compaction run when called. It is intended to be called
 // from test functions that have access to the backend.
-func (s Backend) DoCompact(ctx context.Context) (err error) {
+func (s *Backend) DoCompact(ctx context.Context) (err error) {
 	ctx, span := backendOtelTracer.Start(ctx, fmt.Sprintf("%s.DoCompact", backendOtelName))
 	backendCompactCnt.Add(ctx, 1)
 	defer func() {
@@ -215,11 +215,11 @@ func (s Backend) DoCompact(ctx context.Context) (err error) {
 	return nil
 }
 
-func (s Backend) GetCompactRevision(ctx context.Context) (int64, int64, error) {
+func (s *Backend) GetCompactRevision(ctx context.Context) (int64, int64, error) {
 	return s.Driver.GetCompactRevision(ctx)
 }
 
-func (s Backend) List(ctx context.Context, key, rangeEnd []byte, limit, revision int64) (int64, []*limited.KeyValue, error) {
+func (s *Backend) List(ctx context.Context, key, rangeEnd []byte, limit, revision int64) (int64, []*limited.KeyValue, error) {
 	var err error
 
 	ctx, span := backendOtelTracer.Start(ctx, fmt.Sprintf("%s.List", backendOtelName))
@@ -257,7 +257,7 @@ func (s Backend) List(ctx context.Context, key, rangeEnd []byte, limit, revision
 	return currentRevision, result, err
 }
 
-func (s Backend) startWatch(ctx context.Context) error {
+func (s *Backend) startWatch(ctx context.Context) error {
 	if err := s.compactStart(ctx); err != nil {
 		return err
 	}
@@ -297,7 +297,7 @@ func (s Backend) startWatch(ctx context.Context) error {
 	return nil
 }
 
-func (s Backend) Count(ctx context.Context, key, rangeEnd []byte, revision int64) (int64, int64, error) {
+func (s *Backend) Count(ctx context.Context, key, rangeEnd []byte, revision int64) (int64, int64, error) {
 	var err error
 	ctx, span := backendOtelTracer.Start(ctx, fmt.Sprintf("%s.Count", backendOtelName))
 	defer func() {
@@ -326,7 +326,7 @@ func (s Backend) Count(ctx context.Context, key, rangeEnd []byte, revision int64
 	return currentRevision, count, nil
 }
 
-func (s Backend) Create(ctx context.Context, key, value []byte, lease int64) (int64, bool, error) {
+func (s *Backend) Create(ctx context.Context, key, value []byte, lease int64) (int64, bool, error) {
 	rev, created, err := s.Driver.Create(ctx, key, value, lease)
 	if err != nil {
 		return 0, false, err
@@ -337,7 +337,7 @@ func (s Backend) Create(ctx context.Context, key, value []byte, lease int64) (in
 	return rev, created, nil
 }
 
-func (s Backend) Delete(ctx context.Context, key []byte, revision int64) (rev int64, deleted bool, err error) {
+func (s *Backend) Delete(ctx context.Context, key []byte, revision int64) (rev int64, deleted bool, err error) {
 	rev, deleted, err = s.Driver.Delete(ctx, key, revision)
 	if err != nil {
 		return 0, false, err
@@ -348,7 +348,7 @@ func (s Backend) Delete(ctx context.Context, key []byte, revision int64) (rev in
 	return rev, deleted, nil
 }
 
-func (s Backend) Update(ctx context.Context, key []byte, value []byte, prevRev, lease int64) (rev int64, updated bool, err error) {
+func (s *Backend) Update(ctx context.Context, key []byte, value []byte, prevRev, lease int64) (rev int64, updated bool, err error) {
 	rev, updated, err = s.Driver.Update(ctx, key, value, prevRev, lease)
 	if err != nil {
 		return 0, false, err
@@ -359,7 +359,7 @@ func (s Backend) Update(ctx context.Context, key []byte, value []byte, prevRev, 
 	return rev, updated, nil
 }
 
-func (s Backend) DbSize(ctx context.Context) (int64, error) {
+func (s *Backend) DbSize(ctx context.Context) (int64, error) {
 	var err error
 	ctx, span := backendOtelTracer.Start(ctx, fmt.Sprintf("%s.DbSize", backendOtelName))
 	defer func() {

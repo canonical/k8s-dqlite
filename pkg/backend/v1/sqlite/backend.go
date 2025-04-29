@@ -31,7 +31,7 @@ func NewBackend(ctx context.Context, config *BackendConfig) (limited.Backend, er
 		return nil, err
 	}
 
-	return internal.Backend{
+	return &internal.Backend{
 		Config:        config.Config,
 		Driver:        driver,
 		Notify:        make(chan int64, 100),
