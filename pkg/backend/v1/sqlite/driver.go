@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode"
 
+	metrics "github.com/canonical/k8s-dqlite/pkg/backend/metrics"
 	"github.com/canonical/k8s-dqlite/pkg/database"
 	"github.com/mattn/go-sqlite3"
 	"github.com/sirupsen/logrus"
@@ -380,7 +381,7 @@ func (d *Driver) query(ctx context.Context, txName, query string, args ...interf
 		if err != nil {
 			err = fmt.Errorf("query (try: %d): %w", retryCount, err)
 		}
-		recordOpResult(txName, err, start)
+		metrics.RecordOpResult(txName, err, start)
 	}()
 	for ; retryCount < maxRetries; retryCount++ {
 		if retryCount == 0 {
@@ -397,7 +398,7 @@ func (d *Driver) query(ctx context.Context, txName, query string, args ...interf
 		}
 	}
 
-	recordTxResult(txName, err)
+	metrics.RecordTxResult(txName, err)
 	return rows, err
 }
 
@@ -418,7 +419,7 @@ func (d *Driver) execute(ctx context.Context, txName, query string, args ...inte
 		if err != nil {
 			err = fmt.Errorf("exec (try: %d): %w", retryCount, err)
 		}
-		recordOpResult(txName, err, start)
+		metrics.RecordOpResult(txName, err, start)
 	}()
 	for ; retryCount < maxRetries; retryCount++ {
 		if retryCount > 2 {
@@ -435,7 +436,7 @@ func (d *Driver) execute(ctx context.Context, txName, query string, args ...inte
 		}
 	}
 
-	recordTxResult(txName, err)
+	metrics.RecordTxResult(txName, err)
 	return result, err
 }
 
@@ -637,8 +638,8 @@ func (d *Driver) GetCompactRevision(ctx context.Context) (int64, int64, error) {
 	var err error
 	defer func() {
 		span.RecordError(err)
-		recordOpResult("revision_interval_sql", err, start)
-		recordTxResult("revision_interval_sql", err)
+		metrics.RecordOpResult("revision_interval_sql", err, start)
+		metrics.RecordTxResult("revision_interval_sql", err)
 		span.End()
 	}()
 

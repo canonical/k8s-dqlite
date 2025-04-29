@@ -1,4 +1,4 @@
-package sqlite
+package prommetrics
 
 import (
 	"time"
@@ -33,11 +33,11 @@ func errorToResultLabel(err error) string {
 	return "success"
 }
 
-func recordTxResult(txName string, err error) {
+func RecordTxResult(txName string, err error) {
 	metricsTxResult.WithLabelValues(txName, errorToResultLabel(err)).Inc()
 }
 
-func recordOpResult(txName string, err error, startTime time.Time) {
+func RecordOpResult(txName string, err error, startTime time.Time) {
 	resultLabel := errorToResultLabel(err)
 	metricsOpLatency.WithLabelValues(txName, resultLabel).Observe(float64(time.Since(startTime) / time.Second))
 	metricsOpResult.WithLabelValues(txName, resultLabel).Inc()
