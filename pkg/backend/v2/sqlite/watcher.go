@@ -1,4 +1,4 @@
-package sqlite
+package sqlitev2
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/canonical/k8s-dqlite/pkg/drivers"
+	"github.com/canonical/k8s-dqlite/pkg/backend/v2/internal/backend"
 	"github.com/canonical/k8s-dqlite/pkg/limited"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/attribute"
@@ -16,7 +16,7 @@ import (
 type WatcherGroup struct {
 	mu              sync.Mutex
 	ctx             context.Context
-	driver          drivers.Driver
+	driver          backend.Driver
 	currentRevision int64
 	watchers        map[int64]*watcher
 	updates         chan limited.WatcherGroupUpdate

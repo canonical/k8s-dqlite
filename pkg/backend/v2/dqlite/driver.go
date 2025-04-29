@@ -1,4 +1,4 @@
-package dqlite
+package dqlitev2
 
 import (
 	"context"
@@ -11,8 +11,8 @@ import (
 	"github.com/canonical/go-dqlite/v3"
 	"github.com/canonical/go-dqlite/v3/app"
 	"github.com/canonical/go-dqlite/v3/driver"
+	"github.com/canonical/k8s-dqlite/pkg/backend/v1/sqlite"
 	"github.com/canonical/k8s-dqlite/pkg/database"
-	"github.com/canonical/k8s-dqlite/pkg/drivers/sqlite"
 	"github.com/mattn/go-sqlite3"
 	"github.com/sirupsen/logrus"
 )

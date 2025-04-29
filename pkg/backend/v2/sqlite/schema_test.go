@@ -1,10 +1,10 @@
-package sqlite_test
+package sqlitev2_test
 
 import (
 	"fmt"
 	"testing"
 
-	"github.com/canonical/k8s-dqlite/pkg/drivers/sqlite"
+	sqlite "github.com/canonical/k8s-dqlite/pkg/backend/v2/sqlite"
 )
 
 func TestCanMigrate(t *testing.T) {

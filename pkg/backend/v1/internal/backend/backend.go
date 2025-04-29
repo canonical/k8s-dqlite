@@ -1,8 +1,10 @@
-package drivers
+package backend
 
 import (
 	"context"
 	"database/sql"
+	"sync"
+	"time"
 )
 
 type Driver interface {
@@ -20,4 +22,32 @@ type Driver interface {
 	Compact(ctx context.Context, revision int64) error
 	GetSize(ctx context.Context) (int64, error)
 	Close() error
+}
+
+type Backend struct {
+	mu sync.Mutex
+
+	Config Config
+
+	Driver Driver
+
+	stop    func()
+	started bool
+
+	WatcherGroups map[*WatcherGroup]*WatcherGroup
+	pollRevision  int64
+
+	Notify chan int64
+	wg     sync.WaitGroup
+}
+
+type Config struct {
+	// CompactInterval is interval between database compactions performed by k8s-dqlite.
+	CompactInterval time.Duration
+
+	// PollInterval is the event poll interval used by k8s-dqlite.
+	PollInterval time.Duration
+
+	// WatchQueryTimeout is the timeout on the after query in the poll loop.
+	WatchQueryTimeout time.Duration
 }

@@ -12,9 +12,11 @@ import (
 
 	dqlitedrv "github.com/canonical/go-dqlite/v3"
 	"github.com/canonical/go-dqlite/v3/app"
+	"github.com/canonical/k8s-dqlite/pkg/backend/v1/dqlite"
+	"github.com/canonical/k8s-dqlite/pkg/backend/v1/sqlite"
+	dqlitev2 "github.com/canonical/k8s-dqlite/pkg/backend/v2/dqlite"
+	sqlitev2 "github.com/canonical/k8s-dqlite/pkg/backend/v2/sqlite"
 	"github.com/canonical/k8s-dqlite/pkg/database"
-	"github.com/canonical/k8s-dqlite/pkg/drivers/dqlite"
-	"github.com/canonical/k8s-dqlite/pkg/drivers/sqlite"
 	"github.com/canonical/k8s-dqlite/pkg/endpoint"
 	"github.com/canonical/k8s-dqlite/pkg/instrument"
 	"github.com/canonical/k8s-dqlite/pkg/limited"
@@ -28,8 +30,10 @@ func init() {
 }
 
 const (
-	SQLiteBackend = "sqlite"
-	DQLiteBackend = "dqlite"
+	SQLiteBackend   = "sqlite"
+	SQLiteBackendV2 = "sqlitev2"
+	DQLiteBackend   = "dqlite"
+	DQLiteBackendV2 = "dqlitev2"
 )
 
 type k8sDqliteServer struct {
@@ -63,7 +67,9 @@ func newK8sDqliteServer(ctx context.Context, tb testing.TB, config *k8sDqliteCon
 	var dqliteListener *instrument.Listener
 	switch config.backendType {
 	case SQLiteBackend:
-		backend, db = startSqlite(ctx, tb, dir)
+		backend, db = startSqlite(ctx, tb, dir, SQLiteBackend)
+	case SQLiteBackendV2:
+		backend, db = startSqlite(ctx, tb, dir, SQLiteBackendV2)
 	case DQLiteBackend:
 		dqliteListener = instrument.NewListener("unix", path.Join(dir, "dqlite.sock"))
 		if err := dqliteListener.Listen(ctx); err != nil {
@@ -75,7 +81,20 @@ func newK8sDqliteServer(ctx context.Context, tb testing.TB, config *k8sDqliteCon
 				tb.Error(err)
 			}
 		})
-		backend, db = startDqlite(ctx, tb, dir, dqliteListener)
+		backend, db = startDqlite(ctx, tb, dir, dqliteListener, DQLiteBackend)
+	case DQLiteBackendV2:
+		dqliteListener = instrument.NewListener("unix", path.Join(dir, "dqlite.sock"))
+		if err := dqliteListener.Listen(ctx); err != nil {
+			tb.Fatal(err)
+		}
+		tb.Cleanup(func() {
+			dqliteListener.Close()
+			if err := dqliteListener.Err(); err != nil {
+				tb.Error(err)
+			}
+		})
+		backend, db = startDqlite(ctx, tb, dir, dqliteListener, DQLiteBackendV2)
+
 	default:
 		tb.Fatalf("Testing %s backend not supported", config.backendType)
 	}
@@ -134,7 +153,7 @@ func newK8sDqliteServer(ctx context.Context, tb testing.TB, config *k8sDqliteCon
 	}
 }
 
-func startSqlite(ctx context.Context, tb testing.TB, dir string) (limited.Backend, *sql.DB) {
+func startSqlite(ctx context.Context, tb testing.TB, dir string, backendType string) (limited.Backend, *sql.DB) {
 	dbPath := path.Join(dir, "data.db")
 
 	dbUri := url.URL{
@@ -150,17 +169,30 @@ func startSqlite(ctx context.Context, tb testing.TB, dir string) (limited.Backen
 	if err != nil {
 		tb.Fatal(err)
 	}
-
-	backend, err := sqlite.NewBackend(ctx, &sqlite.BackendConfig{
-		BaseBackendConfig: &sqlite.BaseBackendConfig{
-			CompactInterval:   5 * time.Minute,
-			PollInterval:      1 * time.Second,
-			WatchQueryTimeout: 20 * time.Second,
-		},
-		DriverConfig: &sqlite.DriverConfig{
-			DB: database.NewBatched(database.NewPrepared(db)),
-		},
-	})
+	var backend limited.Backend
+	if backendType == SQLiteBackend {
+		backend, err = sqlite.NewBackend(ctx, &sqlite.BackendConfig{
+			Config: &sqlite.Config{
+				CompactInterval:   5 * time.Minute,
+				PollInterval:      1 * time.Second,
+				WatchQueryTimeout: 20 * time.Second,
+			},
+			DriverConfig: &sqlite.DriverConfig{
+				DB: database.NewBatched(database.NewPrepared(db)),
+			},
+		})
+	} else {
+		backend, err = sqlitev2.NewBackend(ctx, &sqlitev2.BackendConfig{
+			Config: &sqlitev2.Config{
+				CompactInterval:   5 * time.Minute,
+				PollInterval:      1 * time.Second,
+				WatchQueryTimeout: 20 * time.Second,
+			},
+			DriverConfig: &sqlitev2.DriverConfig{
+				DB: database.NewBatched(database.NewPrepared(db)),
+			},
+		})
+	}
 
 	if err != nil {
 		tb.Fatal(err)
@@ -169,7 +201,7 @@ func startSqlite(ctx context.Context, tb testing.TB, dir string) (limited.Backen
 	return backend, db
 }
 
-func startDqlite(ctx context.Context, tb testing.TB, dir string, listener *instrument.Listener) (limited.Backend, *sql.DB) {
+func startDqlite(ctx context.Context, tb testing.TB, dir string, listener *instrument.Listener, backendType string) (limited.Backend, *sql.DB) {
 	app, err := app.New(dir,
 		app.WithAddress(listener.Address),
 		app.WithExternalConn(listener.Connect, listener.AcceptedConns),
@@ -197,18 +229,32 @@ func startDqlite(ctx context.Context, tb testing.TB, dir string, listener *instr
 	if err := db.PingContext(ctx); err != nil {
 		tb.Fatal(err)
 	}
-
-	backend, err := dqlite.NewBackend(ctx, &dqlite.BackendConfig{
-		BaseBackendConfig: &sqlite.BaseBackendConfig{
-			CompactInterval:   5 * time.Minute,
-			PollInterval:      1 * time.Second,
-			WatchQueryTimeout: 20 * time.Second,
-		},
-		DriverConfig: &dqlite.DriverConfig{
-			DB:  database.NewBatched(database.NewPrepared(db)),
-			App: app,
-		},
-	})
+	var backend limited.Backend
+	if backendType == DQLiteBackend {
+		backend, err = dqlite.NewBackend(ctx, &dqlite.BackendConfig{
+			Config: &sqlite.Config{
+				CompactInterval:   5 * time.Minute,
+				PollInterval:      1 * time.Second,
+				WatchQueryTimeout: 20 * time.Second,
+			},
+			DriverConfig: &dqlite.DriverConfig{
+				DB:  database.NewBatched(database.NewPrepared(db)),
+				App: app,
+			},
+		})
+	} else {
+		backend, err = dqlitev2.NewBackend(ctx, &dqlitev2.BackendConfig{
+			Config: &sqlitev2.Config{
+				CompactInterval:   5 * time.Minute,
+				PollInterval:      1 * time.Second,
+				WatchQueryTimeout: 20 * time.Second,
+			},
+			DriverConfig: &dqlitev2.DriverConfig{
+				DB:  database.NewBatched(database.NewPrepared(db)),
+				App: app,
+			},
+		})
+	}
 
 	if err != nil {
 		tb.Fatal(err)

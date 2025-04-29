@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/canonical/k8s-dqlite/pkg/drivers/sqlite"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/types"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -35,10 +34,10 @@ func TestWatch(t *testing.T) {
 				backendType: backendType,
 				setup: func(ctx context.Context, tx *sql.Tx) error {
 					// Make sure there are enough rows deleted to have a compaction.
-					if _, err := insertMany(ctx, tx, "key", 100, sqlite.SupersededCount); err != nil {
+					if _, err := insertMany(ctx, tx, "key", 100, supersededCount); err != nil {
 						return err
 					}
-					if _, err := deleteMany(ctx, tx, "key", sqlite.SupersededCount); err != nil {
+					if _, err := deleteMany(ctx, tx, "key", supersededCount); err != nil {
 						return err
 					}
 					return nil

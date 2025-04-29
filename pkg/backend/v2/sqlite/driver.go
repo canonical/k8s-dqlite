@@ -1,4 +1,4 @@
-package sqlite
+package sqlitev2
 
 import (
 	"context"
