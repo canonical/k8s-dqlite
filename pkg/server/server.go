@@ -106,6 +106,7 @@ const (
 	minThreshold     = 384
 	defaultTrailing  = 4096
 	minTrailing      = 512
+	maxRetries       = 500
 )
 
 // New creates a new instance of Server based on configuration.
@@ -486,12 +487,17 @@ func (s *Server) Start(ctx context.Context) error {
 func (s *Server) getUserVersion(db *sql.DB, ctx context.Context) (int32, error) {
 	query := "PRAGMA user_version;"
 
-	row := db.QueryRowContext(ctx, query)
 	var userVersion int32
-	if err := row.Scan(&userVersion); err != nil {
-		return userVersion, fmt.Errorf("failed to get user version: %w", err)
+	var err error
+	retryCount := 0
+	for ; retryCount < maxRetries; retryCount++ {
+		row := db.QueryRowContext(ctx, query)
+		if err := row.Scan(&userVersion); err == nil {
+			return userVersion, nil
+		}
+		logrus.WithField("try_count", retryCount).WithError(err).Debug("Failed to get user version")
 	}
-	return userVersion, nil
+	return userVersion, fmt.Errorf("failed to get user version: %w", err)
 }
 
 func (s *Server) robustOpenDb(ctx context.Context) (*sql.DB, error) {
