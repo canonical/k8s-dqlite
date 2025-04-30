@@ -16,10 +16,10 @@ Here is an overview that shows which k8s-dqlite version aligns with which suppor
 |--------------------|--------------------|--------------------|
 | 1.1.12             | v1.1               | 1.28-1.30          |
 | 1.2.1              | v1.2               | 1.31               |
-| 1.3.1              | v1.3               | 1.32               |
+| 1.3.1              | v1.3               | 1.32-1.33          |
 | 1.4.1              | NA                 | NA                 |
 | 1.5.0              | NA                 | NA                 |
-| 1.6.0              | master             | 1.33               |
+| 1.6.0              | master             | NA                 |
 
 Note: K8s-dqlite tags `v1.1.7` and branch `1.28` are prior to the major refactor from [Canonical kine](https://github.com/canonical/kine).
 All supported products prior to k8s `1.31` use the `v1.1.x` tag for which the `v1.1` branch tracks its patches.
