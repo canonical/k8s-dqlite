@@ -2,7 +2,7 @@ name: Performance Test K8s-snap
 
 on:
   push:
-    branches: ["master"]
+    branches: ["master", "comparison-v1.3.1"]
   pull_request:
 
 permissions:
@@ -79,7 +79,7 @@ jobs:
         uses: ./.github/actions/patch-k8s-snap
         with:
           out-snap-path: base-code.snap
-          build-commit: $BASE_SHA
+          build-commit: b2f70f18e96bae93d427fc0a557bc9c6fcdf1806
       - name: Run Performance test ${{ github.head_ref }} snap
         env:
           TEST_SNAP: ${{ github.workspace }}/head.snap
