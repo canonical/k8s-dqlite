@@ -32,7 +32,6 @@ var (
 	deleteCnt        metric.Int64Counter
 	createCnt        metric.Int64Counter
 	updateCnt        metric.Int64Counter
-	fillCnt          metric.Int64Counter
 	currentRevCnt    metric.Int64Counter
 	getCompactRevCnt metric.Int64Counter
 )
@@ -62,10 +61,6 @@ func init() {
 		logrus.WithError(err).Warning("Otel failed to create create counter")
 	}
 	deleteCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.delete", otelName), metric.WithDescription("Number of delete requests"))
-	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create create counter")
-	}
-	fillCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.fill", otelName), metric.WithDescription("Number of fill requests"))
 	if err != nil {
 		logrus.WithError(err).Warning("Otel failed to create create counter")
 	}
