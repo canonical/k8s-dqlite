@@ -15,7 +15,6 @@ import (
 	"github.com/canonical/go-dqlite/v3/app"
 	"github.com/canonical/go-dqlite/v3/client"
 	dqliteDriver "github.com/canonical/k8s-dqlite/pkg/backend/v1/dqlite"
-	dqliteDriverV2 "github.com/canonical/k8s-dqlite/pkg/backend/v2/dqlite"
 	"github.com/canonical/k8s-dqlite/pkg/database"
 	"github.com/canonical/k8s-dqlite/pkg/endpoint"
 	"github.com/canonical/k8s-dqlite/pkg/limited"
@@ -423,40 +422,17 @@ func (s *Server) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
 
-	userVersion, err := s.getUserVersion(db, ctx)
-	if err != nil {
-		db.Close()
-		return fmt.Errorf("failed to get user version: %w", err)
-	}
-
-	var backend limited.Backend
-	if userVersion != 0 {
-		logrus.WithField("user_version", userVersion).Debug("Starting dqlite backend v1")
-		backend, err = dqliteDriver.NewBackend(ctx, &dqliteDriver.BackendConfig{
-			DriverConfig: &dqliteDriver.DriverConfig{
-				DB:  database.NewBatched(database.NewPrepared(db)),
-				App: s.app,
-			},
-			Config: limited.Config{
-				CompactInterval:   s.serverConfig.CompactInterval,
-				PollInterval:      s.serverConfig.PollInterval,
-				WatchQueryTimeout: s.serverConfig.WatchQueryTimeout,
-			},
-		})
-	} else {
-		logrus.WithField("user_version", userVersion).Debug("Starting dqlite backend v2")
-		backend, err = dqliteDriverV2.NewBackend(ctx, &dqliteDriverV2.BackendConfig{
-			DriverConfig: &dqliteDriverV2.DriverConfig{
-				DB:  database.NewBatched(database.NewPrepared(db)),
-				App: s.app,
-			},
-			Config: limited.Config{
-				CompactInterval:   s.serverConfig.CompactInterval,
-				PollInterval:      s.serverConfig.PollInterval,
-				WatchQueryTimeout: s.serverConfig.WatchQueryTimeout,
-			},
-		})
-	}
+	backend, err := dqliteDriver.NewBackend(ctx, &dqliteDriver.BackendConfig{
+		DriverConfig: &dqliteDriver.DriverConfig{
+			DB:  database.NewBatched(database.NewPrepared(db)),
+			App: s.app,
+		},
+		Config: limited.Config{
+			CompactInterval:   s.serverConfig.CompactInterval,
+			PollInterval:      s.serverConfig.PollInterval,
+			WatchQueryTimeout: s.serverConfig.WatchQueryTimeout,
+		},
+	})
 
 	if err != nil {
 		return fmt.Errorf("failed to create dqlite backend: %w", err)
@@ -481,17 +457,6 @@ func (s *Server) Start(ctx context.Context) error {
 
 	logrus.WithField("address", s.serverConfig.ListenAddress).Print("Started k8s-dqlite server")
 	return nil
-}
-
-func (s *Server) getUserVersion(db *sql.DB, ctx context.Context) (int32, error) {
-	query := "PRAGMA user_version;"
-
-	row := db.QueryRowContext(ctx, query)
-	var userVersion int32
-	if err := row.Scan(&userVersion); err != nil {
-		return userVersion, fmt.Errorf("failed to get user version: %w", err)
-	}
-	return userVersion, nil
 }
 
 func (s *Server) robustOpenDb(ctx context.Context) (*sql.DB, error) {
