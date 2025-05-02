@@ -6,7 +6,7 @@ import (
 	"path"
 	"testing"
 
-	"github.com/canonical/k8s-dqlite/pkg/backend/v1/sqlite"
+	"github.com/canonical/k8s-dqlite/pkg/backend/v2/sqlite"
 	"github.com/canonical/k8s-dqlite/pkg/database"
 	"github.com/sirupsen/logrus"
 )
