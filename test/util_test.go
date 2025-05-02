@@ -12,6 +12,7 @@ import (
 
 	dqlitedrv "github.com/canonical/go-dqlite/v3"
 	"github.com/canonical/go-dqlite/v3/app"
+	"github.com/canonical/k8s-dqlite/pkg/backend/v1/dqlite"
 	"github.com/canonical/k8s-dqlite/pkg/backend/v1/sqlite"
 	"github.com/canonical/k8s-dqlite/pkg/database"
 	"github.com/canonical/k8s-dqlite/pkg/endpoint"
@@ -197,14 +198,15 @@ func startDqlite(ctx context.Context, tb testing.TB, dir string, listener *instr
 		tb.Fatal(err)
 	}
 
-	backend, err := sqlite.NewBackend(ctx, &sqlite.BackendConfig{
+	backend, err := dqlite.NewBackend(ctx, &dqlite.BackendConfig{
 		Config: limited.Config{
 			CompactInterval:   5 * time.Minute,
 			PollInterval:      1 * time.Second,
 			WatchQueryTimeout: 20 * time.Second,
 		},
-		DriverConfig: &sqlite.DriverConfig{
-			DB: database.NewBatched(database.NewPrepared(db)),
+		DriverConfig: &dqlite.DriverConfig{
+			DB:  database.NewBatched(database.NewPrepared(db)),
+			App: app,
 		},
 	})
 
