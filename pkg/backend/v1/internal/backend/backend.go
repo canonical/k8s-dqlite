@@ -1,13 +1,13 @@
-package sqlite
+package internal
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"sync"
 	"time"
 
-	"github.com/canonical/k8s-dqlite/pkg/drivers"
 	"github.com/canonical/k8s-dqlite/pkg/limited"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
@@ -45,12 +45,29 @@ func init() {
 	}
 }
 
+type Driver interface {
+	List(ctx context.Context, key, rangeEnd []byte, limit, revision int64) (*sql.Rows, error)
+	ListTTL(ctx context.Context, revision int64) (*sql.Rows, error)
+	Count(ctx context.Context, key, rangeEnd []byte, revision int64) (int64, error)
+	CurrentRevision(ctx context.Context) (int64, error)
+	AfterPrefix(ctx context.Context, key, rangeEnd []byte, fromRevision, toRevision int64) (*sql.Rows, error)
+	After(ctx context.Context, startRevision, limit int64) (*sql.Rows, error)
+	Create(ctx context.Context, key []byte, value []byte, lease int64) (int64, bool, error)
+	Update(ctx context.Context, key []byte, value []byte, prevRev, lease int64) (int64, bool, error)
+	Delete(ctx context.Context, key []byte, revision int64) (int64, bool, error)
+	DeleteRevision(ctx context.Context, revision int64) error
+	GetCompactRevision(ctx context.Context) (int64, int64, error)
+	Compact(ctx context.Context, revision int64) error
+	GetSize(ctx context.Context) (int64, error)
+	Close() error
+}
+
 type Backend struct {
 	mu sync.Mutex
 
-	Config *BaseBackendConfig
+	Config limited.Config
 
-	Driver drivers.Driver
+	Driver Driver
 
 	stop    func()
 	started bool
@@ -60,38 +77,6 @@ type Backend struct {
 
 	Notify chan int64
 	wg     sync.WaitGroup
-}
-
-type BaseBackendConfig struct {
-	// CompactInterval is interval between database compactions performed by k8s-dqlite.
-	CompactInterval time.Duration
-
-	// PollInterval is the event poll interval used by k8s-dqlite.
-	PollInterval time.Duration
-
-	// WatchQueryTimeout is the timeout on the after query in the poll loop.
-	WatchQueryTimeout time.Duration
-}
-
-type BackendConfig struct {
-	*BaseBackendConfig
-	//DriverConfig is the sqlite driver config
-	DriverConfig *DriverConfig
-}
-
-func NewBackend(ctx context.Context, config *BackendConfig) (limited.Backend, error) {
-
-	driver, err := NewDriver(ctx, config.DriverConfig)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Backend{
-		Config:        config.BaseBackendConfig,
-		Driver:        driver,
-		Notify:        make(chan int64, 100),
-		WatcherGroups: make(map[*WatcherGroup]*WatcherGroup),
-	}, nil
 }
 
 func (s *Backend) Start(startCtx context.Context) error {

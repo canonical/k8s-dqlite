@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/canonical/k8s-dqlite/pkg/drivers/sqlite"
+	"github.com/canonical/k8s-dqlite/pkg/backend/v1/sqlite"
 )
 
 func TestCanMigrate(t *testing.T) {

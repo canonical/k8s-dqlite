@@ -12,9 +12,9 @@ import (
 
 	dqlitedrv "github.com/canonical/go-dqlite/v3"
 	"github.com/canonical/go-dqlite/v3/app"
+	"github.com/canonical/k8s-dqlite/pkg/backend/v1/dqlite"
+	"github.com/canonical/k8s-dqlite/pkg/backend/v1/sqlite"
 	"github.com/canonical/k8s-dqlite/pkg/database"
-	"github.com/canonical/k8s-dqlite/pkg/drivers/dqlite"
-	"github.com/canonical/k8s-dqlite/pkg/drivers/sqlite"
 	"github.com/canonical/k8s-dqlite/pkg/endpoint"
 	"github.com/canonical/k8s-dqlite/pkg/instrument"
 	"github.com/canonical/k8s-dqlite/pkg/limited"
@@ -152,7 +152,7 @@ func startSqlite(ctx context.Context, tb testing.TB, dir string) (limited.Backen
 	}
 
 	backend, err := sqlite.NewBackend(ctx, &sqlite.BackendConfig{
-		BaseBackendConfig: &sqlite.BaseBackendConfig{
+		Config: limited.Config{
 			CompactInterval:   5 * time.Minute,
 			PollInterval:      1 * time.Second,
 			WatchQueryTimeout: 20 * time.Second,
@@ -199,7 +199,7 @@ func startDqlite(ctx context.Context, tb testing.TB, dir string, listener *instr
 	}
 
 	backend, err := dqlite.NewBackend(ctx, &dqlite.BackendConfig{
-		BaseBackendConfig: &sqlite.BaseBackendConfig{
+		Config: limited.Config{
 			CompactInterval:   5 * time.Minute,
 			PollInterval:      1 * time.Second,
 			WatchQueryTimeout: 20 * time.Second,

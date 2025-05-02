@@ -2,6 +2,7 @@ package limited
 
 import (
 	"context"
+	"time"
 
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	"go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
@@ -33,6 +34,17 @@ type Backend interface {
 	GetCompactRevision(ctx context.Context) (int64, int64, error)
 	DoCompact(ctx context.Context) error
 	Close() error
+}
+
+type Config struct {
+	// CompactInterval is interval between database compactions performed by k8s-dqlite.
+	CompactInterval time.Duration
+
+	// PollInterval is the event poll interval used by k8s-dqlite.
+	PollInterval time.Duration
+
+	// WatchQueryTimeout is the timeout on the after query in the poll loop.
+	WatchQueryTimeout time.Duration
 }
 
 type WatcherGroup interface {
