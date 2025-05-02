@@ -458,17 +458,6 @@ func (s *Server) Start(ctx context.Context) error {
 			},
 		})
 	}
-	backend, err := dqliteDriver.NewBackend(ctx, &dqliteDriver.BackendConfig{
-		DriverConfig: &dqliteDriver.DriverConfig{
-			DB:  database.NewBatched(database.NewPrepared(db)),
-			App: s.app,
-		},
-		Config: limited.Config{
-			CompactInterval:   s.serverConfig.CompactInterval,
-			PollInterval:      s.serverConfig.PollInterval,
-			WatchQueryTimeout: s.serverConfig.WatchQueryTimeout,
-		},
-	})
 
 	if err != nil {
 		return fmt.Errorf("failed to create dqlite backend: %w", err)

@@ -9,7 +9,7 @@ import (
 	"time"
 	"unicode"
 
-	metrics "github.com/canonical/k8s-dqlite/pkg/backend/metrics"
+	"github.com/canonical/k8s-dqlite/pkg/backend/metrics"
 	"github.com/canonical/k8s-dqlite/pkg/database"
 	"github.com/mattn/go-sqlite3"
 	"github.com/sirupsen/logrus"
