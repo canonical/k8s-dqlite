@@ -91,11 +91,15 @@ CREATE TABLE kine
 
 // applySchemaV0_2 moves the schema from version 1 to version 2
 func applySchemaV0_2(ctx context.Context, txn *sql.Tx) error {
-	if _, err := txn.ExecContext(ctx, `DROP INDEX kine_name_index`); err != nil {
+	if _, err := txn.ExecContext(ctx, `DROP INDEX IF EXISTS kine_name_prev_revision_uindex`); err != nil {
 		return err
 	}
 
-	if _, err := txn.ExecContext(ctx, `CREATE UNIQUE INDEX kine_name_index ON kine(name ASC, id DESC, deleted)`); err != nil {
+	if _, err := txn.ExecContext(ctx, `DROP INDEX IF EXISTS kine_name_index`); err != nil {
+		return err
+	}
+
+	if _, err := txn.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS k8s_dqlite_name_del_index ON kine (name ASC, id ASC, deleted)`); err != nil {
 		return err
 	}
 
