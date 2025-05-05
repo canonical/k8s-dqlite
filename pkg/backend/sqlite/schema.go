@@ -34,6 +34,12 @@ func (sv SchemaVersion) Minor() int16 {
 }
 
 func (sv SchemaVersion) CompatibleWith(targetSV SchemaVersion) error {
+	// Legacy nodes panic if they try to migrate to a version
+	// that is not 0.1, so we need to safeguard against that.
+	// See https://github.com/canonical/k8s-dqlite/blob/v1.1.12/pkg/kine/drivers/sqlite/sqlite.go#L169
+	if sv.Major() == 0 && sv.Minor() == 1 {
+		return fmt.Errorf("can not migrate due to safeguard for suicidal legacy nodes")
+	}
 	// Major version must be the same
 	if sv.Major() != targetSV.Major() {
 		return fmt.Errorf("can not migrate between different major versions")
