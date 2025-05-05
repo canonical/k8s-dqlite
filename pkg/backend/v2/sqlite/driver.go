@@ -588,6 +588,29 @@ func (d *Driver) tryCompact(ctx context.Context, start, end int64) (err error) {
 		}
 	}()
 
+	// This query adds `created = 0` as a condition
+	// to mitigate a bug in vXXX where newly created
+	// keys had `prev_revision = max(id)` instead of 0.
+	// Even with the bug fixed, we still need to check
+	// for that in older rows and if older peers are
+	// still running. Given that we are not yet using
+	// an index, it won't change much in performance
+	// however, it should be included in a covering
+	// index if ever necessary.
+	if _, err = tx.ExecContext(ctx, `
+		DELETE FROM kine
+		WHERE id IN (
+			SELECT prev_revision
+			FROM kine
+			WHERE name != 'compact_rev_key'
+				AND created = 0
+				AND prev_revision != 0
+				AND ? < id AND id <= ?
+		)
+	`, start, end); err != nil {
+		return err
+	}
+
 	if _, err = tx.ExecContext(ctx, `
 		DELETE FROM kine
 		WHERE deleted = 1
