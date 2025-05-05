@@ -12,8 +12,8 @@ import (
 
 	dqlitedrv "github.com/canonical/go-dqlite/v3"
 	"github.com/canonical/go-dqlite/v3/app"
-	"github.com/canonical/k8s-dqlite/pkg/backend/v1/dqlite"
-	"github.com/canonical/k8s-dqlite/pkg/backend/v1/sqlite"
+	"github.com/canonical/k8s-dqlite/pkg/backend/dqlite"
+	"github.com/canonical/k8s-dqlite/pkg/backend/sqlite"
 	"github.com/canonical/k8s-dqlite/pkg/database"
 	"github.com/canonical/k8s-dqlite/pkg/endpoint"
 	"github.com/canonical/k8s-dqlite/pkg/instrument"

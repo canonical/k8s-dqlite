@@ -1,15 +1,15 @@
-package sqlite
+package dqlite
 
 import (
 	"context"
 
-	internal "github.com/canonical/k8s-dqlite/pkg/backend/v1/internal/backend"
+	internal "github.com/canonical/k8s-dqlite/pkg/backend/internal/backend"
 	"github.com/canonical/k8s-dqlite/pkg/limited"
 )
 
 type BackendConfig struct {
 	limited.Config
-	//DriverConfig is the sqlite driver config
+	//DriverConfig is the dqlite driver config
 	DriverConfig *DriverConfig
 }
 
