@@ -242,12 +242,30 @@ func (s Stripped) String() string {
 }
 
 type Driver struct {
-	config *DriverConfig
+	config               *DriverConfig
+	queries              Queries
+	currentSchemaVersion SchemaVersion
 }
 
 type DriverConfig struct {
 	DB    database.Interface
 	Retry func(error) bool
+}
+
+type Queries struct {
+	revSQL              string
+	listSQL             string
+	revisionIntervalSQL string
+	countRevisionSQL    string
+	afterSQLPrefix      string
+	afterSQL            string
+	ttlSQL              string
+	deleteRevSQL        string
+	updateCompactSQL    string
+	deleteSQL           string
+	createSQL           string
+	updateSQL           string
+	getSizeSQL          string
 }
 
 func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
@@ -268,8 +286,10 @@ func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
 		}
 	}
 
+	var err error
+	var currentSchemaVersion SchemaVersion
 	for i := 0; i < retryAttempts; i++ {
-		err := setup(ctx, config.DB)
+		currentSchemaVersion, err = setup(ctx, config.DB)
 		if err == nil {
 			break
 		}
@@ -281,8 +301,30 @@ func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
 		}
 	}
 
+	if err != nil {
+		return nil, err // Return the last error if all retries fail
+	}
+
+	queries := Queries{
+		revSQL:              revSQL,
+		listSQL:             listSQL,
+		revisionIntervalSQL: revisionIntervalSQL,
+		countRevisionSQL:    countRevisionSQL,
+		afterSQLPrefix:      afterSQLPrefix,
+		afterSQL:            afterSQL,
+		ttlSQL:              ttlSQL,
+		deleteRevSQL:        deleteRevSQL,
+		updateCompactSQL:    updateCompactSQL,
+		deleteSQL:           deleteSQL,
+		createSQL:           createSQL,
+		updateSQL:           updateSQL,
+		getSizeSQL:          getSizeSQL,
+	}
+
 	return &Driver{
-		config: config,
+		config:               config,
+		currentSchemaVersion: currentSchemaVersion,
+		queries:              queries,
 	}, nil
 }
 
@@ -290,39 +332,54 @@ func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
 // it doesn't already exist, migrating key_value table contents to the Kine
 // table if the key_value table exists, all in a single database transaction.
 // changes are rolled back if an error occurs.
-func setup(ctx context.Context, db database.Interface) error {
+func setup(ctx context.Context, db database.Interface) (SchemaVersion, error) {
+	var currentSchemaVersion SchemaVersion
 	conn, err := db.Conn(ctx)
 	if err != nil {
-		return err
+		return currentSchemaVersion, err
 	}
 	defer conn.Close()
 
 	// Optimistically ask for the user_version without starting a transaction
-	var currentSchemaVersion SchemaVersion
-
-	row := conn.QueryRowContext(ctx, `PRAGMA user_version`)
-	if err := row.Scan(&currentSchemaVersion); err != nil {
-		return err
+	currentSchemaVersion, err = getUserVersion(conn, ctx)
+	if err != nil {
+		return currentSchemaVersion, err
 	}
 
 	if err := currentSchemaVersion.CompatibleWith(databaseSchemaVersion); err != nil {
-		return err
+		return currentSchemaVersion, err
 	}
 	if currentSchemaVersion >= databaseSchemaVersion {
-		return nil
+		return currentSchemaVersion, nil
 	}
 
 	txn, err := conn.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return currentSchemaVersion, err
 	}
 	defer txn.Rollback()
 
 	if err := migrate(ctx, txn); err != nil {
-		return fmt.Errorf("migration failed: %w", err)
+		return currentSchemaVersion, fmt.Errorf("migration failed: %w", err)
 	}
 
-	return txn.Commit()
+	return currentSchemaVersion, txn.Commit()
+}
+
+func getUserVersion(conn *sql.Conn, ctx context.Context) (SchemaVersion, error) {
+	query := "PRAGMA user_version"
+
+	var userVersion SchemaVersion
+	var err error
+	retryCount := 0
+	for ; retryCount < maxRetries; retryCount++ {
+		row := conn.QueryRowContext(ctx, query)
+		if err := row.Scan(&userVersion); err == nil {
+			return userVersion, nil
+		}
+		logrus.WithField("try_count", retryCount).WithError(err).Debug("Failed to get user version")
+	}
+	return userVersion, fmt.Errorf("failed to get user version: %w", err)
 }
 
 // migrate tries to migrate from a version of the database
@@ -438,7 +495,7 @@ func (d *Driver) Count(ctx context.Context, key, rangeEnd []byte, revision int64
 	if len(rangeEnd) == 0 {
 		rangeEnd = append(key, 0)
 	}
-	rows, err := d.query(ctx, "count_revision", countRevisionSQL, key, rangeEnd, revision)
+	rows, err := d.query(ctx, "count_revision", d.queries.countRevisionSQL, key, rangeEnd, revision)
 	if err != nil {
 		return 0, err
 	}
@@ -472,7 +529,7 @@ func (d *Driver) Create(ctx context.Context, key, value []byte, ttl int64) (rev 
 	)
 	createCnt.Add(ctx, 1)
 
-	result, err := d.execute(ctx, "create_sql", createSQL, key, ttl, value, key)
+	result, err := d.execute(ctx, "create_sql", d.queries.createSQL, key, ttl, value, key)
 	if err != nil {
 		logrus.WithError(err).Error("failed to create key")
 		return 0, false, err
@@ -494,7 +551,7 @@ func (d *Driver) Update(ctx context.Context, key, value []byte, preRev, ttl int6
 	}()
 
 	updateCnt.Add(ctx, 1)
-	result, err := d.execute(ctx, "update_sql", updateSQL, key, ttl, value, key, preRev)
+	result, err := d.execute(ctx, "update_sql", d.queries.updateSQL, key, ttl, value, key, preRev)
 	if err != nil {
 		logrus.WithError(err).Error("failed to update key")
 		return 0, false, err
@@ -519,7 +576,7 @@ func (d *Driver) Delete(ctx context.Context, key []byte, revision int64) (rev in
 	}()
 	span.SetAttributes(attribute.String("key", string(key)))
 
-	result, err := d.execute(ctx, "delete_sql", deleteSQL, key, revision)
+	result, err := d.execute(ctx, "delete_sql", d.queries.deleteSQL, key, revision)
 	if err != nil {
 		logrus.WithError(err).Error("failed to delete key")
 		return 0, false, err
@@ -637,7 +694,7 @@ func (d *Driver) GetCompactRevision(ctx context.Context) (int64, int64, error) {
 		span.End()
 	}()
 
-	rows, err := d.query(ctx, "revision_interval_sql", revisionIntervalSQL)
+	rows, err := d.query(ctx, "revision_interval_sql", d.queries.revisionIntervalSQL)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -667,7 +724,7 @@ func (d *Driver) DeleteRevision(ctx context.Context, revision int64) error {
 	}()
 	span.SetAttributes(attribute.Int64("revision", revision))
 
-	_, err = d.execute(ctx, "delete_rev_sql", deleteRevSQL, revision)
+	_, err = d.execute(ctx, "delete_rev_sql", d.queries.deleteRevSQL, revision)
 	return err
 }
 
@@ -675,7 +732,7 @@ func (d *Driver) List(ctx context.Context, key, rangeEnd []byte, limit, revision
 	if len(rangeEnd) == 0 {
 		rangeEnd = append(key, 0)
 	}
-	sql := listSQL
+	sql := d.queries.listSQL
 	if limit > 0 {
 		sql = fmt.Sprintf("%s LIMIT ?", sql)
 		return d.query(ctx, "list_revision_start_sql_limit", sql, key, rangeEnd, revision, limit)
@@ -684,7 +741,7 @@ func (d *Driver) List(ctx context.Context, key, rangeEnd []byte, limit, revision
 }
 
 func (d *Driver) ListTTL(ctx context.Context, revision int64) (*sql.Rows, error) {
-	return d.query(ctx, "ttl_sql", ttlSQL, revision)
+	return d.query(ctx, "ttl_sql", d.queries.ttlSQL, revision)
 }
 
 func (d *Driver) CurrentRevision(ctx context.Context) (int64, error) {
@@ -698,7 +755,7 @@ func (d *Driver) CurrentRevision(ctx context.Context) (int64, error) {
 		span.End()
 	}()
 
-	rows, err := d.query(ctx, "rev_sql", revSQL)
+	rows, err := d.query(ctx, "rev_sql", d.queries.revSQL)
 	if err != nil {
 		return 0, err
 	}
@@ -722,11 +779,11 @@ func (d *Driver) AfterPrefix(ctx context.Context, key, rangeEnd []byte, startRev
 	if len(rangeEnd) == 0 {
 		rangeEnd = append(key, 0)
 	}
-	return d.query(ctx, "after_sql_prefix", afterSQLPrefix, key, rangeEnd, startRevision, endRevision)
+	return d.query(ctx, "after_sql_prefix", d.queries.afterSQLPrefix, key, rangeEnd, startRevision, endRevision)
 }
 
 func (d *Driver) After(ctx context.Context, rev, limit int64) (*sql.Rows, error) {
-	sql := afterSQL
+	sql := d.queries.afterSQL
 	if limit > 0 {
 		sql = fmt.Sprintf("%s LIMIT ?", sql)
 		return d.query(ctx, "after_sql_limit", sql, rev, limit)
@@ -735,7 +792,7 @@ func (d *Driver) After(ctx context.Context, rev, limit int64) (*sql.Rows, error)
 }
 
 func (d *Driver) GetSize(ctx context.Context) (int64, error) {
-	rows, err := d.query(ctx, "get_size_sql", getSizeSQL)
+	rows, err := d.query(ctx, "get_size_sql", d.queries.getSizeSQL)
 	if err != nil {
 		return 0, err
 	}
