@@ -381,6 +381,9 @@ func setup(ctx context.Context, db database.Interface) (SchemaVersion, error) {
 	}
 
 	if currentSchemaVersion == NewSchemaVersion(0, 0) {
+		if err := applySchemaV0_1(ctx, txn); err != nil {
+			return currentSchemaVersion, fmt.Errorf("failed to apply schema v0.1: %w", err)
+		}
 		if err := applySchemaV1_0(ctx, txn); err != nil {
 			return currentSchemaVersion, fmt.Errorf("failed to apply schema v0.2: %w", err)
 		}
