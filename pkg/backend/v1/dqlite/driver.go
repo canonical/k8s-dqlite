@@ -140,7 +140,7 @@ SELECT id, name, created, deleted, create_revision, prev_revision, lease, value,
 FROM kine
 ORDER BY id ASC`)
 	if err != nil {
-		logrus.Errorf("failed to find old data to migrate: %v", err)
+		logrus.Warnf("failed to find old data to migrate: %v", err)
 		return nil
 	}
 	defer oldData.Close()

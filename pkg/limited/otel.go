@@ -26,24 +26,24 @@ func init() {
 	otelTracer = otel.Tracer(otelName)
 	otelMeter = otel.Meter(otelName)
 
-	createCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.create", otelName), metric.WithDescription("Number of create requests"))
+	createCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.create", otelName), metric.WithDescription("number of create requests"))
 	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create create counter")
+		logrus.WithError(err).Warning("otel failed to create create counter")
 	}
-	deleteCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.delete", otelName), metric.WithDescription("Number of delete requests"))
+	deleteCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.delete", otelName), metric.WithDescription("number of delete requests"))
 	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create delete counter")
+		logrus.WithError(err).Warning("otel failed to create delete counter")
 	}
-	getCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.get", otelName), metric.WithDescription("Number of get requests"))
+	getCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.get", otelName), metric.WithDescription("number of get requests"))
 	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create get counter")
+		logrus.WithError(err).Warning("otel failed to create get counter")
 	}
-	listCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.list", otelName), metric.WithDescription("Number of list requests"))
+	listCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.list", otelName), metric.WithDescription("number of list requests"))
 	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create list counter")
+		logrus.WithError(err).Warning("otel failed to create list counter")
 	}
-	updateCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.update", otelName), metric.WithDescription("Number of update requests"))
+	updateCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.update", otelName), metric.WithDescription("number of update requests"))
 	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create update counter")
+		logrus.WithError(err).Warning("otel failed to create update counter")
 	}
 }

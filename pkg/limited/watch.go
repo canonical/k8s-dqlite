@@ -105,7 +105,7 @@ func (ws *watchStream) sendUpdates(updates []WatcherUpdate) error {
 			Events:  watcherUpdate.Events,
 		})
 		if err != nil {
-			logrus.WithError(err).Errorf("couldn't send watch response.")
+			logrus.WithError(err).Errorf("couldn't send watch response")
 			return err
 		}
 	}
@@ -139,7 +139,7 @@ func (ws *watchStream) sendProgress() error {
 				WatchId: id,
 			})
 			if err != nil {
-				logrus.WithError(err).Errorf("couldn't send watch response.")
+				logrus.WithError(err).Errorf("couldn't send watch response")
 				return err
 			}
 		} else {

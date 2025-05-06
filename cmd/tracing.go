@@ -9,7 +9,6 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
@@ -93,35 +92,35 @@ func setupOTelSDK(
 		if meterProvider != nil {
 			err = meterProvider.Shutdown(ctx)
 			if err != nil {
-				logrus.WithError(err).Warning("Failed to shut down otel meter provider")
+				err = fmt.Errorf("failed to shut down otel meter provider: %w", err)
 				shutdownErrs = errors.Join(shutdownErrs, err)
 			}
 		}
 		if traceProvider != nil {
 			err = traceProvider.Shutdown(ctx)
 			if err != nil {
-				logrus.WithError(err).Warning("Failed to shut down otel trace provider")
+				err = fmt.Errorf("failed to shut down otel trace provider: %w", err)
 				shutdownErrs = errors.Join(shutdownErrs, err)
 			}
 		}
 		if grpcConn != nil {
 			err = grpcConn.Close()
 			if err != nil {
-				logrus.WithError(err).Warning("Failed to shut down otel gRPC connection")
+				err = fmt.Errorf("failed to shut down otel grpc connection: %w", err)
 				shutdownErrs = errors.Join(shutdownErrs, err)
 			}
 		}
 		if metricFile != nil {
 			err = metricFile.Close()
 			if err != nil {
-				logrus.WithError(err).Warning("Failed to close otel meter file")
+				err = fmt.Errorf("failed to close otel meter file: %w", err)
 				shutdownErrs = errors.Join(shutdownErrs, err)
 			}
 		}
 		if traceFile != nil {
 			err = traceFile.Close()
 			if err != nil {
-				logrus.WithError(err).Warning("Failed to close otel trace file")
+				err = fmt.Errorf("failed to close otel trace file: %w", err)
 				shutdownErrs = errors.Join(shutdownErrs, err)
 			}
 		}
@@ -134,7 +133,6 @@ func setupOTelSDK(
 		),
 	)
 	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create resource")
 		return nil, err
 	}
 
@@ -205,7 +203,7 @@ func initConn(otelEndpoint string) (*grpc.ClientConn, error) {
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create otel gRPC connection to collector: %w", err)
+		return nil, fmt.Errorf("failed to create otel grpc connection to collector: %w", err)
 	}
 
 	return conn, nil

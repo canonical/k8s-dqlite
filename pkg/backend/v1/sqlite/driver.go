@@ -37,37 +37,37 @@ func init() {
 	var err error
 	otelTracer = otel.Tracer(otelName)
 	otelMeter = otel.Meter(otelName)
-	compactCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.compact", otelName), metric.WithDescription("Number of compact requests"))
+	compactCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.compact", otelName), metric.WithDescription("number of compact requests"))
 	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create create counter")
+		logrus.WithError(err).Warning("otel failed to create create counter")
 	}
-	compactBatchCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.compact_batch", otelName), metric.WithDescription("Number of compact batch requests"))
+	compactBatchCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.compact_batch", otelName), metric.WithDescription("number of compact batch requests"))
 	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create create counter")
+		logrus.WithError(err).Warning("otel failed to create create counter")
 	}
-	deleteRevCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.delete_rev", otelName), metric.WithDescription("Number of delete revision requests"))
+	deleteRevCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.delete_rev", otelName), metric.WithDescription("number of delete revision requests"))
 	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create create counter")
+		logrus.WithError(err).Warning("otel failed to create create counter")
 	}
-	createCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.create", otelName), metric.WithDescription("Number of create requests"))
+	createCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.create", otelName), metric.WithDescription("number of create requests"))
 	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create create counter")
+		logrus.WithError(err).Warning("otel failed to create create counter")
 	}
-	updateCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.update", otelName), metric.WithDescription("Number of update requests"))
+	updateCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.update", otelName), metric.WithDescription("number of update requests"))
 	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create create counter")
+		logrus.WithError(err).Warning("otel failed to create create counter")
 	}
-	deleteCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.delete", otelName), metric.WithDescription("Number of delete requests"))
+	deleteCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.delete", otelName), metric.WithDescription("number of delete requests"))
 	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create create counter")
+		logrus.WithError(err).Warning("otel failed to create create counter")
 	}
-	currentRevCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.current_revision", otelName), metric.WithDescription("Current revision"))
+	currentRevCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.current_revision", otelName), metric.WithDescription("current revision"))
 	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create create counter")
+		logrus.WithError(err).Warning("otel failed to create create counter")
 	}
-	getCompactRevCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.get_compact_revision", otelName), metric.WithDescription("Get compact revision"))
+	getCompactRevCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.get_compact_revision", otelName), metric.WithDescription("get compact revision"))
 	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create create counter")
+		logrus.WithError(err).Warning("otel failed to create create counter")
 	}
 }
 
@@ -459,7 +459,6 @@ func (d *Driver) Create(ctx context.Context, key, value []byte, ttl int64) (rev 
 
 	result, err := d.execute(ctx, "create_sql", createSQL, key, ttl, value, key)
 	if err != nil {
-		logrus.WithError(err).Error("failed to create key")
 		return 0, false, err
 	}
 	if insertCount, err := result.RowsAffected(); err != nil {
@@ -481,7 +480,6 @@ func (d *Driver) Update(ctx context.Context, key, value []byte, preRev, ttl int6
 	updateCnt.Add(ctx, 1)
 	result, err := d.execute(ctx, "update_sql", updateSQL, key, ttl, value, key, preRev)
 	if err != nil {
-		logrus.WithError(err).Error("failed to update key")
 		return 0, false, err
 	}
 	if insertCount, err := result.RowsAffected(); err != nil {
@@ -506,7 +504,6 @@ func (d *Driver) Delete(ctx context.Context, key []byte, revision int64) (rev in
 
 	result, err := d.execute(ctx, "delete_sql", deleteSQL, key, revision)
 	if err != nil {
-		logrus.WithError(err).Error("failed to delete key")
 		return 0, false, err
 	}
 	if insertCount, err := result.RowsAffected(); err != nil {
