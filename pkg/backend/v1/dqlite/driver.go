@@ -36,8 +36,6 @@ type DriverConfig struct {
 }
 
 func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
-	logrus.Printf("New driver for dqlite")
-
 	if config.App == nil {
 		return nil, fmt.Errorf("no go-dqlite app specified")
 	}

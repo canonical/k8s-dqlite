@@ -2,7 +2,9 @@ package migrator
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -61,7 +63,7 @@ func RestoreToDqlite(ctx context.Context, endpoint, dir string) error {
 	for {
 		b, err := os.ReadFile(keyFileName(dir, idx))
 		if err != nil {
-			if !os.IsNotExist(err) {
+			if !errors.Is(err, fs.ErrNotExist) {
 				return fmt.Errorf("failed to read key file: %w", err)
 			}
 			logrus.WithField("entries", idx).Print("Completed database restore")
@@ -123,7 +125,7 @@ func RestoreToEtcd(ctx context.Context, endpoint, dir string) error {
 	for {
 		b, err := os.ReadFile(keyFileName(dir, idx))
 		if err != nil {
-			if !os.IsNotExist(err) {
+			if !errors.Is(err, fs.ErrNotExist) {
 				return fmt.Errorf("failed to read key file: %w", err)
 			}
 			logrus.WithField("entries", idx).Print("Completed database restore")

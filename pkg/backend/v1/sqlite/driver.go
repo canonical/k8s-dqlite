@@ -5,9 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
-	"unicode"
 
 	"github.com/canonical/k8s-dqlite/pkg/database"
 	"github.com/mattn/go-sqlite3"
@@ -221,26 +219,6 @@ var (
 
 const maxRetries = 500
 
-type Stripped string
-
-func (s Stripped) String() string {
-	builder := &strings.Builder{}
-	whitespace := true
-	for _, r := range s {
-		if unicode.IsSpace(r) {
-			if whitespace {
-				continue
-			}
-			whitespace = true
-			builder.WriteRune(' ')
-		} else {
-			whitespace = false
-			builder.WriteRune(r)
-		}
-	}
-	return builder.String()
-}
-
 type Driver struct {
 	config *DriverConfig
 }
@@ -261,8 +239,9 @@ func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
 	}
 	if config.Retry == nil {
 		config.Retry = func(err error) bool {
-			if err, ok := err.(sqlite3.Error); ok {
-				return err.Code == sqlite3.ErrBusy
+			var e sqlite3.Error
+			if errors.As(err, &e) {
+				return e.Code == sqlite3.ErrBusy
 			}
 			return false
 		}
@@ -273,6 +252,12 @@ func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
 		if err == nil {
 			break
 		}
+
+		if errors.Is(err, ErrIncomapatibleVersions) {
+			// do not attempt a retry in case of incompatible versions
+			return nil, err
+		}
+
 		logrus.Errorf("failed to setup db: %v", err)
 		select {
 		case <-ctx.Done():
@@ -379,9 +364,9 @@ func (d *Driver) query(ctx context.Context, txName, query string, args ...interf
 	}()
 	for ; retryCount < maxRetries; retryCount++ {
 		if retryCount == 0 {
-			logrus.Tracef("QUERY (try: %d) %v : %s", retryCount, args, Stripped(query))
+			logrus.Tracef("%s (try: %d) %v", txName, retryCount, args)
 		} else {
-			logrus.Debugf("QUERY (try: %d) %v : %s", retryCount, args, Stripped(query))
+			logrus.Debugf("%s (try: %d) %v", txName, retryCount, args)
 		}
 		rows, err = d.config.DB.QueryContext(ctx, query, args...)
 		if err == nil {
@@ -417,9 +402,9 @@ func (d *Driver) execute(ctx context.Context, txName, query string, args ...inte
 	}()
 	for ; retryCount < maxRetries; retryCount++ {
 		if retryCount > 2 {
-			logrus.Debugf("EXEC (try: %d) %v : %s", retryCount, args, Stripped(query))
+			logrus.Debugf("%s (try: %d) %v", txName, retryCount, args)
 		} else {
-			logrus.Tracef("EXEC (try: %d) %v : %s", retryCount, args, Stripped(query))
+			logrus.Tracef("%s (try: %d) %v", txName, retryCount, args)
 		}
 		result, err = d.config.DB.ExecContext(ctx, query, args...)
 		if err == nil {
@@ -583,7 +568,11 @@ func (d *Driver) tryCompact(ctx context.Context, start, end int64) (err error) {
 	}
 	defer func() {
 		if err := tx.Rollback(); err != nil {
-			logrus.WithError(err).Trace("can't rollback compaction")
+			// sql.ErrTxDone happens in case commit has been successful
+			if errors.Is(err, sql.ErrTxDone) {
+				return
+			}
+			logrus.WithError(err).Warning("can't rollback compaction")
 		}
 	}()
 

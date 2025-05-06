@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -181,8 +180,7 @@ var (
 				logrus.WithError(err).Fatal("Failed to shutdown server")
 			}
 			if rootCmdOpts.otel && otelShutdown != nil {
-				err = errors.Join(err, otelShutdown(stopCtx))
-				if err != nil {
+				if err := otelShutdown(stopCtx); err != nil {
 					logrus.WithError(err).Warning("Failed to shutdown OpenTelemetry SDK")
 				}
 			}
