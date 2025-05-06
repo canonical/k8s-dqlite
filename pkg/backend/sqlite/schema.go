@@ -45,10 +45,10 @@ func (sv SchemaVersion) CompatibleWith(targetSV SchemaVersion) error {
 	return nil
 }
 
-// applySchemaV1_0 moves the schema from version 1 to version 2
+// applySchemaV1_0 moves the schema from major version 0 to version 1.
 func applySchemaV1_0(ctx context.Context, txn *sql.Tx) error {
-	// Legacy nodes (v1..1.12 and older) panic if they try to migrate to any new version
-	// migrate to any new version, so we need a bump in the major version.
+	// Legacy nodes (v1..1.12 and older) panic if they try to migrate to any
+	// new version, so we need a bump in the major version.
 	// See https://github.com/canonical/k8s-dqlite/blob/v1.1.12/pkg/kine/drivers/sqlite/sqlite.go#L169
 	if kineTableExists, err := hasTable(ctx, txn, "kine"); err != nil {
 		return err

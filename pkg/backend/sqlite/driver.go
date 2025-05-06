@@ -117,7 +117,7 @@ var (
 	// when joining tables.
 	// See https://www.sqlite.org/optoverview.html#crossjoin
 	// for more details.
-	listSqlV0_2 = `
+	listSqlV1_0 = `
 		WITH maxkv AS (
 			SELECT MAX(id) AS id
 			FROM kine
@@ -162,7 +162,7 @@ var (
 	    	ON maxkv.id = kv.id
 		WHERE kv.deleted = 0`
 
-	countRevisionSQLV0_2 = `
+	countRevisionSQLV1_0 = `
 		SELECT COUNT(*)
 		FROM (
 			SELECT MAX(id)
@@ -495,7 +495,7 @@ func (d *Driver) Count(ctx context.Context, key, rangeEnd []byte, revision int64
 	}
 	query := countRevisionSQL
 	if d.currentSchemaVersion == NewSchemaVersion(0, 2) {
-		query = countRevisionSQLV0_2
+		query = countRevisionSQLV1_0
 	}
 
 	rows, err := d.query(ctx, "count_revision", query, key, rangeEnd, revision)
@@ -737,7 +737,7 @@ func (d *Driver) List(ctx context.Context, key, rangeEnd []byte, limit, revision
 	}
 	sql := listSQL
 	if d.currentSchemaVersion == NewSchemaVersion(0, 2) {
-		sql = listSqlV0_2
+		sql = listSqlV1_0
 	}
 
 	if limit > 0 {
