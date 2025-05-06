@@ -77,9 +77,9 @@ func RestoreToDqlite(ctx context.Context, endpoint, dir string) error {
 		}
 
 		log := logrus.WithFields(logrus.Fields{"index": idx, "key": key})
-		log.Debug("Restore key")
+		log.Debug("restore key")
 		if err := putKey(ctx, client, key, value); err != nil {
-			log.Error("Failed to restore key")
+			log.Error("failed to restore key")
 		}
 
 		idx++
@@ -139,7 +139,7 @@ func RestoreToEtcd(ctx context.Context, endpoint, dir string) error {
 		}
 
 		log := logrus.WithFields(logrus.Fields{"index": idx, "key": key})
-		log.Debug("Restore key")
+		log.Debug("restore key")
 		if _, err := client.Put(ctx, key, string(value)); err != nil {
 			log.Error("failed to restore key")
 		}
