@@ -150,6 +150,20 @@ var (
 
 	countRevisionSQL = `
 		SELECT COUNT(*)
+		FROM kine AS kv
+		JOIN (
+			SELECT MAX(mkv.id) as id
+			FROM kine AS mkv
+			WHERE
+				mkv.name >= CAST(? AS TEXT) AND mkv.name < CAST(? AS TEXT)
+				AND mkv.id <= ?
+			GROUP BY mkv.name
+		) AS maxkv
+	    	ON maxkv.id = kv.id
+		WHERE kv.deleted = 0`
+
+	countRevisionSQLV0_2 = `
+		SELECT COUNT(*)
 		FROM (
 			SELECT MAX(id)
 			FROM kine
@@ -358,6 +372,7 @@ func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
 
 	if currentSchemaVersion == NewSchemaVersion(0, 2) {
 		queries.listSQL = listSqlV0_2
+		queries.countRevisionSQL = countRevisionSQLV0_2
 	}
 
 	return &Driver{
