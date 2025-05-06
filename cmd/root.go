@@ -84,7 +84,7 @@ var (
 			if rootCmdOpts.otel {
 				var err error
 				if rootCmdOpts.otelAddress == "" && rootCmdOpts.otelDir == "" {
-					logrus.Fatal("No oel address or directory specified")
+					logrus.Fatal("no otel address or directory specified")
 				}
 				if rootCmdOpts.otelDir != "" {
 					logrus.WithField("otel-dir", rootCmdOpts.otelDir).Print("dumping otel data to local directory")
