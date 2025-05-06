@@ -74,7 +74,7 @@ func applySchemaV1_0(ctx context.Context, txn *sql.Tx) error {
 		}
 	}
 
-	if _, err := txn.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS k8s_dqlite_name_del_index ON kine (name ASC, id ASC, deleted)`); err != nil {
+	if _, err := txn.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS k8s_dqlite_name_del_index ON kine (name ASC, id DESC, deleted)`); err != nil {
 		return err
 	}
 	return nil
