@@ -292,29 +292,12 @@ func (s Stripped) String() string {
 
 type Driver struct {
 	config               *DriverConfig
-	queries              Queries
 	currentSchemaVersion SchemaVersion
 }
 
 type DriverConfig struct {
 	DB    database.Interface
 	Retry func(error) bool
-}
-
-type Queries struct {
-	revSQL              string
-	listSQL             string
-	revisionIntervalSQL string
-	countRevisionSQL    string
-	afterSQLPrefix      string
-	afterSQL            string
-	ttlSQL              string
-	deleteRevSQL        string
-	updateCompactSQL    string
-	deleteSQL           string
-	createSQL           string
-	updateSQL           string
-	getSizeSQL          string
 }
 
 func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
@@ -354,31 +337,9 @@ func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
 		return nil, err // Return the last error if all retries fail
 	}
 
-	queries := Queries{
-		revSQL:              revSQL,
-		listSQL:             listSQL,
-		revisionIntervalSQL: revisionIntervalSQL,
-		countRevisionSQL:    countRevisionSQL,
-		afterSQLPrefix:      afterSQLPrefix,
-		afterSQL:            afterSQL,
-		ttlSQL:              ttlSQL,
-		deleteRevSQL:        deleteRevSQL,
-		updateCompactSQL:    updateCompactSQL,
-		deleteSQL:           deleteSQL,
-		createSQL:           createSQL,
-		updateSQL:           updateSQL,
-		getSizeSQL:          getSizeSQL,
-	}
-
-	if currentSchemaVersion == NewSchemaVersion(0, 2) {
-		queries.listSQL = listSqlV0_2
-		queries.countRevisionSQL = countRevisionSQLV0_2
-	}
-
 	return &Driver{
 		config:               config,
 		currentSchemaVersion: currentSchemaVersion,
-		queries:              queries,
 	}, nil
 }
 
@@ -395,13 +356,15 @@ func setup(ctx context.Context, db database.Interface) (SchemaVersion, error) {
 	defer conn.Close()
 
 	// Optimistically ask for the user_version without starting a transaction
-	currentSchemaVersion, err = getUserVersion(conn, ctx)
+	currentSchemaVersion, err = getUserVersion(ctx, conn)
 	if err != nil {
 		return currentSchemaVersion, err
 	}
 
 	if err := currentSchemaVersion.CompatibleWith(databaseSchemaVersion); err != nil {
-		return currentSchemaVersion, err
+		// TODO: add a migration path for this case
+		// For now we will remain on the old schema version
+		return currentSchemaVersion, nil
 	}
 	if currentSchemaVersion >= databaseSchemaVersion {
 		return currentSchemaVersion, nil
@@ -413,26 +376,15 @@ func setup(ctx context.Context, db database.Interface) (SchemaVersion, error) {
 	}
 	defer txn.Rollback()
 
-	if err := currentSchemaVersion.CompatibleWith(databaseSchemaVersion); err != nil {
-		if err.Error() == ErrSafeguard.Error() {
-			logrus.WithError(err).Debug("legacy node detected, not migrating")
-			return currentSchemaVersion, nil
-		}
-		return currentSchemaVersion, err
-	}
 	if currentSchemaVersion >= databaseSchemaVersion {
 		return currentSchemaVersion, nil
 	}
 
 	if currentSchemaVersion == NewSchemaVersion(0, 0) {
-		if err := applySchemaV0_1(ctx, txn); err != nil {
-			return currentSchemaVersion, fmt.Errorf("failed to apply schema v0.1: %w", err)
-		}
-		if err := applySchemaV0_2(ctx, txn); err != nil {
+		if err := applySchemaV1_0(ctx, txn); err != nil {
 			return currentSchemaVersion, fmt.Errorf("failed to apply schema v0.2: %w", err)
 		}
-		setUserVersionSQL := fmt.Sprintf(`PRAGMA user_version = %d`, databaseSchemaVersion)
-		if _, err := txn.ExecContext(ctx, setUserVersionSQL); err != nil {
+		if setUserVersion(ctx, txn, databaseSchemaVersion); err != nil {
 			return currentSchemaVersion, fmt.Errorf("failed to set user version: %w", err)
 		}
 	}
@@ -440,7 +392,7 @@ func setup(ctx context.Context, db database.Interface) (SchemaVersion, error) {
 	return currentSchemaVersion, txn.Commit()
 }
 
-func getUserVersion(conn *sql.Conn, ctx context.Context) (SchemaVersion, error) {
+func getUserVersion(ctx context.Context, conn *sql.Conn) (SchemaVersion, error) {
 	query := "PRAGMA user_version"
 
 	var userVersion SchemaVersion
@@ -454,6 +406,12 @@ func getUserVersion(conn *sql.Conn, ctx context.Context) (SchemaVersion, error) 
 		logrus.WithField("try_count", retryCount).WithError(err).Debug("Failed to get user version")
 	}
 	return userVersion, fmt.Errorf("failed to get user version: %w", err)
+}
+
+func setUserVersion(ctx context.Context, txn *sql.Tx, userVersion SchemaVersion) error {
+	query := fmt.Sprintf("PRAGMA user_version = %d", userVersion)
+	_, err := txn.ExecContext(ctx, query)
+	return err
 }
 
 func (d *Driver) query(ctx context.Context, txName, query string, args ...interface{}) (rows *sql.Rows, err error) {
@@ -535,7 +493,12 @@ func (d *Driver) Count(ctx context.Context, key, rangeEnd []byte, revision int64
 	if len(rangeEnd) == 0 {
 		rangeEnd = append(key, 0)
 	}
-	rows, err := d.query(ctx, "count_revision", d.queries.countRevisionSQL, key, rangeEnd, revision)
+	query := countRevisionSQL
+	if d.currentSchemaVersion == NewSchemaVersion(0, 2) {
+		query = countRevisionSQLV0_2
+	}
+
+	rows, err := d.query(ctx, "count_revision", query, key, rangeEnd, revision)
 	if err != nil {
 		return 0, err
 	}
@@ -569,7 +532,7 @@ func (d *Driver) Create(ctx context.Context, key, value []byte, ttl int64) (rev 
 	)
 	createCnt.Add(ctx, 1)
 
-	result, err := d.execute(ctx, "create_sql", d.queries.createSQL, key, ttl, value, key)
+	result, err := d.execute(ctx, "create_sql", createSQL, key, ttl, value, key)
 	if err != nil {
 		logrus.WithError(err).Error("failed to create key")
 		return 0, false, err
@@ -591,7 +554,7 @@ func (d *Driver) Update(ctx context.Context, key, value []byte, preRev, ttl int6
 	}()
 
 	updateCnt.Add(ctx, 1)
-	result, err := d.execute(ctx, "update_sql", d.queries.updateSQL, key, ttl, value, key, preRev)
+	result, err := d.execute(ctx, "update_sql", updateSQL, key, ttl, value, key, preRev)
 	if err != nil {
 		logrus.WithError(err).Error("failed to update key")
 		return 0, false, err
@@ -616,7 +579,7 @@ func (d *Driver) Delete(ctx context.Context, key []byte, revision int64) (rev in
 	}()
 	span.SetAttributes(attribute.String("key", string(key)))
 
-	result, err := d.execute(ctx, "delete_sql", d.queries.deleteSQL, key, revision)
+	result, err := d.execute(ctx, "delete_sql", deleteSQL, key, revision)
 	if err != nil {
 		logrus.WithError(err).Error("failed to delete key")
 		return 0, false, err
@@ -734,7 +697,7 @@ func (d *Driver) GetCompactRevision(ctx context.Context) (int64, int64, error) {
 		span.End()
 	}()
 
-	rows, err := d.query(ctx, "revision_interval_sql", d.queries.revisionIntervalSQL)
+	rows, err := d.query(ctx, "revision_interval_sql", revisionIntervalSQL)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -764,7 +727,7 @@ func (d *Driver) DeleteRevision(ctx context.Context, revision int64) error {
 	}()
 	span.SetAttributes(attribute.Int64("revision", revision))
 
-	_, err = d.execute(ctx, "delete_rev_sql", d.queries.deleteRevSQL, revision)
+	_, err = d.execute(ctx, "delete_rev_sql", deleteRevSQL, revision)
 	return err
 }
 
@@ -772,7 +735,11 @@ func (d *Driver) List(ctx context.Context, key, rangeEnd []byte, limit, revision
 	if len(rangeEnd) == 0 {
 		rangeEnd = append(key, 0)
 	}
-	sql := d.queries.listSQL
+	sql := listSQL
+	if d.currentSchemaVersion == NewSchemaVersion(0, 2) {
+		sql = listSqlV0_2
+	}
+
 	if limit > 0 {
 		sql = fmt.Sprintf("%s LIMIT ?", sql)
 		return d.query(ctx, "list_revision_start_sql_limit", sql, key, rangeEnd, revision, limit)
@@ -781,7 +748,7 @@ func (d *Driver) List(ctx context.Context, key, rangeEnd []byte, limit, revision
 }
 
 func (d *Driver) ListTTL(ctx context.Context, revision int64) (*sql.Rows, error) {
-	return d.query(ctx, "ttl_sql", d.queries.ttlSQL, revision)
+	return d.query(ctx, "ttl_sql", ttlSQL, revision)
 }
 
 func (d *Driver) CurrentRevision(ctx context.Context) (int64, error) {
@@ -795,7 +762,7 @@ func (d *Driver) CurrentRevision(ctx context.Context) (int64, error) {
 		span.End()
 	}()
 
-	rows, err := d.query(ctx, "rev_sql", d.queries.revSQL)
+	rows, err := d.query(ctx, "rev_sql", revSQL)
 	if err != nil {
 		return 0, err
 	}
@@ -819,11 +786,11 @@ func (d *Driver) AfterPrefix(ctx context.Context, key, rangeEnd []byte, startRev
 	if len(rangeEnd) == 0 {
 		rangeEnd = append(key, 0)
 	}
-	return d.query(ctx, "after_sql_prefix", d.queries.afterSQLPrefix, key, rangeEnd, startRevision, endRevision)
+	return d.query(ctx, "after_sql_prefix", afterSQLPrefix, key, rangeEnd, startRevision, endRevision)
 }
 
 func (d *Driver) After(ctx context.Context, rev, limit int64) (*sql.Rows, error) {
-	sql := d.queries.afterSQL
+	sql := afterSQL
 	if limit > 0 {
 		sql = fmt.Sprintf("%s LIMIT ?", sql)
 		return d.query(ctx, "after_sql_limit", sql, rev, limit)
@@ -832,7 +799,7 @@ func (d *Driver) After(ctx context.Context, rev, limit int64) (*sql.Rows, error)
 }
 
 func (d *Driver) GetSize(ctx context.Context) (int64, error) {
-	rows, err := d.query(ctx, "get_size_sql", d.queries.getSizeSQL)
+	rows, err := d.query(ctx, "get_size_sql", getSizeSQL)
 	if err != nil {
 		return 0, err
 	}

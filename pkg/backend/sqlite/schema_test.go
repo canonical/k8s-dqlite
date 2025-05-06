@@ -21,15 +21,15 @@ func TestCanMigrate(t *testing.T) {
 			expectedErr: sqlite.ErrIncompatibleVersion,
 		},
 		{
-			name:        "can not migrate due to safeguard",
+			name:        "can migrate between same major versions",
 			current:     sqlite.NewSchemaVersion(0, 1),
 			target:      sqlite.NewSchemaVersion(0, 2),
-			expectedErr: sqlite.ErrSafeguard,
+			expectedErr: nil,
 		},
 		{
-			name:        "can migrate between same major versions",
+			name:        "can jump to major versions on fresh install",
 			current:     sqlite.NewSchemaVersion(0, 0),
-			target:      sqlite.NewSchemaVersion(0, 2),
+			target:      sqlite.NewSchemaVersion(1, 0),
 			expectedErr: nil,
 		},
 	}
