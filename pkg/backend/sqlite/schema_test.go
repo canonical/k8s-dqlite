@@ -1,7 +1,6 @@
 package sqlite_test
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/canonical/k8s-dqlite/pkg/backend/sqlite"
@@ -19,12 +18,18 @@ func TestCanMigrate(t *testing.T) {
 			name:        "can not migrate between different major versions",
 			current:     sqlite.NewSchemaVersion(0, 0),
 			target:      sqlite.NewSchemaVersion(1, 0),
-			expectedErr: fmt.Errorf("can not migrate between different major versions"),
+			expectedErr: sqlite.ErrIncompatibleVersion,
 		},
 		{
-			name:        "can migrate",
+			name:        "can not migrate due to safeguard",
+			current:     sqlite.NewSchemaVersion(0, 1),
+			target:      sqlite.NewSchemaVersion(0, 2),
+			expectedErr: sqlite.ErrSafeguard,
+		},
+		{
+			name:        "can migrate between same major versions",
 			current:     sqlite.NewSchemaVersion(0, 0),
-			target:      sqlite.NewSchemaVersion(0, 1),
+			target:      sqlite.NewSchemaVersion(0, 2),
 			expectedErr: nil,
 		},
 	}

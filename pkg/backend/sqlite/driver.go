@@ -356,6 +356,10 @@ func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
 		getSizeSQL:          getSizeSQL,
 	}
 
+	if currentSchemaVersion == NewSchemaVersion(0, 2) {
+		queries.listSQL = listSqlV0_2
+	}
+
 	return &Driver{
 		config:               config,
 		currentSchemaVersion: currentSchemaVersion,
@@ -394,8 +398,28 @@ func setup(ctx context.Context, db database.Interface) (SchemaVersion, error) {
 	}
 	defer txn.Rollback()
 
-	if err := migrate(ctx, txn); err != nil {
-		return currentSchemaVersion, fmt.Errorf("migration failed: %w", err)
+	if err := currentSchemaVersion.CompatibleWith(databaseSchemaVersion); err != nil {
+		if err.Error() == ErrSafeguard.Error() {
+			logrus.WithError(err).Debug("legacy node detected, not migrating")
+			return currentSchemaVersion, nil
+		}
+		return currentSchemaVersion, err
+	}
+	if currentSchemaVersion >= databaseSchemaVersion {
+		return currentSchemaVersion, nil
+	}
+
+	if currentSchemaVersion == NewSchemaVersion(0, 0) {
+		if err := applySchemaV0_1(ctx, txn); err != nil {
+			return currentSchemaVersion, fmt.Errorf("failed to apply schema v0.1: %w", err)
+		}
+		if err := applySchemaV0_2(ctx, txn); err != nil {
+			return currentSchemaVersion, fmt.Errorf("failed to apply schema v0.2: %w", err)
+		}
+		setUserVersionSQL := fmt.Sprintf(`PRAGMA user_version = %d`, databaseSchemaVersion)
+		if _, err := txn.ExecContext(ctx, setUserVersionSQL); err != nil {
+			return currentSchemaVersion, fmt.Errorf("failed to set user version: %w", err)
+		}
 	}
 
 	return currentSchemaVersion, txn.Commit()
@@ -415,45 +439,6 @@ func getUserVersion(conn *sql.Conn, ctx context.Context) (SchemaVersion, error) 
 		logrus.WithField("try_count", retryCount).WithError(err).Debug("Failed to get user version")
 	}
 	return userVersion, fmt.Errorf("failed to get user version: %w", err)
-}
-
-// migrate tries to migrate from a version of the database
-// to the target one.
-func migrate(ctx context.Context, txn *sql.Tx) error {
-	var currentSchemaVersion SchemaVersion
-
-	row := txn.QueryRowContext(ctx, `PRAGMA user_version`)
-	if err := row.Scan(&currentSchemaVersion); err != nil {
-		return err
-	}
-
-	if err := currentSchemaVersion.CompatibleWith(databaseSchemaVersion); err != nil {
-		return err
-	}
-	if currentSchemaVersion >= databaseSchemaVersion {
-		return nil
-	}
-
-	switch currentSchemaVersion {
-	case NewSchemaVersion(0, 0):
-		if err := applySchemaV0_1(ctx, txn); err != nil {
-			return err
-		}
-		fallthrough
-	case NewSchemaVersion(0, 1):
-		if err := applySchemaV0_2(ctx, txn); err != nil {
-			return err
-		}
-	default:
-		return nil
-	}
-
-	setUserVersionSQL := fmt.Sprintf(`PRAGMA user_version = %d`, databaseSchemaVersion)
-	if _, err := txn.ExecContext(ctx, setUserVersionSQL); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (d *Driver) query(ctx context.Context, txName, query string, args ...interface{}) (rows *sql.Rows, err error) {

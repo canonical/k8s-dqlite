@@ -16,7 +16,9 @@ import (
 type SchemaVersion int32
 
 var (
-	databaseSchemaVersion = NewSchemaVersion(0, 2)
+	databaseSchemaVersion  = NewSchemaVersion(0, 2)
+	ErrSafeguard           = fmt.Errorf("can not migrate due to safeguard for suicidal legacy nodes")
+	ErrIncompatibleVersion = fmt.Errorf("incompatible schema version")
 )
 
 func NewSchemaVersion(major int16, minor int16) SchemaVersion {
@@ -38,11 +40,11 @@ func (sv SchemaVersion) CompatibleWith(targetSV SchemaVersion) error {
 	// that is not 0.1, so we need to safeguard against that.
 	// See https://github.com/canonical/k8s-dqlite/blob/v1.1.12/pkg/kine/drivers/sqlite/sqlite.go#L169
 	if sv.Major() == 0 && sv.Minor() == 1 {
-		return fmt.Errorf("can not migrate due to safeguard for suicidal legacy nodes")
+		return ErrSafeguard
 	}
 	// Major version must be the same
 	if sv.Major() != targetSV.Major() {
-		return fmt.Errorf("can not migrate between different major versions")
+		return ErrIncompatibleVersion
 	}
 	return nil
 }
@@ -97,14 +99,17 @@ CREATE TABLE kine
 
 // applySchemaV0_2 moves the schema from version 1 to version 2
 func applySchemaV0_2(ctx context.Context, txn *sql.Tx) error {
-	if _, err := txn.ExecContext(ctx, `DROP INDEX kine_name_index`); err != nil {
+	if _, err := txn.ExecContext(ctx, `DROP INDEX IF EXISTS kine_name_index`); err != nil {
 		return err
 	}
 
-	if _, err := txn.ExecContext(ctx, `CREATE UNIQUE INDEX kine_name_index ON kine(name ASC, id DESC, deleted)`); err != nil {
+	if _, err := txn.ExecContext(ctx, `DROP INDEX IF EXISTS kine_name_prev_revision_uindex`); err != nil {
 		return err
 	}
 
+	if _, err := txn.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS k8s_dqlite_name_del_index ON kine (name ASC, id ASC, deleted)`); err != nil {
+		return err
+	}
 	return nil
 }
 
