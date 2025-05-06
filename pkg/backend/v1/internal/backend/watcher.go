@@ -283,6 +283,6 @@ func (s *Backend) WatcherGroup(ctx context.Context) (limited.WatcherGroup, error
 	})
 	wg.stop = stop
 	s.WatcherGroups[wg] = wg
-	logrus.Debugf("created new watchergroup")
+	logrus.Debugf("created a new WatcherGroup")
 	return wg, nil
 }
