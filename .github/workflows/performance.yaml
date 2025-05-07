@@ -75,8 +75,8 @@ jobs:
         run: |
           sudo snap download k8s \
             --channel=latest/edge \
-            --basename k8s
-          mv k8s.snap head.snap
+            --basename head
+          sudo chmod o+r head.snap
       - name: Patch k8s snap (base)
         uses: ./.github/actions/patch-k8s-snap
         with:
