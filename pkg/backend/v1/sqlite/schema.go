@@ -3,7 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
-	"fmt"
+	"errors"
 )
 
 // The database version that designates whether table migration
@@ -17,6 +17,8 @@ type SchemaVersion int32
 
 var (
 	databaseSchemaVersion = NewSchemaVersion(0, 1)
+
+	ErrIncomapatibleVersions = errors.New("can not migrate between different major versions")
 )
 
 func NewSchemaVersion(major int16, minor int16) SchemaVersion {
@@ -36,7 +38,7 @@ func (sv SchemaVersion) Minor() int16 {
 func (sv SchemaVersion) CompatibleWith(targetSV SchemaVersion) error {
 	// Major version must be the same
 	if sv.Major() != targetSV.Major() {
-		return fmt.Errorf("can not migrate between different major versions")
+		return ErrIncomapatibleVersions
 	}
 	return nil
 }

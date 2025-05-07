@@ -5,9 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
-	"unicode"
 
 	"github.com/canonical/k8s-dqlite/pkg/database"
 	"github.com/mattn/go-sqlite3"
@@ -15,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -39,37 +38,45 @@ func init() {
 	var err error
 	otelTracer = otel.Tracer(otelName)
 	otelMeter = otel.Meter(otelName)
-	compactCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.compact", otelName), metric.WithDescription("Number of compact requests"))
+	compactCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.compact", otelName), metric.WithDescription("number of compact requests"))
 	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create create counter")
+		compactCnt = noop.Int64Counter{}
+		logrus.WithError(err).Warning("otel failed to create create counter")
 	}
-	compactBatchCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.compact_batch", otelName), metric.WithDescription("Number of compact batch requests"))
+	compactBatchCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.compact_batch", otelName), metric.WithDescription("number of compact batch requests"))
 	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create create counter")
+		compactBatchCnt = noop.Int64Counter{}
+		logrus.WithError(err).Warning("otel failed to create create counter")
 	}
-	deleteRevCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.delete_rev", otelName), metric.WithDescription("Number of delete revision requests"))
+	deleteRevCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.delete_rev", otelName), metric.WithDescription("number of delete revision requests"))
 	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create create counter")
+		deleteRevCnt = noop.Int64Counter{}
+		logrus.WithError(err).Warning("otel failed to create create counter")
 	}
-	createCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.create", otelName), metric.WithDescription("Number of create requests"))
+	createCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.create", otelName), metric.WithDescription("number of create requests"))
 	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create create counter")
+		createCnt = noop.Int64Counter{}
+		logrus.WithError(err).Warning("otel failed to create create counter")
 	}
-	updateCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.update", otelName), metric.WithDescription("Number of update requests"))
+	updateCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.update", otelName), metric.WithDescription("number of update requests"))
 	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create create counter")
+		updateCnt = noop.Int64Counter{}
+		logrus.WithError(err).Warning("otel failed to create create counter")
 	}
-	deleteCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.delete", otelName), metric.WithDescription("Number of delete requests"))
+	deleteCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.delete", otelName), metric.WithDescription("number of delete requests"))
 	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create create counter")
+		deleteCnt = noop.Int64Counter{}
+		logrus.WithError(err).Warning("otel failed to create create counter")
 	}
-	currentRevCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.current_revision", otelName), metric.WithDescription("Current revision"))
+	currentRevCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.current_revision", otelName), metric.WithDescription("current revision"))
 	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create create counter")
+		currentRevCnt = noop.Int64Counter{}
+		logrus.WithError(err).Warning("otel failed to create create counter")
 	}
-	getCompactRevCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.get_compact_revision", otelName), metric.WithDescription("Get compact revision"))
+	getCompactRevCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.get_compact_revision", otelName), metric.WithDescription("get compact revision"))
 	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create create counter")
+		getCompactRevCnt = noop.Int64Counter{}
+		logrus.WithError(err).Warning("otel failed to create create counter")
 	}
 }
 
@@ -221,26 +228,6 @@ var (
 
 const maxRetries = 500
 
-type Stripped string
-
-func (s Stripped) String() string {
-	builder := &strings.Builder{}
-	whitespace := true
-	for _, r := range s {
-		if unicode.IsSpace(r) {
-			if whitespace {
-				continue
-			}
-			whitespace = true
-			builder.WriteRune(' ')
-		} else {
-			whitespace = false
-			builder.WriteRune(r)
-		}
-	}
-	return builder.String()
-}
-
 type Driver struct {
 	config *DriverConfig
 }
@@ -261,8 +248,9 @@ func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
 	}
 	if config.Retry == nil {
 		config.Retry = func(err error) bool {
-			if err, ok := err.(sqlite3.Error); ok {
-				return err.Code == sqlite3.ErrBusy
+			var e sqlite3.Error
+			if errors.As(err, &e) {
+				return e.Code == sqlite3.ErrBusy
 			}
 			return false
 		}
@@ -273,6 +261,12 @@ func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
 		if err == nil {
 			break
 		}
+
+		if errors.Is(err, ErrIncomapatibleVersions) {
+			// do not attempt a retry in case of incompatible versions
+			return nil, err
+		}
+
 		logrus.Errorf("failed to setup db: %v", err)
 		select {
 		case <-ctx.Done():
@@ -379,9 +373,9 @@ func (d *Driver) query(ctx context.Context, txName, query string, args ...interf
 	}()
 	for ; retryCount < maxRetries; retryCount++ {
 		if retryCount == 0 {
-			logrus.Tracef("QUERY (try: %d) %v : %s", retryCount, args, Stripped(query))
+			logrus.Tracef("%s (try: %d) %v", txName, retryCount, args)
 		} else {
-			logrus.Debugf("QUERY (try: %d) %v : %s", retryCount, args, Stripped(query))
+			logrus.Debugf("%s (try: %d) %v", txName, retryCount, args)
 		}
 		rows, err = d.config.DB.QueryContext(ctx, query, args...)
 		if err == nil {
@@ -417,9 +411,9 @@ func (d *Driver) execute(ctx context.Context, txName, query string, args ...inte
 	}()
 	for ; retryCount < maxRetries; retryCount++ {
 		if retryCount > 2 {
-			logrus.Debugf("EXEC (try: %d) %v : %s", retryCount, args, Stripped(query))
+			logrus.Debugf("%s (try: %d) %v", txName, retryCount, args)
 		} else {
-			logrus.Tracef("EXEC (try: %d) %v : %s", retryCount, args, Stripped(query))
+			logrus.Tracef("%s (try: %d) %v", txName, retryCount, args)
 		}
 		result, err = d.config.DB.ExecContext(ctx, query, args...)
 		if err == nil {
@@ -474,7 +468,6 @@ func (d *Driver) Create(ctx context.Context, key, value []byte, ttl int64) (rev 
 
 	result, err := d.execute(ctx, "create_sql", createSQL, key, ttl, value, key)
 	if err != nil {
-		logrus.WithError(err).Error("failed to create key")
 		return 0, false, err
 	}
 	if insertCount, err := result.RowsAffected(); err != nil {
@@ -496,7 +489,6 @@ func (d *Driver) Update(ctx context.Context, key, value []byte, preRev, ttl int6
 	updateCnt.Add(ctx, 1)
 	result, err := d.execute(ctx, "update_sql", updateSQL, key, ttl, value, key, preRev)
 	if err != nil {
-		logrus.WithError(err).Error("failed to update key")
 		return 0, false, err
 	}
 	if insertCount, err := result.RowsAffected(); err != nil {
@@ -521,7 +513,6 @@ func (d *Driver) Delete(ctx context.Context, key []byte, revision int64) (rev in
 
 	result, err := d.execute(ctx, "delete_sql", deleteSQL, key, revision)
 	if err != nil {
-		logrus.WithError(err).Error("failed to delete key")
 		return 0, false, err
 	}
 	if insertCount, err := result.RowsAffected(); err != nil {
@@ -583,7 +574,11 @@ func (d *Driver) tryCompact(ctx context.Context, start, end int64) (err error) {
 	}
 	defer func() {
 		if err := tx.Rollback(); err != nil {
-			logrus.WithError(err).Trace("can't rollback compaction")
+			// sql.ErrTxDone happens in case commit has been successful
+			if errors.Is(err, sql.ErrTxDone) {
+				return
+			}
+			logrus.WithError(err).Warning("can't rollback compaction")
 		}
 	}()
 
