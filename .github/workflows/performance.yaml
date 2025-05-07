@@ -2,7 +2,7 @@ name: Performance Test K8s-snap
 
 on:
   push:
-    branches: ["master"]
+    branches: ["master", "test"]
   pull_request:
 
 permissions:
@@ -86,11 +86,11 @@ jobs:
           sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
           sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
           sudo mksquashfs snap-unpack-dir v1-1-11.snap -noappend -comp lzo -no-fragments
-      - name: Create snap with k8s-dqlite v1.2.0
+      - name: Create snap with k8s-dqlite master
         run: |
           set -o pipefail
           git fetch origin --tags
-          git reset --hard v1.2.0
+          git reset --hard master
           make static
           sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
           sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
@@ -133,7 +133,7 @@ jobs:
           cd test/performance 
           mkdir -p ./results/v1-1-11
           sg lxd -c 'tox -e performance'
-      - name: Run Performance test for v1.2.0 snap
+      - name: Run Performance test for master snap
         env:
           TEST_SNAP: ${{ github.workspace }}/v1-2-0.snap
           TEST_SUBSTRATE: lxd
