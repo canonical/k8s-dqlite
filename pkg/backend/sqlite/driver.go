@@ -497,7 +497,7 @@ func (d *Driver) Count(ctx context.Context, key, rangeEnd []byte, revision int64
 		rangeEnd = append(key, 0)
 	}
 	query := countRevisionSQL
-	if d.currentSchemaVersion == NewSchemaVersion(0, 2) {
+	if d.currentSchemaVersion == databaseSchemaVersion {
 		query = countRevisionSQLV1_0
 	}
 
@@ -739,7 +739,7 @@ func (d *Driver) List(ctx context.Context, key, rangeEnd []byte, limit, revision
 		rangeEnd = append(key, 0)
 	}
 	sql := listSQL
-	if d.currentSchemaVersion == NewSchemaVersion(0, 2) {
+	if d.currentSchemaVersion == databaseSchemaVersion {
 		sql = listSqlV1_0
 	}
 

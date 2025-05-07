@@ -16,7 +16,7 @@ import (
 type SchemaVersion int32
 
 var (
-	databaseSchemaVersion  = NewSchemaVersion(0, 2)
+	databaseSchemaVersion  = NewSchemaVersion(1, 0)
 	ErrIncompatibleVersion = fmt.Errorf("incompatible schema version")
 )
 
