@@ -86,15 +86,15 @@ jobs:
           sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
           sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
           sudo mksquashfs snap-unpack-dir v1-1-11.snap -noappend -comp lzo -no-fragments
-      - name: Create snap with k8s-dqlite master
+      - name: Create snap with k8s-dqlite v1.6.0
         run: |
           set -o pipefail
           git fetch origin --tags
-          git reset --hard master
+          git reset --hard v1.6.0
           make static
           sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
           sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
-          sudo mksquashfs snap-unpack-dir v1-2-0.snap -noappend -comp lzo -no-fragments
+          sudo mksquashfs snap-unpack-dir v1-6-0.snap -noappend -comp lzo -no-fragments
       - name: Switch back to target branch
         run: git reset --hard $TARGET_SHA
       - name: Run Performance test ${{ github.head_ref }} snap
@@ -133,17 +133,17 @@ jobs:
           cd test/performance 
           mkdir -p ./results/v1-1-11
           sg lxd -c 'tox -e performance'
-      - name: Run Performance test for master snap
+      - name: Run Performance test for v1.6.0 snap
         env:
-          TEST_SNAP: ${{ github.workspace }}/v1-2-0.snap
+          TEST_SNAP: ${{ github.workspace }}/v1-6-0.snap
           TEST_SUBSTRATE: lxd
           TEST_LXD_IMAGE: ubuntu:22.04
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
-          TEST_METRICS_DIR: ${{ github.workspace }}/test/performance/results/v1-2-0
-          TEST_RUN_NAME: v1-2-0
+          TEST_METRICS_DIR: ${{ github.workspace }}/test/performance/results/v1-6-0
+          TEST_RUN_NAME: v1-6-0
         run: |
           cd test/performance
-          mkdir -p ./results/v1-2-0
+          mkdir -p ./results/v1-6-0
           sg lxd -c 'tox -e performance'
       - name: Generate 3 node Graphs
         run: |
@@ -151,7 +151,7 @@ jobs:
           sudo Rscript parse-performance-metrics.R -p ./results/head -o ./results/head -f *three-node.log
           sudo Rscript parse-performance-metrics.R -p ./results/base-code -o ./results/base-code -f *three-node.log
           sudo Rscript parse-performance-metrics.R -p ./results/v1-1-11 -o ./results/v1-1-11 -f *three-node.log
-          sudo Rscript parse-performance-metrics.R -p ./results/v1-2-0 -o ./results/v1-2-0 -f *three-node.log
+          sudo Rscript parse-performance-metrics.R -p ./results/v1-6-0 -o ./results/v1-6-0 -f *three-node.log
       - name: Generate single node Graphs
         run: |
           cd test/performance
@@ -159,7 +159,7 @@ jobs:
           cp ./results/head/*single-node.log ./results/single-node
           cp ./results/base-code/*single-node.log ./results/single-node
           cp ./results/v1-1-11/*single-node.log ./results/single-node
-          cp ./results/v1-2-0/*single-node.log ./results/single-node
+          cp ./results/v1-6-0/*single-node.log ./results/single-node
           sudo Rscript parse-performance-metrics.R -p ./results/single-node -o ./results/single-node -f *single-node.log
       - name: Upload performance result
         uses: actions/upload-artifact@v4
