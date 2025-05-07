@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -37,10 +38,12 @@ func init() {
 
 	backendCompactCnt, err = backendOtelMeter.Int64Counter(fmt.Sprintf("%s.compact", backendOtelName), metric.WithDescription("Number of compact requests"))
 	if err != nil {
+		backendCompactCnt = noop.Int64Counter{}
 		logrus.WithError(err).Warning("Otel failed to create create counter")
 	}
 	watcherGroupCnt, err = backendOtelMeter.Int64Counter(fmt.Sprintf("%s.watcherGroup", backendOtelName), metric.WithDescription("Number of watcherGroup requests"))
 	if err != nil {
+		watcherGroupCnt = noop.Int64Counter{}
 		logrus.WithError(err).Warning("Otel failed to create create counter")
 	}
 }

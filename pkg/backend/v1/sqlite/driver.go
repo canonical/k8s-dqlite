@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -39,34 +40,42 @@ func init() {
 	otelMeter = otel.Meter(otelName)
 	compactCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.compact", otelName), metric.WithDescription("number of compact requests"))
 	if err != nil {
+		compactCnt = noop.Int64Counter{}
 		logrus.WithError(err).Warning("otel failed to create create counter")
 	}
 	compactBatchCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.compact_batch", otelName), metric.WithDescription("number of compact batch requests"))
 	if err != nil {
+		compactBatchCnt = noop.Int64Counter{}
 		logrus.WithError(err).Warning("otel failed to create create counter")
 	}
 	deleteRevCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.delete_rev", otelName), metric.WithDescription("number of delete revision requests"))
 	if err != nil {
+		deleteRevCnt = noop.Int64Counter{}
 		logrus.WithError(err).Warning("otel failed to create create counter")
 	}
 	createCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.create", otelName), metric.WithDescription("number of create requests"))
 	if err != nil {
+		createCnt = noop.Int64Counter{}
 		logrus.WithError(err).Warning("otel failed to create create counter")
 	}
 	updateCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.update", otelName), metric.WithDescription("number of update requests"))
 	if err != nil {
+		updateCnt = noop.Int64Counter{}
 		logrus.WithError(err).Warning("otel failed to create create counter")
 	}
 	deleteCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.delete", otelName), metric.WithDescription("number of delete requests"))
 	if err != nil {
+		deleteCnt = noop.Int64Counter{}
 		logrus.WithError(err).Warning("otel failed to create create counter")
 	}
 	currentRevCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.current_revision", otelName), metric.WithDescription("current revision"))
 	if err != nil {
+		currentRevCnt = noop.Int64Counter{}
 		logrus.WithError(err).Warning("otel failed to create create counter")
 	}
 	getCompactRevCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.get_compact_revision", otelName), metric.WithDescription("get compact revision"))
 	if err != nil {
+		getCompactRevCnt = noop.Int64Counter{}
 		logrus.WithError(err).Warning("otel failed to create create counter")
 	}
 }

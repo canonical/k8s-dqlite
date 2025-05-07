@@ -6,6 +6,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -28,22 +29,27 @@ func init() {
 
 	createCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.create", otelName), metric.WithDescription("number of create requests"))
 	if err != nil {
+		createCnt = noop.Int64Counter{}
 		logrus.WithError(err).Warning("otel failed to create create counter")
 	}
 	deleteCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.delete", otelName), metric.WithDescription("number of delete requests"))
 	if err != nil {
+		deleteCnt = noop.Int64Counter{}
 		logrus.WithError(err).Warning("otel failed to create delete counter")
 	}
 	getCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.get", otelName), metric.WithDescription("number of get requests"))
 	if err != nil {
+		getCnt = noop.Int64Counter{}
 		logrus.WithError(err).Warning("otel failed to create get counter")
 	}
 	listCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.list", otelName), metric.WithDescription("number of list requests"))
 	if err != nil {
+		listCnt = noop.Int64Counter{}
 		logrus.WithError(err).Warning("otel failed to create list counter")
 	}
 	updateCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.update", otelName), metric.WithDescription("number of update requests"))
 	if err != nil {
+		updateCnt = noop.Int64Counter{}
 		logrus.WithError(err).Warning("otel failed to create update counter")
 	}
 }
