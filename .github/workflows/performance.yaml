@@ -71,15 +71,17 @@ jobs:
         shell: sudo Rscript {0}
       - name: Install lxd
         uses: canonical/k8s-snap/.github/actions/install-lxd@main
-      - name: Patch k8s snap (head)
-        uses: ./.github/actions/patch-k8s-snap
-        with:
-          out-snap-path: head.snap
+      - name: Download snap with k8s-dqlite v1.3.1
+        run: |
+          sudo snap download k8s \
+            --channel=latest/edge \
+            --basename k8s
+          mv k8s.snap head.snap
       - name: Patch k8s snap (base)
         uses: ./.github/actions/patch-k8s-snap
         with:
           out-snap-path: base-code.snap
-          build-commit: b2f70f18e96bae93d427fc0a557bc9c6fcdf1806
+          build-commit: $BASE_SHA
       - name: Run Performance test ${{ github.head_ref }} snap
         env:
           TEST_SNAP: ${{ github.workspace }}/head.snap
