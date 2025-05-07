@@ -348,17 +348,16 @@ func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
 // table if the key_value table exists, all in a single database transaction.
 // changes are rolled back if an error occurs.
 func setup(ctx context.Context, db database.Interface) (SchemaVersion, error) {
-	var currentSchemaVersion SchemaVersion
 	conn, err := db.Conn(ctx)
 	if err != nil {
-		return currentSchemaVersion, err
+		return 0, err
 	}
 	defer conn.Close()
 
 	// Optimistically ask for the user_version without starting a transaction
-	currentSchemaVersion, err = getUserVersion(ctx, conn)
+	currentSchemaVersion, err := getUserVersion(ctx, conn)
 	if err != nil {
-		return currentSchemaVersion, err
+		return 0, err
 	}
 
 	if err := currentSchemaVersion.CompatibleWith(databaseSchemaVersion); err != nil {
@@ -372,9 +371,18 @@ func setup(ctx context.Context, db database.Interface) (SchemaVersion, error) {
 
 	txn, err := conn.BeginTx(ctx, nil)
 	if err != nil {
-		return currentSchemaVersion, err
+		return 0, err
 	}
 	defer txn.Rollback()
+
+	row := txn.QueryRowContext(ctx, `PRAGMA user_version`)
+	if err := row.Scan(&currentSchemaVersion); err != nil {
+		return 0, err
+	}
+
+	if err := currentSchemaVersion.CompatibleWith(databaseSchemaVersion); err != nil {
+		return 0, err
+	}
 
 	if currentSchemaVersion >= databaseSchemaVersion {
 		return currentSchemaVersion, nil
@@ -400,13 +408,9 @@ func getUserVersion(ctx context.Context, conn *sql.Conn) (SchemaVersion, error) 
 
 	var userVersion SchemaVersion
 	var err error
-	retryCount := 0
-	for ; retryCount < maxRetries; retryCount++ {
-		row := conn.QueryRowContext(ctx, query)
-		if err := row.Scan(&userVersion); err == nil {
-			return userVersion, nil
-		}
-		logrus.WithField("try_count", retryCount).WithError(err).Debug("Failed to get user version")
+	row := conn.QueryRowContext(ctx, query)
+	if err := row.Scan(&userVersion); err == nil {
+		return userVersion, nil
 	}
 	return userVersion, fmt.Errorf("failed to get user version: %w", err)
 }
