@@ -355,8 +355,9 @@ func setup(ctx context.Context, db database.Interface) (SchemaVersion, error) {
 	defer conn.Close()
 
 	// Optimistically ask for the user_version without starting a transaction
-	currentSchemaVersion, err := getUserVersion(ctx, conn)
-	if err != nil {
+	var currentSchemaVersion SchemaVersion
+	row := conn.QueryRowContext(ctx, "PRAGMA user_version")
+	if err := row.Scan(&currentSchemaVersion); err != nil {
 		return 0, err
 	}
 
@@ -375,7 +376,7 @@ func setup(ctx context.Context, db database.Interface) (SchemaVersion, error) {
 	}
 	defer txn.Rollback()
 
-	row := txn.QueryRowContext(ctx, `PRAGMA user_version`)
+	row = txn.QueryRowContext(ctx, `PRAGMA user_version`)
 	if err := row.Scan(&currentSchemaVersion); err != nil {
 		return 0, err
 	}
@@ -395,30 +396,13 @@ func setup(ctx context.Context, db database.Interface) (SchemaVersion, error) {
 		if err := applySchemaV1_0(ctx, txn); err != nil {
 			return currentSchemaVersion, fmt.Errorf("failed to apply schema v0.2: %w", err)
 		}
-		if setUserVersion(ctx, txn, databaseSchemaVersion); err != nil {
+		query := fmt.Sprintf("PRAGMA user_version = %d", databaseSchemaVersion)
+		if _, err := txn.ExecContext(ctx, query); err != nil {
 			return currentSchemaVersion, fmt.Errorf("failed to set user version: %w", err)
 		}
 	}
 
 	return currentSchemaVersion, txn.Commit()
-}
-
-func getUserVersion(ctx context.Context, conn *sql.Conn) (SchemaVersion, error) {
-	query := "PRAGMA user_version"
-
-	var userVersion SchemaVersion
-	var err error
-	row := conn.QueryRowContext(ctx, query)
-	if err := row.Scan(&userVersion); err == nil {
-		return userVersion, nil
-	}
-	return userVersion, fmt.Errorf("failed to get user version: %w", err)
-}
-
-func setUserVersion(ctx context.Context, txn *sql.Tx, userVersion SchemaVersion) error {
-	query := fmt.Sprintf("PRAGMA user_version = %d", userVersion)
-	_, err := txn.ExecContext(ctx, query)
-	return err
 }
 
 func (d *Driver) query(ctx context.Context, txName, query string, args ...interface{}) (rows *sql.Rows, err error) {
