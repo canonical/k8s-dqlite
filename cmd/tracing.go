@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
@@ -78,7 +79,7 @@ func (f DurationFilter) OnEnd(s trace.ReadOnlySpan) {
 func setupOTelSDK(
 	ctx context.Context, otelEndpoint string,
 	otelDir string, spanNameFilter string,
-	spanMinDurationFilter time.Duration) (shutdown func(context.Context) error, err error) {
+	spanMinDurationFilter time.Duration) (shutdown func(context.Context) error) {
 	var grpcConn *grpc.ClientConn
 	var traceExporter trace.SpanExporter
 	var traceProvider *trace.TracerProvider
@@ -86,39 +87,44 @@ func setupOTelSDK(
 	var meterProvider *metric.MeterProvider
 	var metricFile *os.File
 	var traceFile *os.File
+	var err error
+
+	defer func() {
+		logrus.WithError(err).Warning("failed to setup otel sdk")
+	}()
 
 	shutdown = func(ctx context.Context) error {
 		var shutdownErrs error
 		if meterProvider != nil {
-			err = meterProvider.Shutdown(ctx)
+			err := meterProvider.Shutdown(ctx)
 			if err != nil {
 				err = fmt.Errorf("failed to shut down otel meter provider: %w", err)
 				shutdownErrs = errors.Join(shutdownErrs, err)
 			}
 		}
 		if traceProvider != nil {
-			err = traceProvider.Shutdown(ctx)
+			err := traceProvider.Shutdown(ctx)
 			if err != nil {
 				err = fmt.Errorf("failed to shut down otel trace provider: %w", err)
 				shutdownErrs = errors.Join(shutdownErrs, err)
 			}
 		}
 		if grpcConn != nil {
-			err = grpcConn.Close()
+			err := grpcConn.Close()
 			if err != nil {
 				err = fmt.Errorf("failed to shut down otel grpc connection: %w", err)
 				shutdownErrs = errors.Join(shutdownErrs, err)
 			}
 		}
 		if metricFile != nil {
-			err = metricFile.Close()
+			err := metricFile.Close()
 			if err != nil {
 				err = fmt.Errorf("failed to close otel meter file: %w", err)
 				shutdownErrs = errors.Join(shutdownErrs, err)
 			}
 		}
 		if traceFile != nil {
-			err = traceFile.Close()
+			err := traceFile.Close()
 			if err != nil {
 				err = fmt.Errorf("failed to close otel trace file: %w", err)
 				shutdownErrs = errors.Join(shutdownErrs, err)
@@ -133,7 +139,7 @@ func setupOTelSDK(
 		),
 	)
 	if err != nil {
-		return nil, err
+		return nil
 	}
 
 	if otelDir != "" {
@@ -141,19 +147,21 @@ func setupOTelSDK(
 		traceFile, err = os.OpenFile(traceFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
 			shutdown(ctx)
-			return nil, fmt.Errorf("failed to open otel trace file %s: %w", traceFilePath, err)
+			err = fmt.Errorf("failed to open otel trace file %s: %w", traceFilePath, err)
+			return nil
 		}
 		metricFilePath := filepath.Join(otelDir, "k8s-dqlite-metrics.txt")
 		metricFile, err = os.OpenFile(metricFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
 			shutdown(ctx)
-			return nil, fmt.Errorf("failed to open otel metric file %s: %w", traceFilePath, err)
+			err = fmt.Errorf("failed to open otel metric file %s: %w", traceFilePath, err)
+			return nil
 		}
 	} else {
 		grpcConn, err = initConn(otelEndpoint)
 		if err != nil {
 			shutdown(ctx)
-			return nil, err
+			return nil
 		}
 	}
 
@@ -165,13 +173,13 @@ func setupOTelSDK(
 	}
 	if err != nil {
 		shutdown(ctx)
-		return nil, err
+		return nil
 	}
 
 	tracerProvider, err := newTraceProvider(traceExporter, res, spanNameFilter, spanMinDurationFilter)
 	if err != nil {
 		shutdown(ctx)
-		return nil, err
+		return nil
 	}
 	otel.SetTracerProvider(tracerProvider)
 
@@ -183,17 +191,17 @@ func setupOTelSDK(
 	}
 	if err != nil {
 		shutdown(ctx)
-		return nil, err
+		return nil
 	}
 
 	meterProvider, err = newMeterProvider(metricExporter, res)
 	if err != nil {
 		shutdown(ctx)
-		return nil, err
+		return nil
 	}
 	otel.SetMeterProvider(meterProvider)
 
-	return shutdown, nil
+	return shutdown
 }
 
 func initConn(otelEndpoint string) (*grpc.ClientConn, error) {

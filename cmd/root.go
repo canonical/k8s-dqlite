@@ -105,13 +105,10 @@ var (
 					}
 				}
 
-				otelShutdown, err = setupOTelSDK(cmd.Context(), rootCmdOpts.otelAddress,
+				otelShutdown = setupOTelSDK(cmd.Context(), rootCmdOpts.otelAddress,
 					rootCmdOpts.otelDir,
 					rootCmdOpts.otelSpanNameFilter,
 					otelSpanMinDuration)
-				if err != nil {
-					logrus.WithError(err).Warning("failed to setup otel sdk")
-				}
 			}
 
 			var metricsServer *http.Server
