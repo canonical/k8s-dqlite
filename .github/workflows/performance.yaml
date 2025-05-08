@@ -56,6 +56,19 @@ jobs:
             echo "Docker is installed, purging it"
             sudo apt-get purge -y docker-engine docker docker.io docker-ce docker-ce-cli containerd runc
           fi
+      - name: Create snap with k8s-dqlite v1.6.0
+        run: |
+          set -o pipefail
+          git fetch origin --tags
+          git reset --hard v1.6.0
+          sudo add-apt-repository ppa:dqlite/dev
+          sudo apt install libdqlite-dev libdqlite0
+          sudo apt install golang-canonical-go-dqlite-v3-dev
+          sudo apt install dqlite-tools-v3
+          make dynamic
+          sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
+          sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
+          sudo mksquashfs snap-unpack-dir v1-6-0.snap -noappend -comp lzo -no-fragments
       - name: Download latest k8s-snap
         run: |
           sudo snap download k8s --channel=latest/edge --basename k8s
@@ -86,19 +99,6 @@ jobs:
           sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
           sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
           sudo mksquashfs snap-unpack-dir v1-1-11.snap -noappend -comp lzo -no-fragments
-      - name: Create snap with k8s-dqlite v1.6.0
-        run: |
-          set -o pipefail
-          git fetch origin --tags
-          git reset --hard v1.6.0
-          sudo add-apt-repository ppa:dqlite/dev
-          sudo apt install libdqlite-dev libdqlite0
-          sudo apt install golang-canonical-go-dqlite-v3-dev
-          sudo apt install dqlite-tools-v3
-          make static
-          sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
-          sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
-          sudo mksquashfs snap-unpack-dir v1-6-0.snap -noappend -comp lzo -no-fragments
       - name: Switch back to target branch
         run: git reset --hard $TARGET_SHA
       - name: Run Performance test ${{ github.head_ref }} snap
