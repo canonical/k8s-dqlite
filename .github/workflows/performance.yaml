@@ -56,6 +56,12 @@ jobs:
             echo "Docker is installed, purging it"
             sudo apt-get purge -y docker-engine docker docker.io docker-ce docker-ce-cli containerd runc
           fi
+      - name: Download latest k8s-snap
+        run: |
+          sudo snap download k8s --channel=latest/edge --basename k8s
+      - name: Unpack Snap
+        run: |
+          sudo unsquashfs -d snap-unpack-dir k8s.snap
       - name: Create snap with k8s-dqlite v1.6.0
         run: |
           set -o pipefail
@@ -69,12 +75,6 @@ jobs:
           sudo cp ./bin/dynamic/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
           sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
           sudo mksquashfs snap-unpack-dir v1-6-0.snap -noappend -comp lzo -no-fragments
-      - name: Download latest k8s-snap
-        run: |
-          sudo snap download k8s --channel=latest/edge --basename k8s
-      - name: Unpack Snap
-        run: |
-          sudo unsquashfs -d snap-unpack-dir k8s.snap
       - name: Create snap with k8s-dqlite ${{ github.head_ref }} code
         run: |
           make static
