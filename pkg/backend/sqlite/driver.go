@@ -78,8 +78,8 @@ func init() {
 // no-op for sqlite.
 var (
 	revSQL = `
-		SELECT MAX(rkv.id) AS id
-		FROM kine AS rkv`
+		SELECT MAX(id) AS id
+		FROM kine`
 
 	listSQL = `
 		SELECT kv.id,
@@ -99,6 +99,44 @@ var (
 	    	ON maxkv.id = kv.id
 		WHERE kv.deleted = 0
 		ORDER BY kv.name ASC, kv.id ASC`
+
+	// listSQL query looks for the latest version of every row in
+	// the range.
+	// The search for the "latest id" (table `maxkv` in the query)
+	// can be carried on quickly with a covering index (kine_name_index).
+	// Unfortunately, using a normal JOIN operation will confuse
+	// SQLite planner and insert a SORT temp table at the end of
+	// the plan, forcing SQLite to load and sort the entire set
+	// before returning it (and making the cost of a paginated
+	// query very high) and returning an unsorted set would make
+	// pagination impossible.
+	// To workaround this silly misplan, a ORDER BY in the first
+	// table forces ordering of `maxkv` (without paying for it
+	// as it is the same order as the index) and CROSS JOIN is
+	// used as it forces SQLite to keep the outer-loop order
+	// when joining tables.
+	// See https://www.sqlite.org/optoverview.html#crossjoin
+	// for more details.
+	listSqlV1_0 = `
+		WITH maxkv AS (
+			SELECT MAX(id) AS id
+			FROM kine
+			WHERE name >= CAST(? AS TEXT) AND name < CAST(? AS TEXT)
+				AND id <= ?
+			GROUP BY name
+			HAVING deleted = 0
+			ORDER BY name
+		)
+		SELECT kv.id,
+			name,
+			CASE
+				WHEN kv.created THEN kv.id
+				ELSE kv.create_revision
+			END AS create_revision,
+			lease,
+			value
+		FROM maxkv CROSS JOIN kine kv
+			ON maxkv.id = kv.id`
 
 	revisionIntervalSQL = `
 		SELECT (
@@ -123,6 +161,17 @@ var (
 		) AS maxkv
 	    	ON maxkv.id = kv.id
 		WHERE kv.deleted = 0`
+
+	countRevisionSQLV1_0 = `
+		SELECT COUNT(*)
+		FROM (
+			SELECT MAX(id)
+			FROM kine
+			WHERE name >= CAST(? AS TEXT) AND name < CAST(? AS TEXT)
+				AND id <= ?
+			GROUP BY name
+			HAVING deleted = 0
+		)`
 
 	afterSQLPrefix = `
 		SELECT id, name, created, deleted, create_revision, prev_revision, lease, value, old_value
@@ -242,7 +291,8 @@ func (s Stripped) String() string {
 }
 
 type Driver struct {
-	config *DriverConfig
+	config               *DriverConfig
+	currentSchemaVersion SchemaVersion
 }
 
 type DriverConfig struct {
@@ -268,8 +318,10 @@ func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
 		}
 	}
 
+	var err error
+	var currentSchemaVersion SchemaVersion
 	for i := 0; i < retryAttempts; i++ {
-		err := setup(ctx, config.DB)
+		currentSchemaVersion, err = setup(ctx, config.DB)
 		if err == nil {
 			break
 		}
@@ -281,8 +333,13 @@ func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
 		}
 	}
 
+	if err != nil {
+		return nil, err // Return the last error if all retries fail
+	}
+
 	return &Driver{
-		config: config,
+		config:               config,
+		currentSchemaVersion: currentSchemaVersion,
 	}, nil
 }
 
@@ -290,73 +347,62 @@ func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
 // it doesn't already exist, migrating key_value table contents to the Kine
 // table if the key_value table exists, all in a single database transaction.
 // changes are rolled back if an error occurs.
-func setup(ctx context.Context, db database.Interface) error {
+func setup(ctx context.Context, db database.Interface) (SchemaVersion, error) {
 	conn, err := db.Conn(ctx)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer conn.Close()
 
 	// Optimistically ask for the user_version without starting a transaction
 	var currentSchemaVersion SchemaVersion
-
-	row := conn.QueryRowContext(ctx, `PRAGMA user_version`)
+	row := conn.QueryRowContext(ctx, "PRAGMA user_version")
 	if err := row.Scan(&currentSchemaVersion); err != nil {
-		return err
+		return 0, err
 	}
 
 	if err := currentSchemaVersion.CompatibleWith(databaseSchemaVersion); err != nil {
-		return err
+		// TODO: add a migration path for this case
+		// For now we will remain on the old schema version
+		return currentSchemaVersion, nil
 	}
 	if currentSchemaVersion >= databaseSchemaVersion {
-		return nil
+		return currentSchemaVersion, nil
 	}
 
 	txn, err := conn.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer txn.Rollback()
 
-	if err := migrate(ctx, txn); err != nil {
-		return fmt.Errorf("migration failed: %w", err)
-	}
-
-	return txn.Commit()
-}
-
-// migrate tries to migrate from a version of the database
-// to the target one.
-func migrate(ctx context.Context, txn *sql.Tx) error {
-	var currentSchemaVersion SchemaVersion
-
-	row := txn.QueryRowContext(ctx, `PRAGMA user_version`)
+	row = txn.QueryRowContext(ctx, `PRAGMA user_version`)
 	if err := row.Scan(&currentSchemaVersion); err != nil {
-		return err
+		return 0, err
 	}
 
 	if err := currentSchemaVersion.CompatibleWith(databaseSchemaVersion); err != nil {
-		return err
+		return 0, err
 	}
+
 	if currentSchemaVersion >= databaseSchemaVersion {
-		return nil
+		return currentSchemaVersion, nil
 	}
 
-	switch currentSchemaVersion {
-	case NewSchemaVersion(0, 0):
+	if currentSchemaVersion == NewSchemaVersion(0, 0) {
 		if err := applySchemaV0_1(ctx, txn); err != nil {
-			return err
+			return currentSchemaVersion, fmt.Errorf("failed to apply schema v0.1: %w", err)
 		}
-	default:
-		return nil
+		if err := applySchemaV1_0(ctx, txn); err != nil {
+			return currentSchemaVersion, fmt.Errorf("failed to apply schema v0.2: %w", err)
+		}
+		query := fmt.Sprintf("PRAGMA user_version = %d", databaseSchemaVersion)
+		if _, err := txn.ExecContext(ctx, query); err != nil {
+			return currentSchemaVersion, fmt.Errorf("failed to set user version: %w", err)
+		}
 	}
 
-	setUserVersionSQL := fmt.Sprintf(`PRAGMA user_version = %d`, databaseSchemaVersion)
-	if _, err := txn.ExecContext(ctx, setUserVersionSQL); err != nil {
-		return err
-	}
-
-	return nil
+	return currentSchemaVersion, txn.Commit()
 }
 
 func (d *Driver) query(ctx context.Context, txName, query string, args ...interface{}) (rows *sql.Rows, err error) {
@@ -438,7 +484,12 @@ func (d *Driver) Count(ctx context.Context, key, rangeEnd []byte, revision int64
 	if len(rangeEnd) == 0 {
 		rangeEnd = append(key, 0)
 	}
-	rows, err := d.query(ctx, "count_revision", countRevisionSQL, key, rangeEnd, revision)
+	query := countRevisionSQL
+	if d.currentSchemaVersion == databaseSchemaVersion {
+		query = countRevisionSQLV1_0
+	}
+
+	rows, err := d.query(ctx, "count_revision", query, key, rangeEnd, revision)
 	if err != nil {
 		return 0, err
 	}
@@ -676,6 +727,10 @@ func (d *Driver) List(ctx context.Context, key, rangeEnd []byte, limit, revision
 		rangeEnd = append(key, 0)
 	}
 	sql := listSQL
+	if d.currentSchemaVersion == databaseSchemaVersion {
+		sql = listSqlV1_0
+	}
+
 	if limit > 0 {
 		sql = fmt.Sprintf("%s LIMIT ?", sql)
 		return d.query(ctx, "list_revision_start_sql_limit", sql, key, rangeEnd, revision, limit)

@@ -16,7 +16,8 @@ import (
 type SchemaVersion int32
 
 var (
-	databaseSchemaVersion = NewSchemaVersion(0, 1)
+	databaseSchemaVersion  = NewSchemaVersion(1, 0)
+	ErrIncompatibleVersion = fmt.Errorf("incompatible schema version")
 )
 
 func NewSchemaVersion(major int16, minor int16) SchemaVersion {
@@ -34,9 +35,12 @@ func (sv SchemaVersion) Minor() int16 {
 }
 
 func (sv SchemaVersion) CompatibleWith(targetSV SchemaVersion) error {
-	// Major version must be the same
+	// Major version must be the same unless the schema version is 0.0
+	if sv.Major() == 0 && sv.Minor() == 0 {
+		return nil
+	}
 	if sv.Major() != targetSV.Major() {
-		return fmt.Errorf("can not migrate between different major versions")
+		return ErrIncompatibleVersion
 	}
 	return nil
 }
@@ -51,18 +55,18 @@ func applySchemaV0_1(ctx context.Context, txn *sql.Tx) error {
 		// In this case the schema it's empty, so it is just
 		// a matter of creating the table.
 		createTableSQL := `
-CREATE TABLE kine
-(
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
-	name TEXT NOT NULL,
-	created INTEGER,
-	deleted INTEGER,
-	create_revision INTEGER NOT NULL,
-	prev_revision INTEGER,
-	lease INTEGER,
-	value BLOB,
-	old_value BLOB
-)`
+		CREATE TABLE kine
+		(
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			created INTEGER,
+			deleted INTEGER,
+			create_revision INTEGER NOT NULL,
+			prev_revision INTEGER,
+			lease INTEGER,
+			value BLOB,
+			old_value BLOB
+		)`
 
 		if _, err := txn.ExecContext(ctx, createTableSQL); err != nil {
 			return err
@@ -85,7 +89,25 @@ CREATE TABLE kine
 	if _, err := txn.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS kine_name_prev_revision_uindex ON kine (prev_revision, name)`); err != nil {
 		return err
 	}
+	return nil
+}
 
+// applySchemaV1_0 moves the schema from major version 0 to version 1.
+func applySchemaV1_0(ctx context.Context, txn *sql.Tx) error {
+	// Legacy nodes (v1..1.12 and older) panic if they try to migrate to any
+	// new version, so we need a bump in the major version.
+	// See https://github.com/canonical/k8s-dqlite/blob/v1.1.12/pkg/kine/drivers/sqlite/sqlite.go#L169
+	if _, err := txn.ExecContext(ctx, `DROP INDEX IF EXISTS kine_name_index`); err != nil {
+		return err
+	}
+
+	if _, err := txn.ExecContext(ctx, `DROP INDEX IF EXISTS kine_name_prev_revision_uindex`); err != nil {
+		return err
+	}
+
+	if _, err := txn.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS k8s_dqlite_name_del_index ON kine (name ASC, id DESC, deleted)`); err != nil {
+		return err
+	}
 	return nil
 }
 
