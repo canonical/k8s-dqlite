@@ -91,6 +91,10 @@ jobs:
           set -o pipefail
           git fetch origin --tags
           git reset --hard v1.6.0
+          sudo add-apt-repository ppa:dqlite/dev
+          sudo apt install libdqlite-dev libdqlite0
+          sudo apt install golang-canonical-go-dqlite-v3-dev
+          sudo apt install dqlite-tools-v3
           make static
           sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
           sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
