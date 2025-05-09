@@ -69,7 +69,7 @@ jobs:
           sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
           sudo mksquashfs snap-unpack-dir head.snap -noappend -comp lzo -no-fragments
       - name: Setup tmate session
-        uses: canonical/action-tmate@main
+        uses: tmate-io/tmate@v2
       - name: Create snap with k8s-dqlite v1.6.0
         run: |
           set -o pipefail
