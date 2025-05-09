@@ -79,7 +79,7 @@ jobs:
         run: |
           sudo snap download k8s \
             --channel=latest/edge \
-            --basename base-code \
+            --basename base-code
           sudo chmod o+r base-code.snap
       - name: Patch k8s snap (base)
         uses: ./.github/actions/patch-k8s-snap
