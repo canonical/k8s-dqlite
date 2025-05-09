@@ -71,12 +71,16 @@ jobs:
         shell: sudo Rscript {0}
       - name: Install lxd
         uses: canonical/k8s-snap/.github/actions/install-lxd@main
+      - name: Patch k8s snap (head)
+        uses: ./.github/actions/patch-k8s-snap
+        with:
+          out-snap-path: head.snap
       - name: Download snap with k8s-dqlite v1.3.1
         run: |
           sudo snap download k8s \
             --channel=latest/edge \
-            --basename head
-          sudo chmod o+r head.snap
+            --basename base-code \
+          sudo chmod o+r base-code.snap
       - name: Patch k8s snap (base)
         uses: ./.github/actions/patch-k8s-snap
         with:
@@ -91,6 +95,7 @@ jobs:
           TEST_METRICS_DIR: ${{ github.workspace }}/test/performance/results
           TEST_RUN_NAME: head
           TEST_KUBE_BURNER_ITERATIONS: 15
+          TEST_ENABLE_PROFILING: 0
         run: |
           cd test/performance
           sg lxd -c 'tox -e performance'
@@ -103,6 +108,7 @@ jobs:
           TEST_METRICS_DIR: ${{ github.workspace }}/test/performance/results
           TEST_RUN_NAME: base-code
           TEST_KUBE_BURNER_ITERATIONS: 15
+          TEST_ENABLE_PROFILING: 0
         run: |
           cd test/performance
           sg lxd -c 'tox -e performance'
