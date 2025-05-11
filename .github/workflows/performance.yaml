@@ -86,6 +86,11 @@ jobs:
         with:
           out-snap-path: base-code.snap
           build-commit: $BASE_SHA
+      - name: Patch k8s snap v1.1.12
+        uses: ./.github/actions/patch-k8s-snap
+        with:
+          out-snap-path: v1-1-12.snap
+          build-commit: 0712a12f1a4da107ab40fd9021cb801dd98636aa
       - name: Run Performance test ${{ github.head_ref }} snap
         env:
           TEST_SNAP: ${{ github.workspace }}/head.snap
@@ -93,7 +98,7 @@ jobs:
           TEST_LXD_IMAGE: ubuntu:22.04
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
           TEST_METRICS_DIR: ${{ github.workspace }}/test/performance/results
-          TEST_RUN_NAME: head
+          TEST_RUN_NAME: current
           TEST_KUBE_BURNER_ITERATIONS: 15
           TEST_ENABLE_PROFILING: 0
         run: |
@@ -106,7 +111,20 @@ jobs:
           TEST_LXD_IMAGE: ubuntu:22.04
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
           TEST_METRICS_DIR: ${{ github.workspace }}/test/performance/results
-          TEST_RUN_NAME: base-code
+          TEST_RUN_NAME: v1-3-1
+          TEST_KUBE_BURNER_ITERATIONS: 15
+          TEST_ENABLE_PROFILING: 0
+        run: |
+          cd test/performance
+          sg lxd -c 'tox -e performance'
+      - name: Run Performance test for v1-6-0 snap
+        env:
+          TEST_SNAP: ${{ github.workspace }}/v1-1-12.snap
+          TEST_SUBSTRATE: lxd
+          TEST_LXD_IMAGE: ubuntu:22.04
+          TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
+          TEST_METRICS_DIR: ${{ github.workspace }}/test/performance/results
+          TEST_RUN_NAME: v1-1-12
           TEST_KUBE_BURNER_ITERATIONS: 15
           TEST_ENABLE_PROFILING: 0
         run: |
@@ -121,6 +139,8 @@ jobs:
              ./results/aggregated-results/single-node/head-metrics.log
           cp ./results/base-code/single-node/metrics.log \
              ./results/aggregated-results/single-node/base-metrics.log
+          cp ./results/v1-1-12/single-node/metrics.log \
+              ./results/aggregated-results/single-node/v1-1-12-metrics.log
           sudo Rscript parse-performance-metrics.R \
             -p ./results/aggregated-results/single-node/ \
             -o ./results/aggregated-results/single-node/ \
