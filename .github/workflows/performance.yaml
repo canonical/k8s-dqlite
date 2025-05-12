@@ -101,6 +101,7 @@ jobs:
           TEST_RUN_NAME: current
           TEST_KUBE_BURNER_ITERATIONS: 15
           TEST_ENABLE_PROFILING: 0
+          TEST_OTEL_ENABLED: 0
         run: |
           cd test/performance
           sg lxd -c 'tox -e performance'
@@ -114,10 +115,11 @@ jobs:
           TEST_RUN_NAME: v1-3-1
           TEST_KUBE_BURNER_ITERATIONS: 15
           TEST_ENABLE_PROFILING: 0
+          TEST_OTEL_ENABLED: 0
         run: |
           cd test/performance
           sg lxd -c 'tox -e performance'
-      - name: Run Performance test for v1-6-0 snap
+      - name: Run Performance test for v1-1-12 snap
         env:
           TEST_SNAP: ${{ github.workspace }}/v1-1-12.snap
           TEST_SUBSTRATE: lxd
@@ -127,6 +129,7 @@ jobs:
           TEST_RUN_NAME: v1-1-12
           TEST_KUBE_BURNER_ITERATIONS: 15
           TEST_ENABLE_PROFILING: 0
+          TEST_OTEL_ENABLED: 0
         run: |
           cd test/performance
           sg lxd -c 'tox -e performance'
