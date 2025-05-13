@@ -138,10 +138,10 @@ jobs:
         run: |
           cd test/performance
           mkdir -p ./results/aggregated-results/single-node
-          cp ./results/head/single-node/metrics.log \
-             ./results/aggregated-results/single-node/head-metrics.log
-          cp ./results/base-code/single-node/metrics.log \
-             ./results/aggregated-results/single-node/base-metrics.log
+          cp ./results/current/single-node/metrics.log \
+             ./results/aggregated-results/single-node/current-metrics.log
+          cp ./results/v1-3-1/single-node/metrics.log \
+             ./results/aggregated-results/single-node/v1-3-1-metrics.log
           cp ./results/v1-1-12/single-node/metrics.log \
               ./results/aggregated-results/single-node/v1-1-12-metrics.log
           sudo Rscript parse-performance-metrics.R \
