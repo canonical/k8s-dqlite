@@ -2,7 +2,9 @@ package migrator
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -36,7 +38,7 @@ func BackupEtcd(ctx context.Context, endpoint, dir string) error {
 		return fmt.Errorf("failed to backup directory: %w", err)
 	}
 	for idx, kv := range resp.Kvs {
-		logrus.WithFields(logrus.Fields{"index": idx, "key": string(kv.Key), "len": len(kv.Value)}).Print("Writing key")
+		logrus.WithFields(logrus.Fields{"index": idx, "key": string(kv.Key), "len": len(kv.Value)}).Print("writing key")
 		if err := os.WriteFile(keyFileName(dir, idx), kv.Key, 0640); err != nil {
 			return fmt.Errorf("failed to write key file %d: %w", idx, err)
 		}
@@ -61,10 +63,10 @@ func RestoreToDqlite(ctx context.Context, endpoint, dir string) error {
 	for {
 		b, err := os.ReadFile(keyFileName(dir, idx))
 		if err != nil {
-			if !os.IsNotExist(err) {
+			if !errors.Is(err, fs.ErrNotExist) {
 				return fmt.Errorf("failed to read key file: %w", err)
 			}
-			logrus.WithField("entries", idx).Print("Completed database restore")
+			logrus.WithField("entries", idx).Print("completed database restore")
 			return nil
 		}
 		key := string(b)
@@ -75,9 +77,9 @@ func RestoreToDqlite(ctx context.Context, endpoint, dir string) error {
 		}
 
 		log := logrus.WithFields(logrus.Fields{"index": idx, "key": key})
-		log.Debug("Restore key")
+		log.Debug("restore key")
 		if err := putKey(ctx, client, key, value); err != nil {
-			log.Error("Failed to restore key")
+			log.Error("failed to restore key")
 		}
 
 		idx++
@@ -100,7 +102,7 @@ func BackupDqlite(ctx context.Context, endpoint, dir string) error {
 		return fmt.Errorf("failed to backup directory: %w", err)
 	}
 	for idx, kv := range resp {
-		logrus.WithFields(logrus.Fields{"index": idx, "key": string(kv.Key), "len": len(kv.Data)}).Print("Writing key")
+		logrus.WithFields(logrus.Fields{"index": idx, "key": string(kv.Key), "len": len(kv.Data)}).Print("writing key")
 		if err := os.WriteFile(keyFileName(dir, idx), kv.Key, 0640); err != nil {
 			return fmt.Errorf("failed to write key file %d: %w", idx, err)
 		}
@@ -123,10 +125,10 @@ func RestoreToEtcd(ctx context.Context, endpoint, dir string) error {
 	for {
 		b, err := os.ReadFile(keyFileName(dir, idx))
 		if err != nil {
-			if !os.IsNotExist(err) {
+			if !errors.Is(err, fs.ErrNotExist) {
 				return fmt.Errorf("failed to read key file: %w", err)
 			}
-			logrus.WithField("entries", idx).Print("Completed database restore")
+			logrus.WithField("entries", idx).Print("completed database restore")
 			return nil
 		}
 		key := string(b)
@@ -137,9 +139,9 @@ func RestoreToEtcd(ctx context.Context, endpoint, dir string) error {
 		}
 
 		log := logrus.WithFields(logrus.Fields{"index": idx, "key": key})
-		log.Debug("Restore key")
+		log.Debug("restore key")
 		if _, err := client.Put(ctx, key, string(value)); err != nil {
-			log.Error("Failed to restore key")
+			log.Error("failed to restore key")
 		}
 
 		idx++
