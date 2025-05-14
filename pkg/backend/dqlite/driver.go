@@ -62,7 +62,7 @@ func (d *Driver) Compact(ctx context.Context, revision int64) (err error) {
 	// Skip the compaction if we're not the leader.
 	isLeader, err := d.isLocalNodeLeader(ctx)
 	if err != nil {
-		logrus.WithError(err).Warning("Couldn't determine whether the local node is the leader, allowing the compaction to proceed")
+		logrus.WithError(err).Warning("couldn't determine whether the local node is the leader, allowing the compaction to proceed")
 	} else if !isLeader {
 		logrus.Trace("skipping compaction on follower node")
 		return nil
