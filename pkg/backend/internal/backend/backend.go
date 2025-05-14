@@ -135,6 +135,9 @@ func (s *Backend) Close() error {
 
 func (s *Backend) compactStart(ctx context.Context) error {
 	currentRevision, err := s.Driver.CurrentRevision(ctx)
+	if err != nil {
+		return err
+	}
 
 	rows, err := s.Driver.AfterPrefix(ctx, []byte("compact_rev_key"), []byte("compact_rev_key\x00"), 0, currentRevision)
 	if err != nil {
