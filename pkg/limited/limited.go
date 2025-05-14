@@ -30,16 +30,32 @@ func txnHeader(rev int64) *etcdserverpb.ResponseHeader {
 
 func (l *LimitedServer) Txn(ctx context.Context, txn *etcdserverpb.TxnRequest) (*etcdserverpb.TxnResponse, error) {
 	if put := isCreate(txn); put != nil {
-		return l.create(ctx, put)
+		resp, err := l.create(ctx, put)
+		if err != nil {
+			err = fmt.Errorf("create transaction failed: %w", err)
+		}
+		return resp, err
 	}
 	if rev, key, ok := isDelete(txn); ok {
-		return l.delete(ctx, key, rev)
+		resp, err := l.delete(ctx, key, rev)
+		if err != nil {
+			err = fmt.Errorf("delete transaction failed for key %s: %w", string(key), err)
+		}
+		return resp, err
 	}
 	if rev, key, value, lease, ok := isUpdate(txn); ok {
-		return l.update(ctx, rev, key, value, lease)
+		resp, err := l.update(ctx, rev, key, value, lease)
+		if err != nil {
+			err = fmt.Errorf("update transaction failed for key %s: %w", string(key), err)
+		}
+		return resp, err
 	}
 	if isCompact(txn) {
-		return l.compact(ctx)
+		resp, err := l.compact(ctx)
+		if err != nil {
+			err = fmt.Errorf("compact transaction failed: %w", err)
+		}
+		return resp, err
 	}
 	return nil, fmt.Errorf("unsupported transaction: %v", txn)
 }

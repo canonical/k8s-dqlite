@@ -2,6 +2,7 @@ package migrator
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -12,16 +13,17 @@ func putKey(ctx context.Context, c client.Client, key string, value []byte) erro
 	err := c.Create(ctx, key, value)
 	if err == nil {
 		return nil
-	} else if err.Error() != "key exists" {
+	} else if !errors.Is(err, client.ErrKeyExists) {
 		return fmt.Errorf("failed to create key %q: %w", key, err)
 	}
 	// failed to create key because it exists, make a few attempts to overwrite it
 	for i := 0; i < 5 && err != nil; i++ {
 		time.Sleep(50 * time.Millisecond)
 		err = c.Put(ctx, key, value)
+
+		if err == nil {
+			return nil
+		}
 	}
-	if err != nil {
-		return fmt.Errorf("failed to put key %q: %w", key, err)
-	}
-	return nil
+	return fmt.Errorf("failed to put key %q: %w", key, err)
 }

@@ -114,8 +114,7 @@ func (w *WatcherGroup) Watch(watchId int64, key, rangeEnd []byte, startRevision 
 
 		compactRev, rev, err := w.driver.GetCompactRevision(ctx)
 		if err != nil {
-			logrus.Errorf("Failed to get compact revision: %v", err)
-			return err
+			return fmt.Errorf("failed to get compact revision: %w", err)
 		}
 		if startRevision < compactRev {
 			return &limited.CompactedError{CompactRevision: compactRev, CurrentRevision: rev}
@@ -127,7 +126,7 @@ func (w *WatcherGroup) Watch(watchId int64, key, rangeEnd []byte, startRevision 
 			delete(w.watchers, watchId)
 			w.mu.Unlock()
 			if !errors.Is(err, context.Canceled) {
-				logrus.Errorf("Failed to list %s for revision %d: %v", key, startRevision, err)
+				err = fmt.Errorf("failed to list %s for revision %d: %w", key, startRevision, err)
 			}
 			return err
 		}
@@ -284,6 +283,6 @@ func (s *Backend) WatcherGroup(ctx context.Context) (limited.WatcherGroup, error
 	})
 	wg.stop = stop
 	s.WatcherGroups[wg] = wg
-	logrus.Debugf("created new WatcherGroup.")
+	logrus.Debugf("created a new WatcherGroup")
 	return wg, nil
 }

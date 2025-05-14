@@ -1,7 +1,9 @@
 package server
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -33,7 +35,7 @@ func fileMarshal(v interface{}, path ...string) error {
 
 func fileExists(path ...string) (bool, error) {
 	if _, err := os.Stat(filepath.Join(path...)); err != nil {
-		if !os.IsNotExist(err) {
+		if !errors.Is(err, fs.ErrNotExist) {
 			return false, fmt.Errorf("failed to stat: %w", err)
 		}
 		return false, nil

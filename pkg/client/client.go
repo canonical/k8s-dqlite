@@ -17,7 +17,8 @@ type Value struct {
 }
 
 var (
-	ErrNotFound = errors.New("etcdwrapper: key not found")
+	ErrNotFound  = errors.New("etcdwrapper: key not found")
+	ErrKeyExists = errors.New("key exists")
 )
 
 type Client interface {
@@ -109,7 +110,7 @@ func (c *client) Create(ctx context.Context, key string, value []byte) error {
 		return err
 	}
 	if !resp.Succeeded {
-		return fmt.Errorf("key exists")
+		return ErrKeyExists
 	}
 	return nil
 }

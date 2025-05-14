@@ -36,8 +36,6 @@ type DriverConfig struct {
 }
 
 func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
-	logrus.Printf("New driver for dqlite")
-
 	if config.App == nil {
 		return nil, fmt.Errorf("no go-dqlite app specified")
 	}
@@ -64,7 +62,7 @@ func (d *Driver) Compact(ctx context.Context, revision int64) (err error) {
 	// Skip the compaction if we're not the leader.
 	isLeader, err := d.isLocalNodeLeader(ctx)
 	if err != nil {
-		logrus.WithError(err).Warning("Couldn't determine whether the local node is the leader, allowing the compaction to proceed")
+		logrus.WithError(err).Warning("couldn't determine whether the local node is the leader, allowing the compaction to proceed")
 	} else if !isLeader {
 		logrus.Trace("skipping compaction on follower node")
 		return nil
@@ -142,7 +140,7 @@ SELECT id, name, created, deleted, create_revision, prev_revision, lease, value,
 FROM kine
 ORDER BY id ASC`)
 	if err != nil {
-		logrus.Errorf("failed to find old data to migrate: %v", err)
+		logrus.Warnf("failed to find old data to migrate: %v", err)
 		return nil
 	}
 	defer oldData.Close()

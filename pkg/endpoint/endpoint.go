@@ -2,6 +2,8 @@ package endpoint
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"net"
 	"os"
 	"strings"
@@ -89,7 +91,7 @@ func createListener(listen string) (_ net.Listener, err error) {
 	network, address := networkAndAddress(listen)
 
 	if network == "unix" {
-		if err := os.Remove(address); err != nil && !os.IsNotExist(err) {
+		if err := os.Remove(address); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			logrus.Warnf("failed to remove socket %s: %v", address, err)
 		}
 		defer func() {

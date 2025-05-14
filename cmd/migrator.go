@@ -30,23 +30,23 @@ Copy data between etcd and k8s-dqlite
 
 			ctx := cmd.Context()
 
-			logrus.WithFields(logrus.Fields{"mode": migratorCmdOpts.mode, "endpoint": migratorCmdOpts.endpoint, "dir": migratorCmdOpts.dbDir}).Print("Starting migrator")
+			logrus.WithFields(logrus.Fields{"mode": migratorCmdOpts.mode, "endpoint": migratorCmdOpts.endpoint, "dir": migratorCmdOpts.dbDir}).Print("starting migrator")
 			switch migratorCmdOpts.mode {
 			case "backup", "backup-etcd":
 				if err := migrator.BackupEtcd(ctx, migratorCmdOpts.endpoint, migratorCmdOpts.dbDir); err != nil {
-					logrus.WithError(err).Fatal("Failed to backup etcd")
+					logrus.WithError(err).Fatal("failed to backup etcd")
 				}
 			case "restore", "restore-to-dqlite", "restore-dqlite":
 				if err := migrator.RestoreToDqlite(ctx, migratorCmdOpts.endpoint, migratorCmdOpts.dbDir); err != nil {
-					logrus.WithError(err).Fatal("Failed to restore to etcd")
+					logrus.WithError(err).Fatal("failed to restore to etcd")
 				}
 			case "backup-dqlite":
 				if err := migrator.BackupDqlite(ctx, migratorCmdOpts.endpoint, migratorCmdOpts.dbDir); err != nil {
-					logrus.WithError(err).Fatal("Failed to backup dqlite")
+					logrus.WithError(err).Fatal("failed to backup dqlite")
 				}
 			case "restore-to-etcd", "restore-etcd":
 				if err := migrator.RestoreToEtcd(ctx, migratorCmdOpts.endpoint, migratorCmdOpts.dbDir); err != nil {
-					logrus.WithError(err).Fatal("Failed to restore etcd")
+					logrus.WithError(err).Fatal("failed to restore etcd")
 				}
 			}
 		},
