@@ -32,7 +32,7 @@ func (l *LimitedServer) Txn(ctx context.Context, txn *etcdserverpb.TxnRequest) (
 	if put := isCreate(txn); put != nil {
 		resp, err := l.create(ctx, put)
 		if err != nil {
-			err = fmt.Errorf("create transaction failed: %w", err)
+			err = fmt.Errorf("create transaction failed for key %s: %w", string(put.Key), err)
 		}
 		return resp, err
 	}

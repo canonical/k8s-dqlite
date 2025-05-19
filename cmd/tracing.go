@@ -90,47 +90,49 @@ func setupOTelSDK(
 	var err error
 
 	defer func() {
-		logrus.WithError(err).Warning("failed to setup otel sdk")
+		if err != nil {
+			logrus.WithError(err).Warning("failed to setup otel sdk")
+		}
 	}()
 
 	shutdown = func(ctx context.Context) error {
-		var shutdownErrs error
+		var shutdownErrs []error
 		if meterProvider != nil {
 			err := meterProvider.Shutdown(ctx)
 			if err != nil {
 				err = fmt.Errorf("failed to shut down otel meter provider: %w", err)
-				shutdownErrs = errors.Join(shutdownErrs, err)
+				shutdownErrs = append(shutdownErrs, err)
 			}
 		}
 		if traceProvider != nil {
 			err := traceProvider.Shutdown(ctx)
 			if err != nil {
 				err = fmt.Errorf("failed to shut down otel trace provider: %w", err)
-				shutdownErrs = errors.Join(shutdownErrs, err)
+				shutdownErrs = append(shutdownErrs, err)
 			}
 		}
 		if grpcConn != nil {
 			err := grpcConn.Close()
 			if err != nil {
 				err = fmt.Errorf("failed to shut down otel grpc connection: %w", err)
-				shutdownErrs = errors.Join(shutdownErrs, err)
+				shutdownErrs = append(shutdownErrs, err)
 			}
 		}
 		if metricFile != nil {
 			err := metricFile.Close()
 			if err != nil {
 				err = fmt.Errorf("failed to close otel meter file: %w", err)
-				shutdownErrs = errors.Join(shutdownErrs, err)
+				shutdownErrs = append(shutdownErrs, err)
 			}
 		}
 		if traceFile != nil {
 			err := traceFile.Close()
 			if err != nil {
 				err = fmt.Errorf("failed to close otel trace file: %w", err)
-				shutdownErrs = errors.Join(shutdownErrs, err)
+				shutdownErrs = append(shutdownErrs, err)
 			}
 		}
-		return shutdownErrs
+		return errors.Join(shutdownErrs...)
 	}
 
 	res, err := resource.New(ctx,
