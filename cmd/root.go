@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -62,19 +61,19 @@ var (
 
 			if rootCmdOpts.profiling {
 				go func() {
-					logrus.WithField("address", rootCmdOpts.profilingAddress).Print("Enable pprof endpoint")
+					logrus.WithField("address", rootCmdOpts.profilingAddress).Print("enable pprof endpoint")
 					http.ListenAndServe(rootCmdOpts.profilingAddress, nil)
 				}()
 
 				if rootCmdOpts.profilingDir != "" {
 					f, err := os.Create(filepath.Join(rootCmdOpts.profilingDir, "cpu_profile.raw"))
 					if err != nil {
-						logrus.WithError(err).Fatal("Failed to create cpu profiling file.")
+						logrus.WithError(err).Fatal("failed to create cpu profiling file.")
 					}
 					defer f.Close()
 					err = pprof.StartCPUProfile(f)
 					if err != nil {
-						logrus.WithError(err).Fatal("Failed to setup cpu profiling.")
+						logrus.WithError(err).Fatal("failed to setup cpu profiling.")
 					}
 					defer pprof.StopCPUProfile()
 				}
@@ -85,34 +84,31 @@ var (
 			if rootCmdOpts.otel {
 				var err error
 				if rootCmdOpts.otelAddress == "" && rootCmdOpts.otelDir == "" {
-					logrus.Fatal("No OTEL address or directory specified.")
+					logrus.Fatal("no otel address or directory specified.")
 				}
 				if rootCmdOpts.otelDir != "" {
-					logrus.WithField("otel-dir", rootCmdOpts.otelDir).Print("Dumping otel data to local directory.")
+					logrus.WithField("otel-dir", rootCmdOpts.otelDir).Print("dumping otel data to local directory.")
 					if rootCmdOpts.otelAddress != "" {
-						logrus.Warning("Only one otel exporter allowed, ignoring otel endpoint.")
+						logrus.Warning("only one otel exporter allowed, ignoring otel endpoint.")
 						rootCmdOpts.otelAddress = ""
 					}
 				} else {
-					logrus.WithField("address", rootCmdOpts.otelAddress).Print("Enabling otel endpoint")
+					logrus.WithField("address", rootCmdOpts.otelAddress).Print("enabling otel endpoint")
 				}
 
 				var otelSpanMinDuration time.Duration
 				if rootCmdOpts.otelSpanMinDurationFilter != "" {
 					otelSpanMinDuration, err = time.ParseDuration(rootCmdOpts.otelSpanMinDurationFilter)
 					if err != nil {
-						logrus.Warningf("Could not parse otel span duration %s: %v, defaulting to 10ms.", rootCmdOpts.otelSpanMinDurationFilter, err)
+						logrus.Warningf("could not parse otel span duration %s: %v, defaulting to 10ms.", rootCmdOpts.otelSpanMinDurationFilter, err)
 						otelSpanMinDuration = time.Duration(10) * time.Millisecond
 					}
 				}
 
-				otelShutdown, err = setupOTelSDK(cmd.Context(), rootCmdOpts.otelAddress,
+				otelShutdown = setupOTelSDK(cmd.Context(), rootCmdOpts.otelAddress,
 					rootCmdOpts.otelDir,
 					rootCmdOpts.otelSpanNameFilter,
 					otelSpanMinDuration)
-				if err != nil {
-					logrus.WithError(err).Warning("Failed to setup OpenTelemetry SDK")
-				}
 			}
 
 			var metricsServer *http.Server
@@ -124,14 +120,14 @@ var (
 				}
 				mux, ok := metricsServer.Handler.(*http.ServeMux)
 				if !ok {
-					logrus.Fatal("Failed to create metrics endpoint")
+					logrus.Fatal("failed to create metrics endpoint")
 				} else {
 					mux.Handle("/metrics", promhttp.Handler())
 
 					go func() {
-						logrus.WithField("address", rootCmdOpts.metricsAddress).Print("Enable metrics endpoint")
+						logrus.WithField("address", rootCmdOpts.metricsAddress).Print("enable metrics endpoint")
 						if err := metricsServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-							logrus.WithError(err).Fatal("Failed to start metrics endpoint")
+							logrus.WithError(err).Fatal("failed to start metrics endpoint")
 						}
 					}()
 				}
@@ -152,12 +148,12 @@ var (
 				rootCmdOpts.watchProgressNotifyInterval,
 			)
 			if err != nil {
-				logrus.WithError(err).Fatal("Failed to create server")
+				logrus.WithError(err).Fatal("failed to create server")
 			}
 
 			ctx, cancel := context.WithCancel(cmd.Context())
 			if err := instance.Start(ctx); err != nil {
-				logrus.WithError(err).Fatal("Server failed to start")
+				logrus.WithError(err).Fatal("server failed to start")
 			}
 
 			// Cancel context if we receive an exit signal
@@ -178,17 +174,16 @@ var (
 			defer cancel()
 
 			if err := instance.Shutdown(stopCtx); err != nil {
-				logrus.WithError(err).Fatal("Failed to shutdown server")
+				logrus.WithError(err).Fatal("failed to shutdown server")
 			}
 			if rootCmdOpts.otel && otelShutdown != nil {
-				err = errors.Join(err, otelShutdown(stopCtx))
-				if err != nil {
-					logrus.WithError(err).Warning("Failed to shutdown OpenTelemetry SDK")
+				if err := otelShutdown(stopCtx); err != nil {
+					logrus.WithError(err).Warning("failed to shutdown otel sdk")
 				}
 			}
 			if metricsServer != nil {
 				if err := metricsServer.Shutdown(stopCtx); err != nil {
-					logrus.WithError(err).Fatal("Failed to shutdown metrics endpoint")
+					logrus.WithError(err).Fatal("failed to shutdown metrics endpoint")
 				}
 			}
 		},

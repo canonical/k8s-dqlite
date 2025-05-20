@@ -45,13 +45,17 @@ func (s *Backend) ttl(ctx context.Context) {
 			go run(ctx, key, revision, time.Duration(lease)*time.Second)
 		}
 
-		// TODO needs to be restarted, never cancelled/dropped
 		group, err := s.WatcherGroup(ctx)
 		if err != nil {
 			logrus.Errorf("failed to create watch group for ttl: %v", err)
 			return
 		}
-		group.Watch(1, []byte{0}, []byte{255}, startRevision)
+
+		// TODO needs to be restarted, never cancelled/dropped
+		err = group.Watch(1, []byte{0}, []byte{255}, startRevision)
+		if err != nil {
+			logrus.WithError(err).Warning("ttl watch failed")
+		}
 
 		for group := range group.Updates() {
 			for _, watcher := range group.Watchers() {
