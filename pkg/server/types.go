@@ -26,7 +26,6 @@ type TuningConfiguration struct {
 	Snapshot *struct {
 		Threshold uint64 `yaml:"threshold"`
 		Trailing  uint64 `yaml:"trailing"`
-		Strategy  string `yaml:"strategy"`
 	} `yaml:"snapshot"`
 
 	// NetworkLatency is the average one-way network latency between dqlite nodes.

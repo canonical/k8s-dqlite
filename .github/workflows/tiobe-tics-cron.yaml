@@ -58,7 +58,7 @@ jobs:
           # We load the dqlite libs here instead of doing through make because TICS
           # will try to build parts of the project itself
           sudo add-apt-repository -y ppa:dqlite/dev
-          sudo apt install libdqlite-dev
+          sudo apt install libdqlite1.17-dev
 
           # We need to have our project built
           sudo make clean
