@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	dqlitedrv "github.com/canonical/go-dqlite/v3"
-	"github.com/canonical/go-dqlite/v3/app"
+	dqlitedrv "github.com/canonical/go-dqlite/v2"
+	"github.com/canonical/go-dqlite/v2/app"
 	"github.com/canonical/k8s-dqlite/pkg/backend/dqlite"
 	"github.com/canonical/k8s-dqlite/pkg/backend/sqlite"
 	"github.com/canonical/k8s-dqlite/pkg/database"
@@ -158,7 +158,7 @@ func startSqlite(ctx context.Context, tb testing.TB, dir string) (limited.Backen
 			WatchQueryTimeout: 20 * time.Second,
 		},
 		DriverConfig: &sqlite.DriverConfig{
-			DB: database.NewBatched(database.NewPrepared(db)),
+			DB: database.NewPrepared(db),
 		},
 	})
 
@@ -176,7 +176,6 @@ func startDqlite(ctx context.Context, tb testing.TB, dir string, listener *instr
 		app.WithSnapshotParams(dqlitedrv.SnapshotParams{
 			Threshold: 512,
 			Trailing:  4096,
-			Strategy:  dqlitedrv.TrailingStrategyDynamic,
 		}),
 	)
 	if err != nil {
@@ -205,7 +204,7 @@ func startDqlite(ctx context.Context, tb testing.TB, dir string, listener *instr
 			WatchQueryTimeout: 20 * time.Second,
 		},
 		DriverConfig: &dqlite.DriverConfig{
-			DB:  database.NewBatched(database.NewPrepared(db)),
+			DB:  database.NewPrepared(db),
 			App: app,
 		},
 	})

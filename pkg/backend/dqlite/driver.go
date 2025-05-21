@@ -8,9 +8,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/canonical/go-dqlite/v3"
-	"github.com/canonical/go-dqlite/v3/app"
-	"github.com/canonical/go-dqlite/v3/driver"
+	"github.com/canonical/go-dqlite/v2"
+	"github.com/canonical/go-dqlite/v2/app"
+	"github.com/canonical/go-dqlite/v2/driver"
 	"github.com/canonical/k8s-dqlite/pkg/backend/sqlite"
 	"github.com/canonical/k8s-dqlite/pkg/database"
 	"github.com/mattn/go-sqlite3"
@@ -41,8 +41,9 @@ func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
 	}
 
 	drv, err := sqlite.NewDriver(ctx, &sqlite.DriverConfig{
-		DB:    config.DB,
-		Retry: dqliteRetry,
+		DB:         config.DB,
+		LockWrites: true,
+		Retry:      dqliteRetry,
 	})
 	if err != nil {
 		return nil, err
