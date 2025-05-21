@@ -73,3 +73,10 @@ runs:
         sudo mksquashfs snap-unpack-dir \
           ${{ inputs.out-snap-path}} \
           -noappend -comp lzo -no-fragments
+    
+    - name: Upload k8s snap
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.out-snap-path }}
+        path: ${{ inputs.out-snap-path }}
+

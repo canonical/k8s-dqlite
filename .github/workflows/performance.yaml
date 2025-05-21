@@ -2,7 +2,7 @@ name: Performance Test K8s-snap
 
 on:
   push:
-    branches: ["master"]
+    branches: ["master", "v1-6-0"]
   pull_request:
 
 permissions:
@@ -23,52 +23,13 @@ jobs:
     name: K8s-snap Performance Test
     runs-on: self-hosted-linux-amd64-jammy-large
     steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@v2
-        with:
-          egress-policy: audit
       - name: Checking out repo
         uses: actions/checkout@v4
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-      - name: Install tox
-        run: |
-          pip install tox
+
       - name: Install Go
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Set-up R
-        run: |
-          sudo apt-get install -y --no-install-recommends r-base
-
-          sudo mkdir -p /usr/local/lib/R/site-library/
-          # Ensure that actions/cache is allowed to restore the R lib dir.
-          sudo chown $USER /usr/local/lib/R/site-library/
-      - name: Get R cache key
-        id: get-r-cache-key
-        run: |
-          osVersion=$(lsb_release -rs)
-          rVersion=$(dpkg -s r-base | grep Version | cut -d ' ' -f 2)
-          key="r-libs-$osVersion-$rVersion"
-
-          echo "r-cache-key=$key" >> "$GITHUB_OUTPUT"
-      - name: Restore R package cache
-        id: restore-r-cache
-        uses: actions/cache@v4
-        with:
-          path: /usr/local/lib/R/site-library/
-          key: ${{ steps.get-r-cache-key.outputs.r-cache-key }}
-          restore-keys: ${{ steps.get-r-cache-key.outputs.r-cache-key }}
-      - name: Install R dependencies
-        if: steps.restore-r-cache.outputs.cache-hit != 'true'
-        run: |
-          install.packages(
-            c("ggplot2", "dplyr", "optparse"),
-            repos="https://cloud.r-project.org")
-        shell: sudo Rscript {0}
       - name: Install lxd
         uses: canonical/k8s-snap/.github/actions/install-lxd@main
       - name: Patch k8s snap (head)
@@ -80,69 +41,3 @@ jobs:
         with:
           out-snap-path: base-code.snap
           build-commit: $BASE_SHA
-      - name: Run Performance test ${{ github.head_ref }} snap
-        env:
-          TEST_SNAP: ${{ github.workspace }}/head.snap
-          TEST_SUBSTRATE: lxd
-          TEST_LXD_IMAGE: ubuntu:22.04
-          TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
-          TEST_METRICS_DIR: ${{ github.workspace }}/test/performance/results
-          TEST_RUN_NAME: head
-          TEST_KUBE_BURNER_ITERATIONS: 15
-        run: |
-          cd test/performance
-          sg lxd -c 'tox -e performance'
-      - name: Run Performance test for base code snap
-        env:
-          TEST_SNAP: ${{ github.workspace }}/base-code.snap
-          TEST_SUBSTRATE: lxd
-          TEST_LXD_IMAGE: ubuntu:22.04
-          TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
-          TEST_METRICS_DIR: ${{ github.workspace }}/test/performance/results
-          TEST_RUN_NAME: base-code
-          TEST_KUBE_BURNER_ITERATIONS: 15
-        run: |
-          cd test/performance
-          sg lxd -c 'tox -e performance'
-      - name: Generate aggregated Graphs
-        if: always()
-        run: |
-          cd test/performance
-          mkdir -p ./results/aggregated-results/single-node
-          cp ./results/head/single-node/metrics.log \
-             ./results/aggregated-results/single-node/head-metrics.log
-          cp ./results/base-code/single-node/metrics.log \
-             ./results/aggregated-results/single-node/base-metrics.log
-          sudo Rscript parse-performance-metrics.R \
-            -p ./results/aggregated-results/single-node/ \
-            -o ./results/aggregated-results/single-node/ \
-            -f *metrics.log
-      - name: Upload performance result
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: performance-results
-          path: ${{ github.workspace }}/test/performance/results
-      - name: Prepare inspection reports
-        if: always()
-        run: |
-          tar -czvf inspection-reports.tar.gz -C ${{ github.workspace }} inspection-reports
-          echo "artifact_name=inspection-reports" | sed 's/:/-/g' >> $GITHUB_ENV
-      - name: Upload inspection report artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.artifact_name }}
-          path: ${{ github.workspace }}/inspection-reports.tar.gz
-      - name: Upload base-code.snap
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: base-code.snap
-          path: ${{ github.workspace }}/base-code.snap
-      - name: Upload head.snap
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: head.snap
-          path: ${{ github.workspace }}/head.snap
