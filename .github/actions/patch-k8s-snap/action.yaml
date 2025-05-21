@@ -12,7 +12,7 @@ inputs:
   k8s-snap-channel:
     description: The downloaded k8s-snap channel.
     type: string
-    default: latest/edge
+    default: 1.32-classic/stable
   out-snap-path:
     description: The output k8s snap path.
     type: string
