@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/canonical/go-dqlite/v2"
-	"github.com/canonical/go-dqlite/v2/driver"
+	"github.com/canonical/go-dqlite"
+	"github.com/canonical/go-dqlite/driver"
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/generic"
 	"github.com/canonical/k8s-dqlite/pkg/kine/drivers/sqlite"
 	"github.com/canonical/k8s-dqlite/pkg/kine/server"
