@@ -10,8 +10,7 @@ import (
 	"testing"
 	"time"
 
-	dqlitedrv "github.com/canonical/go-dqlite/v3"
-	"github.com/canonical/go-dqlite/v3/app"
+	"github.com/canonical/go-dqlite/v2/app"
 	"github.com/canonical/k8s-dqlite/pkg/backend/dqlite"
 	"github.com/canonical/k8s-dqlite/pkg/backend/sqlite"
 	"github.com/canonical/k8s-dqlite/pkg/database"
@@ -173,11 +172,6 @@ func startDqlite(ctx context.Context, tb testing.TB, dir string, listener *instr
 	app, err := app.New(dir,
 		app.WithAddress(listener.Address),
 		app.WithExternalConn(listener.Connect, listener.AcceptedConns),
-		app.WithSnapshotParams(dqlitedrv.SnapshotParams{
-			Threshold: 512,
-			Trailing:  4096,
-			Strategy:  dqlitedrv.TrailingStrategyDynamic,
-		}),
 	)
 	if err != nil {
 		tb.Fatalf("failed to create dqlite app: %v", err)
