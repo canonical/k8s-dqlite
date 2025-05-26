@@ -413,7 +413,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	backend, err := dqliteDriver.NewBackend(ctx, &dqliteDriver.BackendConfig{
 		DriverConfig: &dqliteDriver.DriverConfig{
-			DB:  database.NewBatched(database.NewPrepared(db)),
+			DB:  database.NewPrepared(db),
 			App: s.app,
 		},
 		Config: limited.Config{
