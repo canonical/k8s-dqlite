@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"log"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -69,6 +70,7 @@ func New(
 	lowAvailableStorageAction string,
 	connectionPoolConfig generic.ConnectionPoolConfig,
 	watchQueryTimeout time.Duration,
+	debug bool,
 ) (*Server, error) {
 	var (
 		options         []app.Option
@@ -257,6 +259,11 @@ func New(
 		logrus.Warn("dqlite disk mode operation is current at an experimental state and MUST NOT be used in production. Expect data loss.")
 	}
 
+	if debug {
+		logrus.Print("Enable go-dqlite debug mode")
+		options = append(options, app.WithLogFunc(logEveythingFunc))
+	}
+
 	app, err := app.New(dir, options...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create dqlite app: %w", err)
@@ -365,3 +372,8 @@ func (s *Server) Shutdown(ctx context.Context) error {
 }
 
 var _ Instance = &Server{}
+
+func logEveythingFunc(l client.LogLevel, format string, a ...interface{}) {
+	msg := fmt.Sprintf("["+l.String()+"]"+" dqlite: "+format, a...)
+	log.Printf("%s", msg)
+}
