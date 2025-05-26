@@ -52,7 +52,7 @@ func TestMigration(t *testing.T) {
 	}
 
 	if _, err := sqlite.NewDriver(context.Background(), &sqlite.DriverConfig{
-		DB: database.NewBatched(database.NewPrepared(db)),
+		DB: database.NewPrepared(db),
 	}); err != nil {
 		t.Fatal(err)
 	}

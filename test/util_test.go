@@ -157,7 +157,7 @@ func startSqlite(ctx context.Context, tb testing.TB, dir string) (limited.Backen
 			WatchQueryTimeout: 20 * time.Second,
 		},
 		DriverConfig: &sqlite.DriverConfig{
-			DB: database.NewBatched(database.NewPrepared(db)),
+			DB: database.NewPrepared(db),
 		},
 	})
 
@@ -199,7 +199,7 @@ func startDqlite(ctx context.Context, tb testing.TB, dir string, listener *instr
 			WatchQueryTimeout: 20 * time.Second,
 		},
 		DriverConfig: &dqlite.DriverConfig{
-			DB:  database.NewBatched(database.NewPrepared(db)),
+			DB:  database.NewPrepared(db),
 			App: app,
 		},
 	})
