@@ -70,7 +70,9 @@ jobs:
             repos="https://cloud.r-project.org")
         shell: sudo Rscript {0}
       - name: Install lxd
-        uses: canonical/k8s-snap/.github/actions/install-lxd@main
+        uses: canonical/setup-lxd@v0.1.3
+        with:
+          bridges: "lxdbr0"
       - name: Patch k8s snap (head)
         uses: ./.github/actions/patch-k8s-snap
         with:
