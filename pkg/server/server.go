@@ -121,11 +121,15 @@ func New(
 	watchQueryTimeout time.Duration,
 	watchProgressNotifyInterval time.Duration,
 ) (*Server, error) {
-	level := logrus.GetLevel()
 	options := []app.Option{
 		app.WithLogFunc(appLog),
-		app.WithTracing(clientLogLevel(level)),
 	}
+
+	level := logrus.GetLevel()
+	if level == logrus.TraceLevel {
+		options = append(options, app.WithTracing(client.LogDebug))
+	}
+
 	serverConfig := &ServerConfig{
 		ListenAddress: listen,
 
@@ -525,23 +529,8 @@ func logrusLogLevel(level client.LogLevel) logrus.Level {
 	}
 }
 
-// ToLoggingLevel converts a logrus.Level to your custom logging.Level.
-func clientLogLevel(logrusLevel logrus.Level) client.LogLevel {
-	switch logrusLevel {
-	case logrus.ErrorLevel:
-		return client.LogError
-	case logrus.WarnLevel:
-		return client.LogWarn
-	case logrus.InfoLevel:
-		return client.LogInfo
-	case logrus.DebugLevel:
-		return client.LogDebug
-	default:
-		return client.LogNone
-	}
-}
-
 func appLog(level client.LogLevel, format string, args ...interface{}) {
+	format = fmt.Sprintf("[go-dqlite] %s", format)
 	logrus.StandardLogger().Logf(logrusLogLevel(level), format, args...)
 }
 
