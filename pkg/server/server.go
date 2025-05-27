@@ -121,8 +121,10 @@ func New(
 	watchQueryTimeout time.Duration,
 	watchProgressNotifyInterval time.Duration,
 ) (*Server, error) {
+	level := logrus.GetLevel()
 	options := []app.Option{
 		app.WithLogFunc(appLog),
+		app.WithTracing(clientLogLevel(level)),
 	}
 	serverConfig := &ServerConfig{
 		ListenAddress: listen,
@@ -520,6 +522,22 @@ func logrusLogLevel(level client.LogLevel) logrus.Level {
 		return logrus.DebugLevel
 	default:
 		return logrus.TraceLevel
+	}
+}
+
+// ToLoggingLevel converts a logrus.Level to your custom logging.Level.
+func clientLogLevel(logrusLevel logrus.Level) client.LogLevel {
+	switch logrusLevel {
+	case logrus.ErrorLevel:
+		return client.LogError
+	case logrus.WarnLevel:
+		return client.LogWarn
+	case logrus.InfoLevel:
+		return client.LogInfo
+	case logrus.DebugLevel:
+		return client.LogDebug
+	default:
+		return client.LogNone
 	}
 }
 

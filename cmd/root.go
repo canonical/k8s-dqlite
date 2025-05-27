@@ -23,6 +23,7 @@ var (
 		listen                    string
 		tls                       bool
 		debug                     bool
+		logLevel                  string
 		profiling                 bool
 		profilingAddress          string
 		profilingDir              string
@@ -55,6 +56,15 @@ var (
 		// Uncomment the following line if your bare application
 		// has an action associated with it:
 		Run: func(cmd *cobra.Command, args []string) {
+			if rootCmdOpts.logLevel != "" {
+				level, err := logrus.ParseLevel(rootCmdOpts.logLevel)
+				if err != nil {
+					logrus.WithError(err).Fatalf("failed to parse log level %s", rootCmdOpts.logLevel)
+				} else {
+					logrus.SetLevel(level)
+				}
+			}
+
 			if rootCmdOpts.debug {
 				logrus.SetLevel(logrus.TraceLevel)
 			}
@@ -203,6 +213,8 @@ func init() {
 	rootCmd.Flags().StringVar(&rootCmdOpts.listen, "listen", "tcp://127.0.0.1:12379", "endpoint where dqlite should listen to")
 	rootCmd.Flags().BoolVar(&rootCmdOpts.tls, "enable-tls", true, "enable TLS")
 	rootCmd.Flags().BoolVar(&rootCmdOpts.debug, "debug", false, "debug logs")
+	rootCmd.Flags().MarkDeprecated("debug", "use --log-level debug instead")
+	rootCmd.Flags().StringVar(&rootCmdOpts.logLevel, "log-level", "error", "set the log level")
 	rootCmd.Flags().BoolVar(&rootCmdOpts.profiling, "profiling", false, "enable debug pprof endpoint")
 	rootCmd.Flags().StringVar(&rootCmdOpts.profilingAddress, "profiling-listen", "127.0.0.1:4000", "listen address for pprof endpoint")
 	rootCmd.Flags().StringVar(&rootCmdOpts.profilingDir, "profiling-dir", "", "directory to use for profiling data")
