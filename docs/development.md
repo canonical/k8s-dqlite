@@ -93,7 +93,7 @@ journalctl -u snap.k8s.k8s-dqlite -f
 
 Or use `microk8s.daemon-k8s-dqlite` for MicroK8s.
 
-To debug, you can set the `--debug` flag to true as explained in the [configuration](configuration.md) documentation.
+To debug, you can set the `--log-level` flag to the desired level as explained in the [configuration](configuration.md) documentation.
 
 ## Connecting to the Dqlite Database
 
@@ -117,5 +117,5 @@ Sometimes it is helpful to get insights into what is happening in the dqlite lay
 To do this, you can enable debug logs. Add debug logs by editing
 `/var/snap/k8s/common/args/k8s-dqlite-env` or `/var/snap/microk8s/current/args/k8s-dqlite-env` and uncomment `LIBDQLITE_TRACE=1` and `LIBRAFT_TRACE=1`. Then restart the k8s-dqlite service and check the k8s-dqlite logs.
 
-To enable k8s-dqlite debug logging, add ``--debug`` to
+To increase the log level in k8s-dqlite add ``--log-level=debug`` to
 ``/var/snap/k8s/common/args/k8s-dqlite``.

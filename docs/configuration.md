@@ -11,7 +11,8 @@ The following configuration options are available listed in a table format:
 | `--storage-dir` | The directory to store the Dqlite data | `/var/tmp/k8s-dqlite/` |
 | `--listen` | The endpoint where Dqlite should listen to | `tcp://127.0.0.1:12379` |
 | `--enable-tls` | Enable TLS | `true` |
-| `--debug` | Enable debug logs | `false` |
+| `--debug` | `DEPRECIATED` | `false` |
+| `--log-level` | The log level to use (debug, info, warn, error, fatal) | `info` |
 | `--profiling` | Enable debug pprof endpoint | `false` |
 | `--profiling-dir` | Directory to use for profiling data | - |
 | `--profiling-listen` | The address to listen for pprof endpoint | `127.0.0.1:4000` |
