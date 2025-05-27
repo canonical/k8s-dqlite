@@ -59,7 +59,7 @@ var (
 			if rootCmdOpts.logLevel != "" {
 				level, err := logrus.ParseLevel(rootCmdOpts.logLevel)
 				if err != nil {
-					logrus.WithError(err).Fatalf("failed to parse log level %s", rootCmdOpts.logLevel)
+					logrus.WithError(err).Warnf("failed to parse log level %s, proceeding with default log level.", rootCmdOpts.logLevel)
 				} else {
 					logrus.SetLevel(level)
 				}
