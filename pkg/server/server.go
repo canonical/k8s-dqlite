@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"database/sql"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -120,6 +121,7 @@ func New(
 	connectionPoolConfig *ConnectionPoolConfig,
 	watchQueryTimeout time.Duration,
 	watchProgressNotifyInterval time.Duration,
+	debug bool,
 
 ) (*Server, error) {
 	options := []app.Option{}
@@ -338,6 +340,11 @@ func New(
 		logrus.Warn("dqlite disk mode operation is current at an experimental state and MUST NOT be used in production. Expect data loss.")
 	}
 
+	if debug {
+		logrus.Print("enable dqlite debug mode")
+		options = append(options, app.WithLogFunc(logEverythingFunc))
+	}
+
 	// FIXME: this also starts dqlite. It should be moved to `Start`.
 	app, err := app.New(dir, options...)
 	if err != nil {
@@ -508,3 +515,9 @@ func (s *Server) Shutdown(ctx context.Context) error {
 }
 
 var _ Instance = &Server{}
+
+// logEverythingFunc is a logging function that logs all messages regarless of their level.
+func logEverythingFunc(l client.LogLevel, format string, a ...interface{}) {
+	msg := fmt.Sprintf("["+l.String()+"]"+" dqlite: "+format, a...)
+	log.Printf("%s", msg)
+}

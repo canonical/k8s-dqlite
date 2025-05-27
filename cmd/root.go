@@ -146,6 +146,7 @@ var (
 				&rootCmdOpts.connectionPoolConfig,
 				rootCmdOpts.watchQueryTimeout,
 				rootCmdOpts.watchProgressNotifyInterval,
+				rootCmdOpts.debug,
 			)
 			if err != nil {
 				logrus.WithError(err).Fatal("failed to create server")
