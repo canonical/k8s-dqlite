@@ -249,7 +249,6 @@ func (l *LogStructured) ttlEvents(ctx context.Context) chan *server.Event {
 
 func (l *LogStructured) ttl(ctx context.Context) {
 	// very naive TTL support
-	mutex := &sync.Mutex{}
 	for event := range l.ttlEvents(ctx) {
 		go func(event *server.Event) {
 			select {
@@ -257,9 +256,7 @@ func (l *LogStructured) ttl(ctx context.Context) {
 				return
 			case <-time.After(time.Duration(event.KV.Lease) * time.Second):
 			}
-			mutex.Lock()
 			l.Delete(ctx, event.KV.Key, event.KV.ModRevision)
-			mutex.Unlock()
 		}(event)
 	}
 }
