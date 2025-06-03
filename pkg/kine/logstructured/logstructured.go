@@ -251,7 +251,6 @@ func (l *LogStructured) ttlEvents(ctx context.Context) chan *server.Event {
 
 func (l *LogStructured) ttl(ctx context.Context) {
 	// very naive TTL support
-	mutex := &sync.Mutex{}
 	for event := range l.ttlEvents(ctx) {
 		go func(event *server.Event) {
 			// add some jitter to avoid ttl expiry and deletion on all nodes at the same time with the goal of
@@ -265,9 +264,7 @@ func (l *LogStructured) ttl(ctx context.Context) {
 
 			deleteLease := func() error {
 				// retry until we succeed or context is cancelled, if another node has already deleted the key the delete will not return an error and we will exit the retry loop
-				mutex.Lock()
 				rev, deleted, err := l.Delete(ctx, event.KV.Key, event.KV.ModRevision)
-				mutex.Unlock()
 				if err != nil {
 					logrus.Errorf("failed to delete %s for TTL: %v, retrying", event.KV.Key, err)
 					return err
@@ -290,7 +287,6 @@ func (l *LogStructured) ttl(ctx context.Context) {
 			if err != nil {
 				logrus.Errorf("failed to delete %s for TTL after retries: %v", event.KV.Key, err)
 			}
-			mutex.Unlock()
 		}(event)
 	}
 }
