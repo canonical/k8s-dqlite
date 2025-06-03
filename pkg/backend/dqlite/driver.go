@@ -2,10 +2,8 @@ package dqlite
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/canonical/go-dqlite/v2"
@@ -47,10 +45,6 @@ func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
 	})
 	if err != nil {
 		return nil, err
-	}
-
-	if err := migrate(ctx, config.DB); err != nil {
-		return nil, fmt.Errorf("failed to migrate DB from sqlite: %w", err)
 	}
 
 	return &Driver{
@@ -114,87 +108,4 @@ func (d *Driver) isLocalNodeLeader(ctx context.Context) (bool, error) {
 	}
 
 	return d.app.ID() == leader.ID, nil
-}
-
-// FIXME this might be very slow.
-func migrate(ctx context.Context, db database.Interface) (exitErr error) {
-	conn, err := db.Conn(ctx)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
-	if migrate, err := shouldMigrate(ctx, conn); err != nil {
-		return err
-	} else if !migrate {
-		return nil
-	}
-
-	oldDB, err := sql.Open("sqlite3", "./db/state.db")
-	if err != nil {
-		return nil
-	}
-	defer oldDB.Close()
-
-	oldData, err := oldDB.QueryContext(ctx, `
-SELECT id, name, created, deleted, create_revision, prev_revision, lease, value, old_value
-FROM kine
-ORDER BY id ASC`)
-	if err != nil {
-		logrus.Warnf("failed to find old data to migrate: %v", err)
-		return nil
-	}
-	defer oldData.Close()
-
-	tx, err := conn.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	stmt, err := tx.PrepareContext(ctx, `
-INSERT INTO kine(id, name, created, deleted, create_revision, prev_revision, lease, value, old_value)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-	if err != nil {
-		return err
-	}
-
-	oldRow := []interface{}{
-		new(int),
-		new(string),
-		new(int),
-		new(int),
-		new(int),
-		new(int),
-		new(int),
-		new([]byte),
-		new([]byte),
-	}
-	for oldData.Next() {
-		if err := oldData.Scan(oldRow...); err != nil {
-			return err
-		}
-
-		if _, err := stmt.ExecContext(ctx, oldRow...); err != nil {
-			return err
-		}
-	}
-	if err := oldData.Err(); err != nil {
-		return err
-	}
-
-	return tx.Commit()
-}
-
-func shouldMigrate(ctx context.Context, conn *sql.Conn) (bool, error) {
-	if _, err := os.Stat("./db/state.db"); err != nil {
-		return false, nil
-	}
-
-	row := conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM kine")
-	var count int64
-	if err := row.Scan(&count); err != nil {
-		return false, err
-	}
-	return count == 0, nil
 }
