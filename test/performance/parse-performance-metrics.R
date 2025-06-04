@@ -70,8 +70,8 @@ create_plot <- function(data_list, y_column, title, y_label, file_suffix, max_y)
 
 print("Creating plots")
 # Generate and save all required plots
-create_plot(metrics_data, "X.CPU", "CPU Usage Over Time", "% CPU", "cpu_usage_plot", 250)
-create_plot(metrics_data, "X.MEM", "Memory Usage Over Time", "% MEM", "mem_usage_plot", 2)
-create_plot(metrics_data, "RSS", "Resident Set Size in MiB Over Time", "RSS", "rss_plot", 400)
-create_plot(metrics_data, "kB_rd_s", "IO Read Usage Over Time", "kB_rd_s", "io_read_usage_plot", 30)
-create_plot(metrics_data, "kB_wr_s", "IO Write Usage Over Time", "kB_wr_s", "io_write_usage_plot", 35000)
+create_plot(metrics_data, "X.CPU", "CPU Usage Over Time", "% CPU", "cpu_usage_plot", 150)
+create_plot(metrics_data, "X.MEM", "Memory Usage Over Time", "% MEM", "mem_usage_plot", 15)
+create_plot(metrics_data, "RSS", "Resident Set Size in MiB Over Time", "RSS", "rss_plot", 500)
+create_plot(metrics_data, "kB_rd_s", "IO Read Usage Over Time", "kB_rd_s", "io_read_usage_plot", 80)
+create_plot(metrics_data, "kB_wr_s", "IO Write Usage Over Time", "kB_wr_s", "io_write_usage_plot", 25000)

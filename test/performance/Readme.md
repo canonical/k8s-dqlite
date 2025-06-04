@@ -76,5 +76,5 @@ The script can be run with the following command:
 
 ```bash
 cd test/performance
-Rscript parse_performance_metrics.R
+Rscript parse-performance-metrics.R
 ```
