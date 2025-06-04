@@ -120,9 +120,16 @@ func New(
 	connectionPoolConfig *ConnectionPoolConfig,
 	watchQueryTimeout time.Duration,
 	watchProgressNotifyInterval time.Duration,
-
 ) (*Server, error) {
-	options := []app.Option{}
+	options := []app.Option{
+		app.WithLogFunc(appLog),
+	}
+
+	level := logrus.GetLevel()
+	if level == logrus.TraceLevel {
+		options = append(options, app.WithTracing(client.LogDebug))
+	}
+
 	serverConfig := &ServerConfig{
 		ListenAddress: listen,
 
@@ -505,6 +512,26 @@ func (s *Server) Shutdown(ctx context.Context) error {
 
 	close(s.mustStopCh)
 	return nil
+}
+
+func logrusLogLevel(level client.LogLevel) logrus.Level {
+	switch level {
+	case client.LogError:
+		return logrus.ErrorLevel
+	case client.LogWarn:
+		return logrus.WarnLevel
+	case client.LogInfo:
+		return logrus.InfoLevel
+	case client.LogDebug:
+		return logrus.DebugLevel
+	default:
+		return logrus.TraceLevel
+	}
+}
+
+func appLog(level client.LogLevel, format string, args ...interface{}) {
+	format = fmt.Sprintf("[go-dqlite] %s", format)
+	logrus.StandardLogger().Logf(logrusLogLevel(level), format, args...)
 }
 
 var _ Instance = &Server{}
