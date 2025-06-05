@@ -12,7 +12,6 @@ import boto3
 from alive_progress import alive_bar
 from rich.console import Console
 
-from elastic_ip import ElasticIpWrapper
 from instance import EC2InstanceWrapper
 from key_pair import KeyPairWrapper
 from security_group import SecurityGroupWrapper
@@ -20,13 +19,11 @@ from security_group import SecurityGroupWrapper
 logger = logging.getLogger(__name__)
 console = Console()
 
-
 # snippet-start:[python.example_code.ec2.Scenario_GetStartedInstances]
 class EC2InstanceScenario:
     """
     A scenario that demonstrates how to use Boto3 to manage Amazon EC2 resources.
-    Covers creating a key pair, security group, launching an instance, associating
-    an Elastic IP, and cleaning up resources.
+    Covers creating a key pair, security group, launching an instance, and cleaning up resources.
     """
 
     def __init__(
@@ -34,7 +31,6 @@ class EC2InstanceScenario:
         inst_wrapper: EC2InstanceWrapper,
         key_wrapper: KeyPairWrapper,
         sg_wrapper: SecurityGroupWrapper,
-        eip_wrapper: ElasticIpWrapper,
         ssm_client: boto3.client,
         remote_exec: bool = False,
     ):
@@ -44,7 +40,6 @@ class EC2InstanceScenario:
         :param inst_wrapper: Wrapper for EC2 instance operations.
         :param key_wrapper: Wrapper for key pair operations.
         :param sg_wrapper: Wrapper for security group operations.
-        :param eip_wrapper: Wrapper for Elastic IP operations.
         :param ssm_client: Boto3 client for accessing SSM to retrieve AMIs.
         :param remote_exec: Flag to indicate if the scenario is running in a remote execution
                             environment. Defaults to False. If True, the script won't prompt
@@ -53,7 +48,6 @@ class EC2InstanceScenario:
         self.inst_wrapper = inst_wrapper
         self.key_wrapper = key_wrapper
         self.sg_wrapper = sg_wrapper
-        self.eip_wrapper = eip_wrapper
         self.ssm_client = ssm_client
         self.remote_exec = remote_exec
 
@@ -75,6 +69,7 @@ class EC2InstanceScenario:
             bar()
 
         console.print(f"- **Private Key Saved to**: {self.key_wrapper.key_file_path}\n")
+        os.chmod(self.key_wrapper.key_file_path, 0o400)
 
         # List key pairs (simulated) and show a progress bar.
         list_keys = True
@@ -280,12 +275,8 @@ class EC2InstanceScenario:
         Displays SSH connection information for the user to connect to the EC2 instance.
         Handles the case where the instance does or does not have an associated public IP address.
         """
-        if (
-            not self.eip_wrapper.elastic_ips
-            or not self.eip_wrapper.elastic_ips[0].allocation_id
-        ):
-            if self.inst_wrapper.instances:
-                instance = self.inst_wrapper.instances[0]
+        if self.inst_wrapper.instances:
+            for instance in self.inst_wrapper.instances:
                 instance_id = instance["InstanceId"]
 
                 waiter = self.inst_wrapper.ec2_client.get_waiter("instance_running")
@@ -317,60 +308,19 @@ class EC2InstanceScenario:
                         "Instance does not have a public IP address assigned.",
                         style="bold red",
                     )
-            else:
-                console.print(
-                    "No instance available to retrieve public IP address.",
-                    style="bold red",
-                )
         else:
-            elastic_ip = self.eip_wrapper.elastic_ips[0]
-            elastic_ip_address = elastic_ip.public_ip
             console.print(
-                f"\tssh -i {self.key_wrapper.key_file_path} ubuntu@{elastic_ip_address}"
+                "No instance available to retrieve public IP address.",
+                style="bold red",
             )
 
         if not self.remote_exec:
             console.print("\nOpen a new terminal tab to try the above SSH command.")
             input("Press Enter to continue...")
 
-    def associate_elastic_ip(self) -> None:
-        """
-        Allocates an Elastic IP address and associates it with the EC2 instance.
-        Displays the Elastic IP address and SSH connection information.
-        """
-        console.print("\n**Step 4: Allocate an Elastic IP Address**", style="bold cyan")
-        console.print(
-            "You can allocate an Elastic IP address and associate it with your instance\n"
-            "to keep a consistent IP address even when your instance restarts."
-        )
-
-        with alive_bar(1, title="Allocating Elastic IP") as bar:
-            elastic_ip = self.eip_wrapper.allocate()
-            time.sleep(0.5)
-            bar()
-
-        console.print(
-            f"- **Allocated Static Elastic IP Address**: {elastic_ip.public_ip}."
-        )
-
-        with alive_bar(1, title="Associating Elastic IP") as bar:
-            self.eip_wrapper.associate(
-                elastic_ip.allocation_id, self.inst_wrapper.instances[0]["InstanceId"]
-            )
-            time.sleep(2)
-            bar()
-
-        console.print(f"- **Associated Elastic IP with Your Instance**.")
-        console.print(
-            "You can now use SSH to connect to your instance by using the Elastic IP."
-        )
-        self._display_ssh_info()
-
     def stop_and_start_instance(self) -> None:
         """
-        Stops and restarts the EC2 instance. Displays instance state and explains
-        changes that occur when the instance is restarted, such as the potential change
-        in the public IP address unless an Elastic IP is associated.
+        Stops and restarts the EC2 instance. Displays instance state.
         """
         console.print("\n**Step 5: Stop and Start Your Instance**", style="bold cyan")
         console.print("Let's stop and start your instance to see what changes.")
@@ -391,48 +341,15 @@ class EC2InstanceScenario:
         console.print("**Your instance is running.**", style="bold green")
         self.inst_wrapper.display()
 
-        elastic_ip = (
-            self.eip_wrapper.elastic_ips[0] if self.eip_wrapper.elastic_ips else None
-        )
-
-        if elastic_ip is None or elastic_ip.allocation_id is None:
-            console.print(
-                "- **Note**: Every time your instance is restarted, its public IP address changes."
-            )
-        else:
-            console.print(
-                f"Because you have associated an Elastic IP with your instance, you can \n"
-                f"connect by using a consistent IP address after the instance restarts: {elastic_ip.public_ip}"
-            )
-
         self._display_ssh_info()
 
     def cleanup(self) -> None:
         """
-        Cleans up all the resources created during the scenario, including disassociating
-        and releasing the Elastic IP, terminating the instance, deleting the security
+        Cleans up all the resources created during the scenario, including terminating the instance, deleting the security
         group, and deleting the key pair.
         """
         console.print("\n**Step 6: Clean Up Resources**", style="bold cyan")
         console.print("Cleaning up resources:")
-
-        for elastic_ip in self.eip_wrapper.elastic_ips:
-            console.print(f"- **Elastic IP**: {elastic_ip.public_ip}")
-
-            with alive_bar(1, title="Disassociating Elastic IP") as bar:
-                self.eip_wrapper.disassociate(elastic_ip.allocation_id)
-                time.sleep(2)
-                bar()
-
-            console.print("\t- **Disassociated Elastic IP from the Instance**")
-
-            with alive_bar(1, title="Releasing Elastic IP") as bar:
-                self.eip_wrapper.release(elastic_ip.allocation_id)
-                time.sleep(1)
-                bar()
-
-            console.print("\t- **Released Elastic IP**")
-
         console.print(f"- **Instance**: {self.inst_wrapper.instances[0]['InstanceId']}")
 
         with alive_bar(1, title="Terminating Instance") as bar:
@@ -463,13 +380,13 @@ class EC2InstanceScenario:
     def run_scenario(self) -> None:
         """
         Executes the entire EC2 instance scenario: creates key pairs, security groups,
-        launches an instance, associates an Elastic IP, and cleans up all resources.
+        launches an instance, and cleans up all resources.
         """
         logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
         console.print("-" * 88)
         console.print(
-            "Welcome to the Amazon Elastic Compute Cloud (Amazon EC2) get started with instances demo.",
+            "Welcome to the AWS Performance test 3 node scenario!",
             style="bold magenta",
         )
         console.print("-" * 88)
@@ -477,38 +394,58 @@ class EC2InstanceScenario:
         self.create_and_list_key_pairs()
         self.create_security_group()
         self.create_instances()
-        # self.create_instance()
-        commands = [
+        microk8s_commands = [
             "sudo apt update",
             "sudo snap install microk8s --channel=1.31 --classic",
             "sudo microk8s status --wait-ready",
-            "sudo microk8s enable prometheus",
-            "sudo microk8s config > ~/.kube/config",
-            "sudo apt-get install -y sysstat",
             "mkdir -p ~/.kube/",
-            "git clone https://github.com/canonical/k8s-dqlite.git",
+            "sudo microk8s config > ~/.kube/config",
+            "sudo apt-get install -y sysstat"
+        ]
+        etcd_commands = [
+            "sudo apt update",
+            "sudo snap install microk8s --channel=1.31 --classic",
+            "sudo microk8s status --wait-ready",
+            "mkdir -p ~/.kube/",
+            "sudo microk8s config > ~/.kube/config",
+            "sudo apt-get install -y sysstat"
+            "sudo microk8s stop",
+            "sudo mv /var/snap/microk8s/current/var/lock/no-etcd /var/snap/microk8s/current/var/lock/yes-etcd",
+            "sudo touch /var/snap/microk8s/current/var/lock/no-k8s-dqlite",
+            "sudo sed -i '/--storage-backend/d' /var/snap/microk8s/current/args/kube-apiserver",
+            "sudo sed -i '/--storage-dir/d' /var/snap/microk8s/current/args/kube-apiserver",
+            "sudo sed -i '/--etcd-servers/d' /var/snap/microk8s/current/args/kube-apiserver",
+            "echo --etcd-servers=https://172.31.34.85:12379,https://172.31.37.184:12379,https://172.31.32.86:12379 | sudo tee -a /var/snap/microk8s/current/args/kube-apiserver",
+            "echo --etcd-cafile=/var/snap/microk8s/current/certs/ca.crt | sudo tee -a /var/snap/microk8s/current/args/kube-apiserver",
+            "echo --etcd-certfile=/var/snap/microk8s/current/certs/server.crt | sudo tee -a /var/snap/microk8s/current/args/kube-apiserver",
+            "echo --etcd-keyfile=/var/snap/microk8s/current/certs/server.key | sudo tee -a /var/snap/microk8s/current/args/kube-apiserver",
+            "sudo microk8s start",
+            "sudo microk8s status --wait-ready",
+            "sudo microk8s kubectl apply -f /var/snap/microk8s/current/args/cni-network/cni.yaml"
+        ]
+
+        prom_commands = [
+            "sudo microk8s enable prometheus",
+            "sleep 40",
+            "nohup sudo microk8s.kubectl port-forward -n observability svc/kube-prom-stack-grafana 30801:80 --address='0.0.0.0' > /dev/null 2>&1 &"
+            
         ]
         kube_burner_commands = [
+            "git clone https://github.com/canonical/k8s-dqlite.git",
             "mkdir -p ../bin/",
             "wget https://github.com/kube-burner/kube-burner/releases/download/v1.2/kube-burner-1.2-Linux-x86_64.tar.gz",
             "tar -zxvf kube-burner-1.2-Linux-x86_64.tar.gz",
             "chmod +x /root/kube-burner"
         ]
-        push_files = [
-            ["/Users/louiseschmidtgen/Canonical/k8s-dqlite/test/performance/templates/api-intensive.yaml", "/root/api-intensive.yaml"],
-            ["/Users/louiseschmidtgen/Canonical/k8s-dqlite/test/performance/templates/secret.yaml", "/root/secret.yaml"],
-            ["/Users/louiseschmidtgen/Canonical/k8s-dqlite/test/performance/templates/configmap.yaml", "/root/configmap.yaml"],
-        ]
         
-        self.execute_command_instance(commands, 0)
-        self.execute_command_instance(commands, 1)
-        self.execute_command_instance(commands, 2)
+        self.execute_command_instance(etcd_commands, 0)
+        self.execute_command_instance(etcd_commands, 1)
+        self.execute_command_instance(etcd_commands, 2)
         self.execute_command_instance(kube_burner_commands, 0)
+        self.execute_command_instance(prom_commands, 0)
         self._display_ssh_info()
         ## Join cluster, do dashboard in grafana, collect metrics, run kube-burner
         
-        # self.stop_and_start_instance()
-        # self.associate_elastic_ip()
         # self.stop_and_start_instance()
         # self.cleanup()
 
@@ -518,11 +455,11 @@ class EC2InstanceScenario:
 
 if __name__ == "__main__":
     try:
+        os.environ['AWS_DEFAULT_REGION'] = 'us-east-1'
         scenario = EC2InstanceScenario(
             EC2InstanceWrapper.from_client(),
             KeyPairWrapper(boto3.client("ec2"), "/Users/louiseschmidtgen"),
             SecurityGroupWrapper.from_client(),
-            ElasticIpWrapper.from_client(),
             boto3.client("ssm"),
         )
         scenario.run_scenario()

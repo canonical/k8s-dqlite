@@ -96,12 +96,61 @@ class SecurityGroupWrapper:
                     "ToPort": 30801,
                     "IpRanges": [{"CidrIp": f"{ssh_ingress_ip}/32"}],
                 },
-                                {
-                    # Allow custom TCP port 8080 for HTTP access node join.
+                {
+                    # Allow custom TCP port access api server.
+                    "IpProtocol": "tcp",
+                    "FromPort": 16443,
+                    "ToPort": 16443,
+                    "IpRanges": [{"CidrIp": "0.0.0.0/0"}],
+                },
+                {
+                    # Allow custom TCP access kube-controller
+                    "IpProtocol": "tcp",
+                    "FromPort": 10257,
+                    "ToPort": 10257,
+                    "IpRanges": [{"CidrIp": "0.0.0.0/0"}],
+                },
+                {
+                    # Allow custom TCP access cluster agent
                     "IpProtocol": "tcp",
                     "FromPort": 25000,
                     "ToPort": 25000,
-                    "IpRanges": [{"CidrIp": f"{ssh_ingress_ip}/32"}],
+                    "IpRanges": [{"CidrIp": "0.0.0.0/0"}],
+                },
+                {
+                    # Allow custom UDP port 4789 for calico
+                    "IpProtocol": "udp",
+                    "FromPort": 25000,
+                    "ToPort": 25000,
+                    "IpRanges": [{"CidrIp": "0.0.0.0/0"}],
+                },
+                {
+                    # Allow custom TCP access kubelet
+                    "IpProtocol": "tcp",
+                    "FromPort": 10250,
+                    "ToPort": 10250,
+                    "IpRanges": [{"CidrIp": "0.0.0.0/0"}],
+                },
+                {
+                    # Allow custom TCP access dqlite
+                    "IpProtocol": "tcp",
+                    "FromPort": 19001,
+                    "ToPort": 19001,
+                    "IpRanges": [{"CidrIp": "0.0.0.0/0"}],
+                },
+                {
+                    # Allow custom TCP access etcd
+                    "IpProtocol": "tcp",
+                    "FromPort": 12379,
+                    "ToPort": 12379,
+                    "IpRanges": [{"CidrIp": "0.0.0.0/0"}],
+                },                                       
+                {
+                    # Allow custom TCP access kube-scheduler
+                    "IpProtocol": "tcp",
+                    "FromPort": 10259,
+                    "ToPort": 10259,
+                    "IpRanges": [{"CidrIp": "0.0.0.0/0"}],
                 },
             ]
             response = self.ec2_client.authorize_security_group_ingress(
