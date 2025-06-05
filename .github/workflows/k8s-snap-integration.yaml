@@ -34,7 +34,9 @@ jobs:
         run: |
           sudo snap download k8s --channel=latest/edge --basename k8s
       - name: Install lxd
-        uses: canonical/k8s-snap/.github/actions/install-lxd@main
+        uses: canonical/setup-lxd@v0.1.3
+        with:
+          bridges: "lxdbr0,dualstack-br0,ipv6-br0"
       - name: Build k8s-dqlite
         run: |
           make static
