@@ -5,9 +5,12 @@ import (
 	"database/sql"
 	"testing"
 
-	"github.com/canonical/k8s-dqlite/pkg/sqllog"
 	. "github.com/onsi/gomega"
 )
+
+// SupersededCount is the amount of old entries to keep during compaction.
+// This must be kept in sync with <path to the file where it is defined>
+const supersededCount = 100
 
 func TestCompaction(t *testing.T) {
 	for _, backendType := range []string{SQLiteBackend, DQLiteBackend} {
@@ -102,7 +105,7 @@ func BenchmarkCompaction(b *testing.B) {
 				setup: func(ctx context.Context, tx *sql.Tx) error {
 					// Make sure there are enough rows deleted to have
 					// b.N rows to compact.
-					delCount := b.N + sqllog.SupersededCount
+					delCount := b.N + supersededCount
 
 					// Also, make sure there are uncollectable data, so
 					// that the deleted rows are about 5% of the total.

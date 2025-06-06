@@ -4,7 +4,6 @@ global:
 
 jobs:
   - name: api-intensive
-    preLoadPeriod: 5s
     jobIterations: 100
     qps: 500
     burst: 500
@@ -16,12 +15,12 @@ jobs:
     waitWhenFinished: true
     objects:
       - objectTemplate: configmap.yaml
-        replicas: 50
+        replicas: 10
       - objectTemplate: secret.yaml
-        replicas: 50
+        replicas: 10
   - name: remove-configmaps-secrets
-    qps: 500
-    burst: 500
+    qps: 100
+    burst: 100
     jobType: delete
     objects:
       - kind: ConfigMap

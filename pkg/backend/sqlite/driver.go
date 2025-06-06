@@ -3,19 +3,18 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
-	"unicode"
 
 	"github.com/canonical/k8s-dqlite/pkg/database"
 	"github.com/mattn/go-sqlite3"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -32,7 +31,6 @@ var (
 	deleteCnt        metric.Int64Counter
 	createCnt        metric.Int64Counter
 	updateCnt        metric.Int64Counter
-	fillCnt          metric.Int64Counter
 	currentRevCnt    metric.Int64Counter
 	getCompactRevCnt metric.Int64Counter
 )
@@ -43,39 +41,43 @@ func init() {
 	otelMeter = otel.Meter(otelName)
 	compactCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.compact", otelName), metric.WithDescription("Number of compact requests"))
 	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create create counter")
+		compactCnt = noop.Int64Counter{}
+		logrus.WithError(err).Warning("otel failed to create create counter")
 	}
 	compactBatchCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.compact_batch", otelName), metric.WithDescription("Number of compact batch requests"))
 	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create create counter")
+		compactBatchCnt = noop.Int64Counter{}
+		logrus.WithError(err).Warning("otel failed to create create counter")
 	}
 	deleteRevCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.delete_rev", otelName), metric.WithDescription("Number of delete revision requests"))
 	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create create counter")
+		deleteRevCnt = noop.Int64Counter{}
+		logrus.WithError(err).Warning("otel failed to create create counter")
 	}
 	createCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.create", otelName), metric.WithDescription("Number of create requests"))
 	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create create counter")
+		createCnt = noop.Int64Counter{}
+		logrus.WithError(err).Warning("otel failed to create create counter")
 	}
 	updateCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.update", otelName), metric.WithDescription("Number of update requests"))
 	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create create counter")
+		updateCnt = noop.Int64Counter{}
+		logrus.WithError(err).Warning("otel failed to create create counter")
 	}
 	deleteCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.delete", otelName), metric.WithDescription("Number of delete requests"))
 	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create create counter")
-	}
-	fillCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.fill", otelName), metric.WithDescription("Number of fill requests"))
-	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create create counter")
+		deleteCnt = noop.Int64Counter{}
+		logrus.WithError(err).Warning("otel failed to create create counter")
 	}
 	currentRevCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.current_revision", otelName), metric.WithDescription("Current revision"))
 	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create create counter")
+		currentRevCnt = noop.Int64Counter{}
+		logrus.WithError(err).Warning("otel failed to create create counter")
 	}
 	getCompactRevCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.get_compact_revision", otelName), metric.WithDescription("Get compact revision"))
 	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create create counter")
+		getCompactRevCnt = noop.Int64Counter{}
+		logrus.WithError(err).Warning("otel failed to create create counter")
 	}
 }
 
@@ -84,8 +86,8 @@ func init() {
 // no-op for sqlite.
 var (
 	revSQL = `
-		SELECT MAX(rkv.id) AS id
-		FROM kine AS rkv`
+		SELECT MAX(id) AS id
+		FROM kine`
 
 	listSQL = `
 		SELECT kv.id,
@@ -105,6 +107,44 @@ var (
 	    	ON maxkv.id = kv.id
 		WHERE kv.deleted = 0
 		ORDER BY kv.name ASC, kv.id ASC`
+
+	// listSQL query looks for the latest version of every row in
+	// the range.
+	// The search for the "latest id" (table `maxkv` in the query)
+	// can be carried on quickly with a covering index (kine_name_index).
+	// Unfortunately, using a normal JOIN operation will confuse
+	// SQLite planner and insert a SORT temp table at the end of
+	// the plan, forcing SQLite to load and sort the entire set
+	// before returning it (and making the cost of a paginated
+	// query very high) and returning an unsorted set would make
+	// pagination impossible.
+	// To workaround this silly misplan, a ORDER BY in the first
+	// table forces ordering of `maxkv` (without paying for it
+	// as it is the same order as the index) and CROSS JOIN is
+	// used as it forces SQLite to keep the outer-loop order
+	// when joining tables.
+	// See https://www.sqlite.org/optoverview.html#crossjoin
+	// for more details.
+	listSqlV1_0 = `
+		WITH maxkv AS (
+			SELECT MAX(id) AS id
+			FROM kine
+			WHERE name >= CAST(? AS TEXT) AND name < CAST(? AS TEXT)
+				AND id <= ?
+			GROUP BY name
+			HAVING deleted = 0
+			ORDER BY name
+		)
+		SELECT kv.id,
+			name,
+			CASE
+				WHEN kv.created THEN kv.id
+				ELSE kv.create_revision
+			END AS create_revision,
+			lease,
+			value
+		FROM maxkv CROSS JOIN kine kv
+			ON maxkv.id = kv.id`
 
 	revisionIntervalSQL = `
 		SELECT (
@@ -129,6 +169,17 @@ var (
 		) AS maxkv
 	    	ON maxkv.id = kv.id
 		WHERE kv.deleted = 0`
+
+	countRevisionSQLV1_0 = `
+		SELECT COUNT(*)
+		FROM (
+			SELECT MAX(id)
+			FROM kine
+			WHERE name >= CAST(? AS TEXT) AND name < CAST(? AS TEXT)
+				AND id <= ?
+			GROUP BY name
+			HAVING deleted = 0
+		)`
 
 	afterSQLPrefix = `
 		SELECT id, name, created, deleted, create_revision, prev_revision, lease, value, old_value
@@ -227,36 +278,17 @@ var (
 
 const maxRetries = 500
 
-type Stripped string
-
-func (s Stripped) String() string {
-	builder := &strings.Builder{}
-	whitespace := true
-	for _, r := range s {
-		if unicode.IsSpace(r) {
-			if whitespace {
-				continue
-			}
-			whitespace = true
-			builder.WriteRune(' ')
-		} else {
-			whitespace = false
-			builder.WriteRune(r)
-		}
-	}
-	return builder.String()
-}
-
 type Driver struct {
 	mu sync.Mutex
 
-	config *DriverConfig
+	config               *DriverConfig
+	currentSchemaVersion SchemaVersion
 }
 
 type DriverConfig struct {
-	DB      database.Interface
-	Retry   func(error) bool
-	ErrCode func(error) string
+	DB         database.Interface
+	LockWrites bool
+	Retry      func(error) bool
 }
 
 func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
@@ -268,23 +300,29 @@ func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
 	if config.DB == nil {
 		return nil, errors.New("db cannot be nil")
 	}
-	if config.ErrCode == nil {
-		config.ErrCode = error.Error
-	}
 	if config.Retry == nil {
 		config.Retry = func(err error) bool {
-			if err, ok := err.(sqlite3.Error); ok {
-				return err.Code == sqlite3.ErrBusy
+			var e sqlite3.Error
+			if errors.As(err, &e) {
+				return e.Code == sqlite3.ErrBusy
 			}
 			return false
 		}
 	}
 
+	var err error
+	var currentSchemaVersion SchemaVersion
 	for i := 0; i < retryAttempts; i++ {
-		err := setup(ctx, config.DB)
+		currentSchemaVersion, err = setup(ctx, config.DB)
 		if err == nil {
 			break
 		}
+
+		if errors.Is(err, ErrIncompatibleVersion) {
+			// do not attempt a retry in case of incompatible versions
+			return nil, err
+		}
+
 		logrus.Errorf("failed to setup db: %v", err)
 		select {
 		case <-ctx.Done():
@@ -293,8 +331,13 @@ func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
 		}
 	}
 
+	if err != nil {
+		return nil, err // Return the last error if all retries fail
+	}
+
 	return &Driver{
-		config: config,
+		config:               config,
+		currentSchemaVersion: currentSchemaVersion,
 	}, nil
 }
 
@@ -302,73 +345,62 @@ func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
 // it doesn't already exist, migrating key_value table contents to the Kine
 // table if the key_value table exists, all in a single database transaction.
 // changes are rolled back if an error occurs.
-func setup(ctx context.Context, db database.Interface) error {
+func setup(ctx context.Context, db database.Interface) (SchemaVersion, error) {
 	conn, err := db.Conn(ctx)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer conn.Close()
 
 	// Optimistically ask for the user_version without starting a transaction
 	var currentSchemaVersion SchemaVersion
-
-	row := conn.QueryRowContext(ctx, `PRAGMA user_version`)
+	row := conn.QueryRowContext(ctx, "PRAGMA user_version")
 	if err := row.Scan(&currentSchemaVersion); err != nil {
-		return err
+		return 0, err
 	}
 
 	if err := currentSchemaVersion.CompatibleWith(databaseSchemaVersion); err != nil {
-		return err
+		// TODO: add a migration path for this case
+		// For now we will remain on the old schema version
+		return currentSchemaVersion, nil
 	}
 	if currentSchemaVersion >= databaseSchemaVersion {
-		return nil
+		return currentSchemaVersion, nil
 	}
 
 	txn, err := conn.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer txn.Rollback()
 
-	if err := migrate(ctx, txn); err != nil {
-		return errors.Wrap(err, "migration failed")
-	}
-
-	return txn.Commit()
-}
-
-// migrate tries to migrate from a version of the database
-// to the target one.
-func migrate(ctx context.Context, txn *sql.Tx) error {
-	var currentSchemaVersion SchemaVersion
-
-	row := txn.QueryRowContext(ctx, `PRAGMA user_version`)
+	row = txn.QueryRowContext(ctx, `PRAGMA user_version`)
 	if err := row.Scan(&currentSchemaVersion); err != nil {
-		return err
+		return 0, err
 	}
 
 	if err := currentSchemaVersion.CompatibleWith(databaseSchemaVersion); err != nil {
-		return err
+		return 0, err
 	}
+
 	if currentSchemaVersion >= databaseSchemaVersion {
-		return nil
+		return currentSchemaVersion, nil
 	}
 
-	switch currentSchemaVersion {
-	case NewSchemaVersion(0, 0):
+	if currentSchemaVersion == NewSchemaVersion(0, 0) {
 		if err := applySchemaV0_1(ctx, txn); err != nil {
-			return err
+			return currentSchemaVersion, fmt.Errorf("failed to apply schema v0.1: %w", err)
 		}
-	default:
-		return nil
+		if err := applySchemaV1_0(ctx, txn); err != nil {
+			return currentSchemaVersion, fmt.Errorf("failed to apply schema v0.2: %w", err)
+		}
+		query := fmt.Sprintf("PRAGMA user_version = %d", databaseSchemaVersion)
+		if _, err := txn.ExecContext(ctx, query); err != nil {
+			return currentSchemaVersion, fmt.Errorf("failed to set user version: %w", err)
+		}
 	}
 
-	setUserVersionSQL := fmt.Sprintf(`PRAGMA user_version = %d`, databaseSchemaVersion)
-	if _, err := txn.ExecContext(ctx, setUserVersionSQL); err != nil {
-		return err
-	}
-
-	return nil
+	return currentSchemaVersion, txn.Commit()
 }
 
 func (d *Driver) query(ctx context.Context, txName, query string, args ...interface{}) (rows *sql.Rows, err error) {
@@ -391,9 +423,9 @@ func (d *Driver) query(ctx context.Context, txName, query string, args ...interf
 	}()
 	for ; retryCount < maxRetries; retryCount++ {
 		if retryCount == 0 {
-			logrus.Tracef("QUERY (try: %d) %v : %s", retryCount, args, Stripped(query))
+			logrus.Tracef("%s (try: %d) %v", txName, retryCount, args)
 		} else {
-			logrus.Debugf("QUERY (try: %d) %v : %s", retryCount, args, Stripped(query))
+			logrus.Debugf("%s (try: %d) %v", txName, retryCount, args)
 		}
 		rows, err = d.config.DB.QueryContext(ctx, query, args...)
 		if err == nil {
@@ -419,6 +451,12 @@ func (d *Driver) execute(ctx context.Context, txName, query string, args ...inte
 		attribute.String("tx_name", txName),
 	)
 
+	if d.config.LockWrites {
+		d.mu.Lock()
+		defer d.mu.Unlock()
+		span.AddEvent("acquired write lock")
+	}
+
 	start := time.Now()
 	retryCount := 0
 	defer func() {
@@ -429,9 +467,9 @@ func (d *Driver) execute(ctx context.Context, txName, query string, args ...inte
 	}()
 	for ; retryCount < maxRetries; retryCount++ {
 		if retryCount > 2 {
-			logrus.Debugf("EXEC (try: %d) %v : %s", retryCount, args, Stripped(query))
+			logrus.Debugf("%s (try: %d) %v", txName, retryCount, args)
 		} else {
-			logrus.Tracef("EXEC (try: %d) %v : %s", retryCount, args, Stripped(query))
+			logrus.Tracef("%s (try: %d) %v", txName, retryCount, args)
 		}
 		result, err = d.config.DB.ExecContext(ctx, query, args...)
 		if err == nil {
@@ -450,7 +488,12 @@ func (d *Driver) Count(ctx context.Context, key, rangeEnd []byte, revision int64
 	if len(rangeEnd) == 0 {
 		rangeEnd = append(key, 0)
 	}
-	rows, err := d.query(ctx, "count_revision", countRevisionSQL, key, rangeEnd, revision)
+	query := countRevisionSQL
+	if d.currentSchemaVersion == databaseSchemaVersion {
+		query = countRevisionSQLV1_0
+	}
+
+	rows, err := d.query(ctx, "count_revision", query, key, rangeEnd, revision)
 	if err != nil {
 		return 0, err
 	}
@@ -486,7 +529,6 @@ func (d *Driver) Create(ctx context.Context, key, value []byte, ttl int64) (rev 
 
 	result, err := d.execute(ctx, "create_sql", createSQL, key, ttl, value, key)
 	if err != nil {
-		logrus.WithError(err).Error("failed to create key")
 		return 0, false, err
 	}
 	if insertCount, err := result.RowsAffected(); err != nil {
@@ -508,7 +550,6 @@ func (d *Driver) Update(ctx context.Context, key, value []byte, preRev, ttl int6
 	updateCnt.Add(ctx, 1)
 	result, err := d.execute(ctx, "update_sql", updateSQL, key, ttl, value, key, preRev)
 	if err != nil {
-		logrus.WithError(err).Error("failed to update key")
 		return 0, false, err
 	}
 	if insertCount, err := result.RowsAffected(); err != nil {
@@ -533,7 +574,6 @@ func (d *Driver) Delete(ctx context.Context, key []byte, revision int64) (rev in
 
 	result, err := d.execute(ctx, "delete_sql", deleteSQL, key, revision)
 	if err != nil {
-		logrus.WithError(err).Error("failed to delete key")
 		return 0, false, err
 	}
 	if insertCount, err := result.RowsAffected(); err != nil {
@@ -595,7 +635,10 @@ func (d *Driver) tryCompact(ctx context.Context, start, end int64) (err error) {
 	}
 	defer func() {
 		if err := tx.Rollback(); err != nil {
-			logrus.WithError(err).Trace("can't rollback compaction")
+			if errors.Is(err, sql.ErrTxDone) {
+				return
+			}
+			logrus.WithError(err).Warning("can't rollback compaction")
 		}
 	}()
 
@@ -688,6 +731,10 @@ func (d *Driver) List(ctx context.Context, key, rangeEnd []byte, limit, revision
 		rangeEnd = append(key, 0)
 	}
 	sql := listSQL
+	if d.currentSchemaVersion == databaseSchemaVersion {
+		sql = listSqlV1_0
+	}
+
 	if limit > 0 {
 		sql = fmt.Sprintf("%s LIMIT ?", sql)
 		return d.query(ctx, "list_revision_start_sql_limit", sql, key, rangeEnd, revision, limit)

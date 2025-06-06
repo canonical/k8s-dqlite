@@ -11,15 +11,20 @@ The following configuration options are available listed in a table format:
 | `--storage-dir` | The directory to store the Dqlite data | `/var/tmp/k8s-dqlite/` |
 | `--listen` | The endpoint where Dqlite should listen to | `tcp://127.0.0.1:12379` |
 | `--enable-tls` | Enable TLS | `true` |
-| `--debug` | Enable debug logs | `false` |
+| `--debug` | `DEPRECIATED`: Enable debug logs | `false` |
+| `--log-level` | The log level to use (debug, info, warn, error, fatal) | `info` |
 | `--profiling` | Enable debug pprof endpoint | `false` |
+| `--profiling-dir` | Directory to use for profiling data | - |
 | `--profiling-listen` | The address to listen for pprof endpoint | `127.0.0.1:4000` |
 | `--disk-mode` | (Experimental) Run Dqlite store in disk mode | `false` |
 | `--tls-client-session-cache-size` | ClientCacheSession size for dial TLS config | `0` |
 | `--min-tls-version` | Minimum TLS version for Dqlite endpoint supported values: (tls10, tls11, tls12, tls13) | `tls12` |
 | `--metrics` | Enable metrics endpoint | `false` |
 | `--otel` | Enable traces endpoint | `false` |
-| `--otel-listen` | The address to listen for OpenTelemetry endpoint | `127.0.0.1:4317` |
+| `--otel-listen` |  The address of the OpenTelemetry endpoint (for gRPC exporter) | `127.0.0.1:4317` |
+| `--otel-dir` | The directory to export OpenTelemetry metrics (for file exporter)  | - |
+| `--otel-span-name-filter` | Drop OpenTelemetry trace spans that do not match the specified regular expression (regex) filter | - |
+| `--otel-span-min-duration-filter` | Drop OpenTelemetry trace spans below the specified time interval (e.g., 10ms) | - |
 | `--metrics-listen` | The address to listen for metrics endpoint | `127.0.0.1:9042` |
 | `--datastore-max-idle-connections` | Maximum number of idle connections retained by datastore | `5` |
 | `--datastore-max-open-connections` | Maximum number of open connections used by datastore | `5` |
@@ -44,6 +49,22 @@ traces on queries to Dqlite using a tool like Jaeger.
 To gather insights on traces and metrics locally, run `docker-compose up` in the `./hack/otel` directory.
 This sets up the Otel collector, Jaeger, and Prometheus. Navigate to `http://localhost:16686` to view the traces
 in Jaeger and to `http://localhost:9090` to view the metrics in Prometheus.
+
+By default, k8s-dqlite uses the `127.0.0.1:4317` address to connect to a gRPC endpoint and export the
+OpenTelemetry data. Use ``--otel-listen`` to specify a different endpoint address.
+
+For testing purposes, k8s-dqlite also allows exporting OpenTelemetry traces and metrics to a directory that can be specified using the ``--otel-dir`` argument.
+
+OpenTelemetry trace spans can be filtered using the following arguments:
+
+* ``--otel-span-name-filter`` - use a regex to filter spans by name
+* ``--otel-span-min-duration-filter`` -- filter out spans below a given threshold interval
+
+Profiling data can also help identify k8s-dqlite bottlenecks. Use the ``--profiling``
+and ``--profiling-dir`` k8s-dqlite arguments to obtain ``pprof`` profiling data,
+which will be stored in the specified directory when the k8s-dqlite service
+stops.
+
 
 ## Connection Pool Configuration
 

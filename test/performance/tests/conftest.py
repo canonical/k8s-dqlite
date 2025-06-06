@@ -3,8 +3,8 @@
 #
 import itertools
 import logging
-from pathlib import Path
 import threading
+from pathlib import Path
 from typing import Dict, Generator, Iterator, List, Optional, Union
 
 import pytest
@@ -135,10 +135,10 @@ def bootstrap_config(request) -> Union[str, None]:
 
 @pytest.fixture(scope="function")
 def network_type(request) -> Union[str, None]:
-    bootstrap_config_marker = request.node.get_closest_marker("network_type")
-    if not bootstrap_config_marker:
+    network_config_marker = request.node.get_closest_marker("network_type")
+    if not network_config_marker:
         return "IPv4"
-    network_type, *_ = bootstrap_config_marker.args
+    network_type, *_ = network_config_marker.args
     return network_type
 
 
@@ -262,19 +262,13 @@ def session_instance(
     snap = next(snap_versions(request))
     util.setup_k8s_snap(instance, tmp_path, snap)
 
-    bootstrap_config_path = "/root/bootstrap.yaml"
-    if config.ENABLE_PROFILING:
-        bootstrap_template = "bootstrap-profiling.yaml"
-    else:
-        bootstrap_template = "bootstrap-session.yaml"
-    instance.send_file(
-        (config.MANIFESTS_DIR / bootstrap_template).as_posix(),
-        bootstrap_config_path,
-    )
+    bootstrap_config = (config.MANIFESTS_DIR / "bootstrap-all.yaml").read_text()
 
     instance_default_ip = util.get_default_ip(instance)
 
-    instance.exec(["k8s", "bootstrap", "--file", bootstrap_config_path])
+    instance.exec(
+        ["k8s", "bootstrap", "--file", "-"], input=str.encode(bootstrap_config)
+    )
     instance_default_cidr = util.get_default_cidr(instance, instance_default_ip)
 
     lb_cidr = util.find_suitable_cidr(

@@ -4,6 +4,8 @@ on:
   push:
     branches: ["master"]
   pull_request:
+  schedule:
+    - cron: "0 0 * * *" # Runs every midnight
 
 permissions:
   contents: read
@@ -13,9 +15,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  get-e2e-tags:
+    name: Get e2e test tags
+    runs-on: ubuntu-latest
+    outputs:
+      test-tags: ${{ steps.get-e2e-tags.outputs.test-tags }}
+    steps:
+      - name: Get e2e test tags
+        id: get-e2e-tags
+        run: |
+          set -x
+
+          tags="up_to_weekly"
+          has_cnfc_label=${{ contains(github.event.pull_request.labels.*.name, 'cncf-conformance') }}
+
+          if [[ ${{ github.event_name }} == "schedule" || "$has_cnfc_label" == "true" ]]; then
+            tags+=" conformance_tests"
+          fi
+
+          echo "test-tags=$tags" >> "$GITHUB_OUTPUT"
+
   build:
     name: K8s-snap Integration Test
     runs-on: self-hosted-linux-amd64-jammy-large
+    needs: [get-e2e-tags]
 
     steps:
       - name: Checking out repo
@@ -30,24 +53,12 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Download latest k8s-snap
-        run: |
-          sudo snap download k8s --channel=latest/edge --basename k8s
       - name: Install lxd
-        uses: canonical/k8s-snap/.github/actions/install-lxd@main
-      - name: Build k8s-dqlite
-        run: |
-          make static
-      - name: Unpack Snap
-        run: |
-          sudo unsquashfs -d snap-unpack-dir k8s.snap
-      - name: Replace k8s-dqlite binary
-        run: |
-          sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
-          sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
-      - name: Repack Snap
-        run: |
-          sudo mksquashfs snap-unpack-dir k8s-updated.snap -noappend -comp lzo -no-fragments
+        uses: canonical/setup-lxd@v0.1.3
+        with:
+          bridges: "lxdbr0,dualstack-br0,ipv6-br0"
+      - name: Patch k8s snap
+        uses: ./.github/actions/patch-k8s-snap
       - name: Running
         env:
           TEST_SNAP: ${{ github.workspace }}/k8s-updated.snap
@@ -56,7 +67,7 @@ jobs:
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
         run: |
           git clone https://github.com/canonical/k8s-snap.git      
-          cd k8s-snap/tests/integration && sg lxd -c 'tox -e integration -- --tags up_to_weekly'
+          cd k8s-snap/tests/integration && sg lxd -c "tox -e integration -- --tags ${{ needs.get-e2e-tags.outputs.test-tags }}"
       - name: Prepare inspection reports
         if: failure()
         run: |
@@ -67,3 +78,9 @@ jobs:
         with:
           name: inspection-reports
           path: ${{ github.workspace }}/inspection-reports.tar.gz
+      - name: Upload CNCF conformance report artifact
+        if: ${{ failure() && contains(needs.get-e2e-tags.outputs.test-tags, 'conformance_tests') }}
+        uses: actions/upload-artifact@v4
+        with:
+         name: sonobuoy-e2e-${{ env.artifact_name }}
+         path: k8s-snap/tests/integration/sonobuoy_e2e.tar.gz

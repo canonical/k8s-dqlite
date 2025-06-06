@@ -6,8 +6,8 @@ import (
 	"path"
 	"testing"
 
+	"github.com/canonical/k8s-dqlite/pkg/backend/sqlite"
 	"github.com/canonical/k8s-dqlite/pkg/database"
-	"github.com/canonical/k8s-dqlite/pkg/drivers/sqlite"
 	"github.com/sirupsen/logrus"
 )
 
@@ -52,7 +52,7 @@ func TestMigration(t *testing.T) {
 	}
 
 	if _, err := sqlite.NewDriver(context.Background(), &sqlite.DriverConfig{
-		DB: database.NewBatched(database.NewPrepared(db)),
+		DB: database.NewPrepared(db),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -62,14 +62,14 @@ SELECT COUNT(*)
 FROM sqlite_master
 WHERE type = 'index'
 	AND tbl_name = 'kine'
-	AND name IN ('kine_name_index', 'kine_name_prev_revision_uindex')`)
+	AND name IN ('k8s_dqlite_name_del_index')`)
 
 	var indexes int
 	if err := row.Scan(&indexes); err != nil {
 		t.Error(err)
 	}
 
-	if indexes != 2 {
-		t.Errorf("Expected 2 indexes, got %d", indexes)
+	if indexes != 1 {
+		t.Errorf("Expected 1 index, got %d", indexes)
 	}
 }

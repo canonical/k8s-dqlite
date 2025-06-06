@@ -8,17 +8,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
-	"github.com/canonical/go-dqlite/v3"
-	"github.com/canonical/go-dqlite/v3/app"
-	"github.com/canonical/go-dqlite/v3/client"
+	"github.com/canonical/go-dqlite/v2"
+	"github.com/canonical/go-dqlite/v2/app"
+	"github.com/canonical/go-dqlite/v2/client"
+	dqliteDriver "github.com/canonical/k8s-dqlite/pkg/backend/dqlite"
 	"github.com/canonical/k8s-dqlite/pkg/database"
-	dqliteDriver "github.com/canonical/k8s-dqlite/pkg/drivers/dqlite"
 	"github.com/canonical/k8s-dqlite/pkg/endpoint"
 	"github.com/canonical/k8s-dqlite/pkg/limited"
-	"github.com/canonical/k8s-dqlite/pkg/sqllog"
 	k8s_dqlite_tls "github.com/canonical/k8s-dqlite/pkg/tls"
 	"github.com/sirupsen/logrus"
 )
@@ -79,7 +77,7 @@ func (conf *ConnectionPoolConfig) apply(db *sql.DB) {
 	}
 
 	logrus.Infof(
-		"Configuring database connection pooling: maxIdleConns=%d, maxOpenConns=%d, connMaxLifetime=%v, connMaxIdleTime=%v ",
+		"configuring database connection pooling: maxIdleConns=%d, maxOpenConns=%d, connMaxLifetime=%v, connMaxIdleTime=%v ",
 		maxIdle,
 		conf.MaxOpen,
 		conf.MaxLifetime,
@@ -104,7 +102,7 @@ var expectedFilesDuringInitialization = map[string]struct{}{
 const (
 	defaultThreshold = 512
 	minThreshold     = 384
-	defaultTrailing  = 4096
+	defaultTrailing  = 1024
 	minTrailing      = 512
 )
 
@@ -122,9 +120,16 @@ func New(
 	connectionPoolConfig *ConnectionPoolConfig,
 	watchQueryTimeout time.Duration,
 	watchProgressNotifyInterval time.Duration,
-
 ) (*Server, error) {
-	options := []app.Option{}
+	options := []app.Option{
+		app.WithLogFunc(appLog),
+	}
+
+	level := logrus.GetLevel()
+	if level == logrus.TraceLevel {
+		options = append(options, app.WithTracing(client.LogDebug))
+	}
+
 	serverConfig := &ServerConfig{
 		ListenAddress: listen,
 
@@ -169,7 +174,7 @@ func New(
 			return nil, fmt.Errorf("failed to remove init.yaml after init: %w", err)
 		}
 
-		logrus.WithFields(logrus.Fields{"address": init.Address, "cluster": init.Cluster}).Print("Will initialize dqlite node")
+		logrus.WithFields(logrus.Fields{"address": init.Address, "cluster": init.Cluster}).Print("will initialize dqlite node")
 
 		options = append(options, app.WithAddress(init.Address), app.WithCluster(init.Cluster))
 	} else if mustUpdate, err := fileExists(dir, "update.yaml"); err != nil {
@@ -192,7 +197,7 @@ func New(
 			return nil, fmt.Errorf("failed to read info.yaml: %w", err)
 		}
 
-		logrus.WithFields(logrus.Fields{"old_address": info.Address, "new_address": update.Address}).Print("Will update address of dqlite node")
+		logrus.WithFields(logrus.Fields{"old_address": info.Address, "new_address": update.Address}).Print("will update address of dqlite node")
 
 		// update node address
 		info.Address = update.Address
@@ -225,7 +230,7 @@ func New(
 			return nil, fmt.Errorf("failed to parse failure-domain from file: %w", err)
 		}
 	}
-	logrus.WithField("failure-domain", failureDomain).Print("Configure dqlite failure domain")
+	logrus.WithField("failure-domain", failureDomain).Print("configure dqlite failure domain")
 	options = append(options, app.WithFailureDomain(failureDomain))
 
 	// handle TLS
@@ -249,10 +254,10 @@ func New(
 		listen, dial := app.SimpleTLSConfig(keypair, pool)
 
 		if clientSessionCacheSize > 0 {
-			logrus.WithField("cache_size", clientSessionCacheSize).Print("Use TLS ClientSessionCache")
+			logrus.WithField("cache_size", clientSessionCacheSize).Print("use TLS ClientSessionCache")
 			dial.ClientSessionCache = tls.NewLRUClientSessionCache(int(clientSessionCacheSize))
 		} else {
-			logrus.Print("Disable TLS ClientSessionCache")
+			logrus.Print("disable TLS ClientSessionCache")
 			dial.ClientSessionCache = nil
 		}
 
@@ -269,7 +274,7 @@ func New(
 		default:
 			return nil, fmt.Errorf("unsupported TLS version %v (supported values are tls10, tls11, tls12, tls13)", minTLSVersion)
 		}
-		logrus.WithField("min_tls_version", minTLSVersion).Print("Enable TLS")
+		logrus.WithField("min_tls_version", minTLSVersion).Print("enable TLS")
 
 		serverConfig.TlsConfig = k8s_dqlite_tls.Config{
 			CertFile: crtFile,
@@ -283,7 +288,6 @@ func New(
 	snapshotParameters := dqlite.SnapshotParams{
 		Threshold: defaultThreshold,
 		Trailing:  defaultTrailing,
-		Strategy:  dqlite.TrailingStrategyDynamic,
 	}
 	if exists, err := fileExists(dir, "tuning.yaml"); err != nil {
 		return nil, fmt.Errorf("failed to check for tuning.yaml: %w", err)
@@ -294,39 +298,30 @@ func New(
 		}
 
 		if v := tuning.Snapshot; v != nil {
-			logrus.WithFields(logrus.Fields{"threshold": v.Threshold, "trailing": v.Trailing}).Print("Initial dqlite raft snapshot parameters before adjustments")
+			logrus.WithFields(logrus.Fields{"threshold": v.Threshold, "trailing": v.Trailing}).Print("initial dqlite raft snapshot parameters before adjustments")
 
 			snapshotParameters.Threshold = v.Threshold
 			snapshotParameters.Trailing = v.Trailing
 
 			if v.Trailing < minTrailing {
 				snapshotParameters.Trailing = minTrailing
-				logrus.WithFields(logrus.Fields{"adjustedTrailing": snapshotParameters.Trailing}).Warning("Trailing value is too low, setting to minimum value")
+				logrus.WithFields(logrus.Fields{"adjustedTrailing": snapshotParameters.Trailing}).Warning("trailing value is too low, setting to minimum value")
 			}
 			if v.Threshold == 0 {
 				snapshotParameters.Threshold = v.Trailing * 3 / 4
-				logrus.WithFields(logrus.Fields{"adjustedThreshold": snapshotParameters.Threshold}).Warning("Threshold value is zero, setting to half of trailing value")
+				logrus.WithFields(logrus.Fields{"adjustedThreshold": snapshotParameters.Threshold}).Warning("threshold value is zero, setting to half of trailing value")
 			} else if v.Threshold < minThreshold {
 				snapshotParameters.Threshold = minThreshold
-				logrus.WithFields(logrus.Fields{"adjustedThreshold": snapshotParameters.Threshold}).Warning("Threshold value is too low, setting to minimum value")
+				logrus.WithFields(logrus.Fields{"adjustedThreshold": snapshotParameters.Threshold}).Warning("threshold value is too low, setting to minimum value")
 			}
 			if v.Threshold > v.Trailing {
 				snapshotParameters.Threshold = v.Trailing
-				logrus.WithFields(logrus.Fields{"adjustedThreshold": snapshotParameters.Threshold}).Warning("Threshold value is higher than trailing value, setting to trailing value")
-			}
-
-			if strings.EqualFold(v.Strategy, "static") {
-				snapshotParameters.Strategy = dqlite.TrailingStrategyStatic
-			} else {
-				snapshotParameters.Strategy = dqlite.TrailingStrategyDynamic
-				if v.Strategy != "" && !strings.EqualFold(v.Strategy, "dynamic") {
-					logrus.WithFields(logrus.Fields{"adjustedStrategy": "dynamic"}).Warning("Strategy parameter is invalid, setting to default (dynamic)")
-				}
+				logrus.WithFields(logrus.Fields{"adjustedThreshold": snapshotParameters.Threshold}).Warning("threshold value is higher than trailing value, setting to trailing value")
 			}
 		}
 
 		if v := tuning.NetworkLatency; v != nil {
-			logrus.WithField("latency", *v).Print("Configure dqlite average one-way network latency")
+			logrus.WithField("latency", *v).Print("configure dqlite average one-way network latency")
 			options = append(options, app.WithNetworkLatency(*v))
 		}
 
@@ -339,11 +334,11 @@ func New(
 		}
 	}
 
-	logrus.WithFields(logrus.Fields{"threshold": snapshotParameters.Threshold, "trailing": snapshotParameters.Trailing}).Print("Configure dqlite raft snapshot parameters")
+	logrus.WithFields(logrus.Fields{"threshold": snapshotParameters.Threshold, "trailing": snapshotParameters.Trailing}).Print("configure dqlite raft snapshot parameters")
 	options = append(options, app.WithSnapshotParams(snapshotParameters))
 
 	if diskMode {
-		logrus.Print("Enable dqlite disk mode operation")
+		logrus.Print("enable dqlite disk mode operation")
 		options = append(options, app.WithDiskMode(true))
 
 		// TODO: remove after disk mode is stable
@@ -374,11 +369,11 @@ func (s *Server) watchAvailableStorageSize(ctx context.Context) {
 	logrus := logrus.WithField("dir", s.storageDir)
 
 	if s.watchAvailableStorageInterval <= 0 {
-		logrus.Info("Disable periodic check for available disk size")
+		logrus.Info("disable periodic check for available disk size")
 		return
 	}
 
-	logrus.WithField("interval", s.watchAvailableStorageInterval).Info("Enable periodic check for available disk size")
+	logrus.WithField("interval", s.watchAvailableStorageInterval).Info("enable periodic check for available disk size")
 	for {
 		select {
 		case <-ctx.Done():
@@ -389,14 +384,14 @@ func (s *Server) watchAvailableStorageSize(ctx context.Context) {
 
 				switch s.actionOnLowDisk {
 				case "none":
-					logrus.WithError(err).Info("Ignoring failed available disk storage check")
+					logrus.WithError(err).Info("ignoring failed available disk storage check")
 				case "handover":
-					logrus.WithError(err).Info("Handover dqlite leadership role")
+					logrus.WithError(err).Info("handover dqlite leadership role")
 					if err := s.app.Handover(ctx); err != nil {
-						logrus.WithError(err).Warning("Failed to handover dqlite leadership")
+						logrus.WithError(err).Warning("failed to handover dqlite leadership")
 					}
 				case "terminate":
-					logrus.WithError(err).Error("Terminating due to failed available disk storage check")
+					logrus.WithError(err).Error("terminating due to failed available disk storage check")
 					s.mustStopCh <- struct{}{}
 				}
 			}
@@ -414,29 +409,31 @@ func (s *Server) Start(ctx context.Context) error {
 	if err := s.app.Ready(ctx); err != nil {
 		return fmt.Errorf("failed to start dqlite app: %w", err)
 	}
-	logrus.WithFields(logrus.Fields{"id": s.app.ID(), "address": s.app.Address()}).Print("Started dqlite")
+	logrus.WithFields(logrus.Fields{"id": s.app.ID(), "address": s.app.Address()}).Print("started dqlite")
 
-	logrus.WithField("config", s.serverConfig).Debug("Starting k8s-dqlite server")
+	logrus.WithField("config", s.serverConfig).Debug("starting k8s-dqlite server")
 
 	db, err := s.robustOpenDb(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
 
-	driver, err := dqliteDriver.NewDriver(ctx, &dqliteDriver.DriverConfig{
-		DB:  database.NewBatched(database.NewPrepared(db)),
-		App: s.app,
+	backend, err := dqliteDriver.NewBackend(ctx, &dqliteDriver.BackendConfig{
+		DriverConfig: &dqliteDriver.DriverConfig{
+			DB:  database.NewPrepared(db),
+			App: s.app,
+		},
+		Config: limited.Config{
+			CompactInterval:   s.serverConfig.CompactInterval,
+			PollInterval:      s.serverConfig.PollInterval,
+			WatchQueryTimeout: s.serverConfig.WatchQueryTimeout,
+		},
 	})
+
 	if err != nil {
-		return fmt.Errorf("failed to create dqlite driver: %w", err)
+		return fmt.Errorf("failed to create dqlite backend: %w", err)
 	}
 
-	backend := sqllog.New(&sqllog.SQLLogConfig{
-		Driver:            driver,
-		CompactInterval:   s.serverConfig.CompactInterval,
-		PollInterval:      s.serverConfig.PollInterval,
-		WatchQueryTimeout: s.serverConfig.WatchQueryTimeout,
-	})
 	if err := backend.Start(ctx); err != nil {
 		backend.Close()
 		return fmt.Errorf("failed to start k8s-dqlite backend: %w", err)
@@ -454,7 +451,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	go s.watchAvailableStorageSize(ctx)
 
-	logrus.WithField("address", s.serverConfig.ListenAddress).Print("Started k8s-dqlite server")
+	logrus.WithField("address", s.serverConfig.ListenAddress).Print("started k8s-dqlite server")
 	return nil
 }
 
@@ -504,17 +501,37 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		return err
 	}
 
-	logrus.Debug("Handing over dqlite leadership")
+	logrus.Debug("handing over dqlite leadership")
 	if err := s.app.Handover(ctx); err != nil {
-		logrus.WithError(err).Errorf("Failed to handover dqlite")
+		logrus.WithError(err).Errorf("failed to handover dqlite")
 	}
-	logrus.Debug("Closing dqlite application")
+	logrus.Debug("closing dqlite application")
 	if err := s.app.Close(); err != nil {
 		return fmt.Errorf("failed to close dqlite app: %w", err)
 	}
 
 	close(s.mustStopCh)
 	return nil
+}
+
+func logrusLogLevel(level client.LogLevel) logrus.Level {
+	switch level {
+	case client.LogError:
+		return logrus.ErrorLevel
+	case client.LogWarn:
+		return logrus.WarnLevel
+	case client.LogInfo:
+		return logrus.InfoLevel
+	case client.LogDebug:
+		return logrus.DebugLevel
+	default:
+		return logrus.TraceLevel
+	}
+}
+
+func appLog(level client.LogLevel, format string, args ...interface{}) {
+	format = fmt.Sprintf("[go-dqlite] %s", format)
+	logrus.StandardLogger().Logf(logrusLogLevel(level), format, args...)
 }
 
 var _ Instance = &Server{}

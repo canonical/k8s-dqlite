@@ -71,6 +71,18 @@ Follow the guide for MicroK8s steps 1-5 while changing the snap name to `k8s`.
     --listen unix:///var/snap/k8s/common/var/lib/k8s-dqlite/k8s-dqlite.sock
     ```
 
+## Running unit tests
+
+In order to run the unit tests `make go.test`, you need to have the correct Dqlite dependencies installed.
+Otherwise, during code compilation you will run into C binding errors.
+
+```
+sudo add-apt-repository ppa:dqlite/dev
+sudo apt install libdqlite-dev libdqlite0
+sudo apt install golang-canonical-go-dqlite-v3-dev
+sudo apt install dqlite-tools-v3
+```
+
 ## Viewing logs and debugging
 
 To view k8s-dqlite logs, you can use the `journalctl` command:
@@ -81,7 +93,7 @@ journalctl -u snap.k8s.k8s-dqlite -f
 
 Or use `microk8s.daemon-k8s-dqlite` for MicroK8s.
 
-To debug, you can set the `--debug` flag to true as explained in the [configuration](configuration.md) documentation.
+To debug, you can set the `--log-level` flag to the desired level as explained in the [configuration](configuration.md) documentation.
 
 ## Connecting to the Dqlite Database
 
@@ -104,3 +116,6 @@ To find the Dqlite leader run `.leader` in the dqlite shell.
 Sometimes it is helpful to get insights into what is happening in the dqlite layer.
 To do this, you can enable debug logs. Add debug logs by editing
 `/var/snap/k8s/common/args/k8s-dqlite-env` or `/var/snap/microk8s/current/args/k8s-dqlite-env` and uncomment `LIBDQLITE_TRACE=1` and `LIBRAFT_TRACE=1`. Then restart the k8s-dqlite service and check the k8s-dqlite logs.
+
+To increase the log level in k8s-dqlite add ``--log-level=debug`` to
+``/var/snap/k8s/common/args/k8s-dqlite``.

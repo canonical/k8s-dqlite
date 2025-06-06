@@ -10,15 +10,13 @@ import (
 	"testing"
 	"time"
 
-	dqlitedrv "github.com/canonical/go-dqlite/v3"
-	"github.com/canonical/go-dqlite/v3/app"
+	"github.com/canonical/go-dqlite/v2/app"
+	"github.com/canonical/k8s-dqlite/pkg/backend/dqlite"
+	"github.com/canonical/k8s-dqlite/pkg/backend/sqlite"
 	"github.com/canonical/k8s-dqlite/pkg/database"
-	"github.com/canonical/k8s-dqlite/pkg/drivers/dqlite"
-	"github.com/canonical/k8s-dqlite/pkg/drivers/sqlite"
 	"github.com/canonical/k8s-dqlite/pkg/endpoint"
 	"github.com/canonical/k8s-dqlite/pkg/instrument"
 	"github.com/canonical/k8s-dqlite/pkg/limited"
-	"github.com/canonical/k8s-dqlite/pkg/sqllog"
 	"github.com/sirupsen/logrus"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
@@ -59,12 +57,12 @@ func newK8sDqliteServer(ctx context.Context, tb testing.TB, config *k8sDqliteCon
 	}
 	tb.Cleanup(func() { instrument.StopSQLiteMonitoring() })
 
-	var driver sqllog.Driver
+	var backend limited.Backend
 	var db *sql.DB
 	var dqliteListener *instrument.Listener
 	switch config.backendType {
 	case SQLiteBackend:
-		driver, db = startSqlite(ctx, tb, dir)
+		backend, db = startSqlite(ctx, tb, dir)
 	case DQLiteBackend:
 		dqliteListener = instrument.NewListener("unix", path.Join(dir, "dqlite.sock"))
 		if err := dqliteListener.Listen(ctx); err != nil {
@@ -76,7 +74,7 @@ func newK8sDqliteServer(ctx context.Context, tb testing.TB, config *k8sDqliteCon
 				tb.Error(err)
 			}
 		})
-		driver, db = startDqlite(ctx, tb, dir, dqliteListener)
+		backend, db = startDqlite(ctx, tb, dir, dqliteListener)
 	default:
 		tb.Fatalf("Testing %s backend not supported", config.backendType)
 	}
@@ -95,12 +93,6 @@ func newK8sDqliteServer(ctx context.Context, tb testing.TB, config *k8sDqliteCon
 		}
 	}
 
-	backend := sqllog.New(&sqllog.SQLLogConfig{
-		Driver:            driver,
-		CompactInterval:   5 * time.Minute,
-		PollInterval:      1 * time.Second,
-		WatchQueryTimeout: 20 * time.Second,
-	})
 	tb.Cleanup(func() {
 		if err := backend.Close(); err != nil {
 			tb.Error("cannot close backend", err)
@@ -141,7 +133,7 @@ func newK8sDqliteServer(ctx context.Context, tb testing.TB, config *k8sDqliteCon
 	}
 }
 
-func startSqlite(ctx context.Context, tb testing.TB, dir string) (*sqlite.Driver, *sql.DB) {
+func startSqlite(ctx context.Context, tb testing.TB, dir string) (limited.Backend, *sql.DB) {
 	dbPath := path.Join(dir, "data.db")
 
 	dbUri := url.URL{
@@ -158,25 +150,28 @@ func startSqlite(ctx context.Context, tb testing.TB, dir string) (*sqlite.Driver
 		tb.Fatal(err)
 	}
 
-	driver, err := sqlite.NewDriver(ctx, &sqlite.DriverConfig{
-		DB: database.NewBatched(database.NewPrepared(db)),
+	backend, err := sqlite.NewBackend(ctx, &sqlite.BackendConfig{
+		Config: limited.Config{
+			CompactInterval:   5 * time.Minute,
+			PollInterval:      1 * time.Second,
+			WatchQueryTimeout: 20 * time.Second,
+		},
+		DriverConfig: &sqlite.DriverConfig{
+			DB: database.NewPrepared(db),
+		},
 	})
+
 	if err != nil {
 		tb.Fatal(err)
 	}
 
-	return driver, db
+	return backend, db
 }
 
-func startDqlite(ctx context.Context, tb testing.TB, dir string, listener *instrument.Listener) (*dqlite.Driver, *sql.DB) {
+func startDqlite(ctx context.Context, tb testing.TB, dir string, listener *instrument.Listener) (limited.Backend, *sql.DB) {
 	app, err := app.New(dir,
 		app.WithAddress(listener.Address),
 		app.WithExternalConn(listener.Connect, listener.AcceptedConns),
-		app.WithSnapshotParams(dqlitedrv.SnapshotParams{
-			Threshold: 512,
-			Trailing:  4096,
-			Strategy:  dqlitedrv.TrailingStrategyDynamic,
-		}),
 	)
 	if err != nil {
 		tb.Fatalf("failed to create dqlite app: %v", err)
@@ -197,15 +192,23 @@ func startDqlite(ctx context.Context, tb testing.TB, dir string, listener *instr
 		tb.Fatal(err)
 	}
 
-	driver, err := dqlite.NewDriver(ctx, &dqlite.DriverConfig{
-		DB:  database.NewBatched(database.NewPrepared(db)),
-		App: app,
+	backend, err := dqlite.NewBackend(ctx, &dqlite.BackendConfig{
+		Config: limited.Config{
+			CompactInterval:   5 * time.Minute,
+			PollInterval:      1 * time.Second,
+			WatchQueryTimeout: 20 * time.Second,
+		},
+		DriverConfig: &dqlite.DriverConfig{
+			DB:  database.NewPrepared(db),
+			App: app,
+		},
 	})
+
 	if err != nil {
 		tb.Fatal(err)
 	}
 
-	return driver, db
+	return backend, db
 }
 
 func (ks *k8sDqliteServer) ReportMetrics(b *testing.B) {
@@ -232,7 +235,7 @@ func (ks *k8sDqliteServer) ResetMetrics() {
 }
 
 func insertMany(ctx context.Context, tx *sql.Tx, prefix string, valueSize, n int) (int64, error) {
-	insertManyQuery := `
+	const insertManyQuery = `
 WITH RECURSIVE gen_id AS(
 	SELECT 1 AS id
 
@@ -258,20 +261,22 @@ FROM gen_id, revision`
 }
 
 func updateMany(ctx context.Context, tx *sql.Tx, prefix string, valueSize, n int) (int64, error) {
-	updateManyQuery := `
+	const updateManyQuery = `
+WITH maxkv AS (
+	SELECT MAX(id) AS id
+	FROM kine
+	WHERE
+		?||'/' <= name AND name < ?||'0'
+	GROUP BY name
+	HAVING deleted = 0
+	ORDER BY name
+)
 INSERT INTO kine(
 	name, created, deleted, create_revision, prev_revision, lease, value, old_value
 )
 SELECT kv.name, 0, 0, kv.create_revision, kv.id, 0, randomblob(?), kv.value
-FROM kine AS kv
-JOIN (
-	SELECT MAX(mkv.id) as id
-	FROM kine mkv
-	WHERE  ?||'/' <= mkv.name AND mkv.name < ?||'0'
-	GROUP BY mkv.name
-) maxkv ON maxkv.id = kv.id
-WHERE kv.deleted = 0
-ORDER BY kv.name
+FROM maxkv CROSS JOIN kine kv
+	ON maxkv.id = kv.id
 LIMIT ?`
 	result, err := tx.ExecContext(ctx, updateManyQuery, valueSize, prefix, prefix, n)
 	if err != nil {
@@ -282,19 +287,21 @@ LIMIT ?`
 
 func deleteMany(ctx context.Context, tx *sql.Tx, prefix string, n int) (int64, error) {
 	const deleteManyQuery = `
+WITH maxkv AS (
+	SELECT MAX(id) AS id
+	FROM kine
+	WHERE
+		?||'/' <= name AND name < ?||'0'
+	GROUP BY name
+	HAVING deleted = 0
+	ORDER BY name
+)
 INSERT INTO kine(
 	name, created, deleted, create_revision, prev_revision, lease, value, old_value
 )
 SELECT kv.name, 0, 1, kv.create_revision, kv.id, 0, kv.value, kv.value
-FROM kine AS kv
-JOIN (
-	SELECT MAX(mkv.id) as id
-	FROM kine mkv
-	WHERE  ?||'/' <= mkv.name AND mkv.name < ?||'0'
-	GROUP BY mkv.name
-) maxkv ON maxkv.id = kv.id
-WHERE kv.deleted = 0
-ORDER BY kv.name
+FROM maxkv CROSS JOIN kine kv
+	ON maxkv.id = kv.id
 LIMIT ?`
 	result, err := tx.ExecContext(ctx, deleteManyQuery, prefix, prefix, n)
 	if err != nil {
