@@ -79,14 +79,12 @@ func init() {
 }
 
 var (
-	columns = "kv.id as theid, kv.name, kv.created, kv.deleted, kv.create_revision, kv.prev_revision, kv.lease, kv.value, kv.old_value"
-
 	revSQL = `
 		SELECT MAX(rkv.id) AS id
 		FROM kine AS rkv`
 
-	listSQL = fmt.Sprintf(`
-		SELECT %s
+	listSQL = `
+		SELECT kv.id, kv.name, kv.created, kv.deleted, kv.create_revision, kv.prev_revision, kv.lease, kv.value, kv.old_value
 		FROM kine AS kv
 		JOIN (
 			SELECT MAX(mkv.id) as id
@@ -98,8 +96,7 @@ var (
 		) AS maxkv
 	    	ON maxkv.id = kv.id
 		WHERE (kv.deleted = 0 OR ?)
-		ORDER BY kv.name ASC, kv.id ASC
-	`, columns)
+		ORDER BY kv.name ASC, kv.id ASC`
 
 	revisionIntervalSQL = `
 		SELECT (
@@ -119,20 +116,19 @@ var (
 			%s
 		)`, listSQL)
 
-	afterSQLPrefix = fmt.Sprintf(`
-		SELECT %s
+	afterSQLPrefix = `
+		SELECT kv.id, kv.name, kv.created, kv.deleted, kv.create_revision, kv.prev_revision, kv.lease, kv.value, kv.old_value
 		FROM kine AS kv
 		WHERE
 			kv.name >= ? AND kv.name < ?
 			AND kv.id > ?
-		ORDER BY kv.id ASC`, columns)
+		ORDER BY kv.id ASC`
 
-	afterSQL = fmt.Sprintf(`
-		SELECT %s
-			FROM kine AS kv
-			WHERE kv.id > ?
-			ORDER BY kv.id ASC
-		`, columns)
+	afterSQL = `
+		SELECT kv.id, kv.name, kv.created, kv.deleted, kv.create_revision, kv.prev_revision, kv.lease, kv.value, kv.old_value
+		FROM kine AS kv
+		WHERE kv.id > ?
+		ORDER BY kv.id ASC`
 
 	deleteRevSQL = `
 		DELETE FROM kine
