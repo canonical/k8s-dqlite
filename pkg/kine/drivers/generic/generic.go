@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/canonical/k8s-dqlite/pkg/kine/prepared"
@@ -220,9 +219,6 @@ type TranslateErr func(error) error
 type ErrCode func(error) string
 
 type Generic struct {
-	sync.Mutex
-
-	LockWrites   bool
 	DB           *prepared.DB
 	Retry        ErrRetry
 	TranslateErr TranslateErr
@@ -369,12 +365,6 @@ func (d *Generic) execute(ctx context.Context, txName, query string, args ...int
 	span.SetAttributes(
 		attribute.String("tx_name", txName),
 	)
-
-	if d.LockWrites {
-		d.Lock()
-		defer d.Unlock()
-		span.AddEvent("acquired write lock")
-	}
 
 	start := time.Now()
 	retryCount := 0
