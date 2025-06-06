@@ -106,6 +106,7 @@ var (
 				rootCmdOpts.lowAvailableStorageAction,
 				rootCmdOpts.connectionPoolConfig,
 				rootCmdOpts.watchQueryTimeout,
+				rootCmdOpts.debug,
 			)
 			if err != nil {
 				logrus.WithError(err).Fatal("Failed to create server")
