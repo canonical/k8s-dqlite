@@ -48,6 +48,15 @@ for (file in metrics_files) {
   df["RSS"] <- df["RSS"] / 1024
   
   metrics_data[[basename(file)]] <- df
+
+  # Select only specific columns for csv output
+  df_subset <- df[, c("X.CPU", "kB_rd_s", "kB_wr_s", "RSS", "X.MEM")]
+
+  # Save each subset of one pidstat output to a CSV file
+  csv_file <- file.path(opt$out, paste0(tools::file_path_sans_ext(basename(file)), ".csv"))
+  write.csv(df_subset, file = csv_file, row.names = FALSE)
+
+  print(paste("Processed file:", basename(file), "->", csv_file))
 }
 
 # Verify data is loaded

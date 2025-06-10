@@ -96,6 +96,18 @@ class SecurityGroupWrapper:
                     "ToPort": 30801,
                     "IpRanges": [{"CidrIp": f"{ssh_ingress_ip}/32"}],
                 },
+                    # Allow all traffic within the security group.
+                {
+                    "IpProtocol": "-1",  # -1 means all protocols
+                    "FromPort": 0,
+                    "ToPort": 0,
+                    "UserIdGroupPairs": [
+                        {
+                            "GroupId": self.security_group,
+                            "UserId": "",  # Empty UserId means the same account
+                        }
+                    ],
+                },
                 {
                     # Allow custom TCP port access api server.
                     "IpProtocol": "tcp",
@@ -115,6 +127,13 @@ class SecurityGroupWrapper:
                     "IpProtocol": "tcp",
                     "FromPort": 25000,
                     "ToPort": 25000,
+                    "IpRanges": [{"CidrIp": "0.0.0.0/0"}],
+                },
+                                {
+                    # Allow custom TCP access cluster agent
+                    "IpProtocol": "tcp",
+                    "FromPort": 9090,
+                    "ToPort": 9090,
                     "IpRanges": [{"CidrIp": "0.0.0.0/0"}],
                 },
                 {
@@ -141,8 +160,15 @@ class SecurityGroupWrapper:
                 {
                     # Allow custom TCP access etcd
                     "IpProtocol": "tcp",
-                    "FromPort": 12379,
-                    "ToPort": 12379,
+                    "FromPort": 2379,
+                    "ToPort": 2379,
+                    "IpRanges": [{"CidrIp": "0.0.0.0/0"}],
+                },
+                {
+                    # Allow custom TCP access etcd peer
+                    "IpProtocol": "tcp",
+                    "FromPort": 2380,
+                    "ToPort": 2380,
                     "IpRanges": [{"CidrIp": "0.0.0.0/0"}],
                 },                                       
                 {

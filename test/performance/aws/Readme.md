@@ -4,7 +4,7 @@ Run test:
 
 ```
 cd test/performance/aws   
-source bin/activate  
+source /venv/bin/activate  
 pip3 install -r requirements.txt
 ```
 

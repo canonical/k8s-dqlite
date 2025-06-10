@@ -174,7 +174,7 @@ ubuntu@ip-172-31-34-85:~$ sudo cat /var/snap/microk8s/current/args/kube-apiserve
 --etcd-certfile=/var/snap/microk8s/current/certs/etcd-client.crt
 --etcd-keyfile=/var/snap/microk8s/current/certs/etcd-client.key
 
-etcdctl --endpoints=https://127.0.0.1:2379   --cacert=ca.pem   --cert=172.31.34.85.pem   --key=172.31.34.85-key.pem   endpoint health
+etcdctl --endpoints=https://127.0.0.1:2379 --cacert=ca.pem --cert=172.31.34.85.pem --key=172.31.34.85-key.pem endpoint health
 
 ubuntu@ip-172-31-34-85:~$ sudo microk8s status
 microk8s is running
@@ -203,47 +203,16 @@ sudo cp 172.31.32.86-key.pem /var/snap/microk8s/current/certs/etcd-client.key
 
 sudo snap restart microk8s
 # Finally
-ubuntu@ip-172-31-37-184:~$ sudo microk8s kubectl get no -A -o wide
-NAME STATUS ROLES AGE VERSION INTERNAL-IP EXTERNAL-IP OS-IMAGE KERNEL-VERSION CONTAINER-RUNTIME
-ip-172-31-32-86 Ready v1.31.7 172.31.32.86 24.04.2 LTS 6.8.0-1024-aws containerd://1.6.28 <none >1s <none >Ubuntu
-ip-172-31-34-85 Ready v1.31.7 172.31.34.85 24.04.2 LTS 6.8.0-1024-aws containerd://1.6.28 <none >13m <none >Ubuntu
-ip-172-31-37-184 Ready v1.31.7 172.31.37.184 24.04.2 LTS 6.8.0-1024-aws containerd://1.6.28 <none >4m24s <none >Ubuntu
-
-okay disk pressure:
-ubuntu@ip-172-31-34-85:~$ df -h
-Filesystem Size Used Avail Use% Mounted on
-/dev/root 6.8G 5.5G 1.3G 82% /
 
 # bumped volume size to 20 GB in AWS console
 sudo growpart /dev/nvme0n1 1
 sudo resize2fs /dev/nvme0n1p1
 
-# happy pods
-ubuntu@ip-172-31-34-85:~$ sudo microk8s kubectl get po -A
-NAMESPACE       NAME                                                     READY   STATUS    RESTARTS      AGE
-kube-system     calico-kube-controllers-759cd8b574-rclcc                 1/1     Running   0             52m
-kube-system     calico-node-2lssj                                        1/1     Running   0             43m
-kube-system     calico-node-458pp                                        1/1     Running   0             44m
-kube-system     calico-node-lsf9r                                        1/1     Running   0             39m
-kube-system     coredns-7896dbf49-4dhnn                                  1/1     Running   0             38m
-kube-system     hostpath-provisioner-5fbc49d86c-rmkdm                    1/1     Running   0             38m
-observability   alertmanager-kube-prom-stack-kube-prome-alertmanager-0   2/2     Running   1 (37m ago)   37m
-observability   kube-prom-stack-grafana-649cb6588b-d44h4                 3/3     Running   0             37m
-observability   kube-prom-stack-kube-prome-operator-7c7d5757db-tbh4j     1/1     Running   0             37m
-observability   kube-prom-stack-kube-state-metrics-7c69654b66-2gx55      1/1     Running   0             37m
-observability   kube-prom-stack-prometheus-node-exporter-5gbrr           1/1     Running   0             2m43s
-observability   kube-prom-stack-prometheus-node-exporter-lfcq5           1/1     Running   0             37m
-observability   kube-prom-stack-prometheus-node-exporter-p7nhq           1/1     Running   0             37m
-observability   loki-0                                                   1/1     Running   0             37m
-observability   loki-promtail-dhvxx                                      1/1     Running   0             37m
-observability   loki-promtail-krxzd                                      1/1     Running   0             37m
-observability   loki-promtail-wjv85                                      1/1     Running   0             2m44s
-observability   prometheus-kube-prom-stack-kube-prome-prometheus-0       2/2     Running   0             37m
-observability   tempo-0                                                  2/2     Running   0             37m
-
-
-
 sudo chown root:microk8s /var/snap/microk8s/current/certs/etcd*
-   68  sudo chmod 640 /var/snap/microk8s/current/certs/etcd-client.crt
-   69  sudo chmod 640 /var/snap/microk8s/current/certs/etcd-client.key
-   70  sudo chmod 640 /var/snap/microk8s/current/certs/etcd-ca.crt
+sudo chmod 640 /var/snap/microk8s/current/certs/etcd-client.crt
+sudo chmod 640 /var/snap/microk8s/current/certs/etcd-client.key
+sudo chmod 640 /var/snap/microk8s/current/certs/etcd-ca.crt
+
+sudo pidstat -druh -p $(pgrep etcd) 1 >/home/ubuntu/node1_metrics.log
+sudo pidstat -druh -p $(pgrep etcd) 1 >/home/ubuntu/node2_metrics.log
+sudo pidstat -druh -p $(pgrep etcd) 1 >/home/ubuntu/node3_metrics.log
