@@ -3,11 +3,13 @@ package logstructured
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/canonical/k8s-dqlite/pkg/kine/server"
+	"github.com/cenkalti/backoff/v4"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -382,17 +384,42 @@ func (l *LogStructured) ttlEvents(ctx context.Context) chan *server.Event {
 
 func (l *LogStructured) ttl(ctx context.Context) {
 	// very naive TTL support
-	mutex := &sync.Mutex{}
 	for event := range l.ttlEvents(ctx) {
 		go func(event *server.Event) {
+			// add some jitter to avoid ttl expiry and deletion on all nodes at the same time with the goal of
+			// one of them succeeding if the DB is under high load (busy)
+			jitterDelay := time.Duration(rand.Intn(1000)) * time.Millisecond // Jitter up to 1 second as api-server does not expect sub-second precision
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(time.Duration(event.KV.Lease) * time.Second):
+			case <-time.After(time.Duration(event.KV.Lease)*time.Second + jitterDelay):
 			}
-			mutex.Lock()
-			l.Delete(ctx, event.KV.Key, event.KV.ModRevision)
-			mutex.Unlock()
+
+			deleteLease := func() error {
+				// retry until we succeed or context is cancelled, if another node has already deleted the key the delete will not return an error and we will exit the retry loop
+				rev, deleted, err := l.Delete(ctx, event.KV.Key, event.KV.ModRevision)
+				if err != nil {
+					logrus.Errorf("failed to delete %s for TTL: %v, retrying", event.KV.Key, err)
+					return err
+				}
+				if deleted {
+					logrus.Debugf("deleted %s for TTL, revRet=%d", event.KV.Key, rev)
+				}
+				return nil
+			}
+
+			b := backoff.NewExponentialBackOff()
+			b.InitialInterval = 100 * time.Millisecond
+			b.RandomizationFactor = 0.5
+			b.Multiplier = 1.5
+			b.MaxInterval = 5 * time.Second
+			b.MaxElapsedTime = 0 // retry indefinitely
+			b.Reset()
+
+			err := backoff.Retry(deleteLease, backoff.WithContext(b, ctx))
+			if err != nil {
+				logrus.Errorf("failed to delete %s for TTL after retries: %v", event.KV.Key, err)
+			}
 		}(event)
 	}
 }

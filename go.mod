@@ -3,7 +3,8 @@ module github.com/canonical/k8s-dqlite
 go 1.21
 
 require (
-	github.com/canonical/go-dqlite v1.22.0
+	github.com/canonical/go-dqlite v2.0.0
+	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/mattn/go-sqlite3 v1.14.22
 	github.com/onsi/gomega v1.27.10
 	github.com/pkg/errors v0.9.1
@@ -30,7 +31,6 @@ require (
 require (
 	github.com/Rican7/retry v0.3.1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/coreos/go-semver v0.3.1 // indirect
 	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
