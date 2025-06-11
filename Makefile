@@ -31,7 +31,7 @@ bin/static/k8s-dqlite: $(DQLITE_BUILD_SCRIPTS_DIR)/.deps/static/lib/libdqlite.a 
 
 bin/static/dqlite: $(DQLITE_BUILD_SCRIPTS_DIR)/.deps/static/lib/libdqlite.a
 	mkdir -p bin/static
-	GOBIN=$(shell pwd)/bin/static $(DQLITE_BUILD_SCRIPTS_DIR)/static-go-install.sh github.com/canonical/go-dqlite/v2/cmd/dqlite@v2.0.0
+	GOBIN=$(shell pwd)/bin/static $(DQLITE_BUILD_SCRIPTS_DIR)/static-go-install.sh github.com/canonical/go-dqlite/v3/cmd/dqlite@v3.0.1
 
 ## Dynamic Builds
 dynamic: bin/dynamic/k8s-dqlite bin/dynamic/dqlite
@@ -47,7 +47,7 @@ bin/dynamic/k8s-dqlite: bin/dynamic/lib/libdqlite.so $(GO_SOURCES)
 
 bin/dynamic/dqlite: bin/dynamic/lib/libdqlite.so
 	mkdir -p bin/dynamic
-	GOBIN=$(shell pwd)/bin/dynamic $(DQLITE_BUILD_SCRIPTS_DIR)/dynamic-go-install.sh github.com/canonical/go-dqlite/v2/cmd/dqlite@v2.0.0
+	GOBIN=$(shell pwd)/bin/dynamic $(DQLITE_BUILD_SCRIPTS_DIR)/dynamic-go-install.sh github.com/canonical/go-dqlite/v3/cmd/dqlite@v3.0.1
 
 ## Cleanup
 clean:
