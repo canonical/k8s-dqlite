@@ -50,10 +50,6 @@ func (k *KVServerBridge) Range(ctx context.Context, r *etcdserverpb.RangeRequest
 		return nil, unsupported("sortTarget")
 	}
 
-	if r.Serializable {
-		return nil, unsupported("serializable")
-	}
-
 	if r.KeysOnly {
 		return nil, unsupported("keysOnly")
 	}
