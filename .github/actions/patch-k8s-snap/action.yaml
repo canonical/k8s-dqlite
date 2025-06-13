@@ -61,11 +61,13 @@ runs:
           sudo unsquashfs -d snap-unpack-dir k8s.snap
         fi
 
-    - name: Replace k8s-dqlite binary
+    - name: Replace k8s-dqlite dqlite binary
       shell: bash
       run: |
           sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
           sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
+          sudo cp ./bin/static/dqlite snap-unpack-dir/bin/dqlite
+          sudo chmod o+r snap-unpack-dir/bin/dqlite
 
     - name: Repack Snap
       shell: bash
