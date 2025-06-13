@@ -47,6 +47,8 @@ jobs:
         run: |
           sudo cp ./bin/static/k8s-dqlite snap-unpack-dir/bin/k8s-dqlite
           sudo chmod o+r snap-unpack-dir/bin/k8s-dqlite
+          sudo cp ./bin/static/dqlite snap-unpack-dir/bin/dqlite
+          sudo chmod o+r snap-unpack-dir/bin/dqlite
       - name: Repack Snap
         run: |
           sudo mksquashfs snap-unpack-dir k8s-updated.snap -noappend -comp lzo -no-fragments
