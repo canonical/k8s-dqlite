@@ -48,7 +48,50 @@ func TestCompaction(t *testing.T) {
 				g.Expect(finalSize).To(BeNumerically("==", initialSize)) // Expecting no compaction.
 			})
 
-			t.Run("LargeDatabaseDeleteFivePercent", func(t *testing.T) {
+			t.Run("LargeDatabaseDeleteFew", func(t *testing.T) {
+				g := NewWithT(t)
+
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+
+				server := newK8sDqliteServer(ctx, t, &k8sDqliteConfig{
+					backendType: backendType,
+					setup: func(ctx context.Context, tx *sql.Tx) error {
+						if _, err := insertMany(ctx, tx, "key", 100, 10_000); err != nil {
+							return err
+						}
+						if _, err := updateMany(ctx, tx, "key", 100, 5_000); err != nil {
+							return err
+						}
+						if _, err := deleteMany(ctx, tx, "key", 500); err != nil {
+							return err
+						}
+						return nil
+					},
+				})
+
+				initialSize, err := server.backend.DbSize(ctx)
+				g.Expect(err).To(BeNil())
+
+				err = server.backend.DoCompact(ctx)
+				g.Expect(err).To(BeNil())
+
+				// Expect compaction not to increase the size.
+				finalSize, err := server.backend.DbSize(ctx)
+				g.Expect(err).To(BeNil())
+				g.Expect(finalSize).To(BeNumerically("<=", initialSize))
+
+				// Expect for keys to still be there.
+				rev, count, err := server.backend.Count(ctx, []byte("key/"), []byte("key0"), 0)
+				g.Expect(err).To(BeNil())
+				g.Expect(count).To(Equal(int64(10_000 - 500)))
+
+				// Expect old revisions not to be there anymore.
+				_, _, err = server.backend.List(ctx, []byte("key/"), []byte("key0"), 0, rev-400)
+				g.Expect(err).To(Not(BeNil()))
+			})
+
+			t.Run("LargeDatabaseDeleteMost", func(t *testing.T) {
 				g := NewWithT(t)
 
 				ctx, cancel := context.WithCancel(context.Background())
@@ -63,7 +106,7 @@ func TestCompaction(t *testing.T) {
 						if _, err := updateMany(ctx, tx, "key", 100, 500); err != nil {
 							return err
 						}
-						if _, err := deleteMany(ctx, tx, "key", 500); err != nil {
+						if _, err := deleteMany(ctx, tx, "key", 9_500); err != nil {
 							return err
 						}
 						return nil
@@ -84,7 +127,7 @@ func TestCompaction(t *testing.T) {
 				// Expect for keys to still be there.
 				rev, count, err := server.backend.Count(ctx, []byte("key/"), []byte("key0"), 0)
 				g.Expect(err).To(BeNil())
-				g.Expect(count).To(Equal(int64(10_000 - 500)))
+				g.Expect(count).To(Equal(int64(10_000 - 9_500)))
 
 				// Expect old revisions not to be there anymore.
 				_, _, err = server.backend.List(ctx, []byte("key/"), []byte("key0"), 0, rev-400)
