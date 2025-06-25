@@ -2,8 +2,7 @@ name: Tiobe TICS nightly report
 
 on:
   schedule:
-     # Runs every midnight
-    - cron: '0 0 * * *'
+    - cron: '0 0 * * 0' # runs every sunday at midnight
   pull_request:
     paths:
       - .github/workflows/tiobe-tics-cron.yaml
@@ -40,7 +39,7 @@ jobs:
       - name: go mod download
         run: go mod download
 
-      - name: Run Tests with Coverage
+      - name: Prepare Go coverage and build
         run: |
           set -eux -o pipefail
 
@@ -50,6 +49,7 @@ jobs:
           go install github.com/boumenot/gocover-cobertura@latest
           mkdir -p .coverage
           gocover-cobertura < coverage.txt > .coverage/coverage.xml
+          go install honnef.co/go/tools/cmd/staticcheck@v0.5.1
 
       - name: Build Project
         run: |
@@ -64,26 +64,18 @@ jobs:
           sudo make clean
           sudo make -j static
 
-      - name: Install and Run TICS
-        run: |
-          export TICSAUTHTOKEN=${{ secrets.TICSAUTHTOKEN }}
-
-          # NOTE(aznashwan): TiCS install script doesn't define defaults; cannot '-u'
-          set -ex -o pipefail
-
-          # Install the TICS and staticcheck
-          go install honnef.co/go/tools/cmd/staticcheck@v0.5.1
-          . <(curl --silent --show-error 'https://canonical.tiobe.com/tiobeweb/TICS/api/public/v1/fapi/installtics/Script?cfg=default&platform=linux&url=https://canonical.tiobe.com/tiobeweb/TICS/')
-
-          # Performance tests are importing a local test_util module. Needed for pylint.
-          export PYTHONPATH="$(pwd)/test/performance/tests/"
-
-          # TICSQServer will try to build the project. We need a few environment variables
-          # for it to succeed. Based on make static / "hack/static-dqlite.sh".
-          export INSTALL_DIR="$(pwd)/hack/.deps/static"
-          export PATH="${PATH}:${INSTALL_DIR}/musl/bin"
-          export CC=musl-gcc
-          export CGO_CFLAGS="-I${INSTALL_DIR}/include"
-          export CGO_LDFLAGS="-L${INSTALL_DIR}/lib -luv -ldqlite -llz4 -lsqlite3 -Wl,-z,stack-size=1048576"
-
-          TICSQServer -project ${{ github.event.repository.name }} -tmpdir /tmp/tics -branchdir "$GITHUB_WORKSPACE"
+      - name: Run TICS
+        uses: tiobe/tics-github-action@v3
+        env:
+          PYTHONPATH: ${{ github.workspace }}/test/performance/tests/
+          INSTALL_DIR: ${{ github.workspace }}/hack/.deps/static
+          PATH: ${{ env.PATH }}:${{ github.workspace }}/hack/.deps/static/musl/bin
+          CC: musl-gcc
+          CGO_CFLAGS: -I${{ github.workspace }}/hack/.deps/static/include
+          CGO_LDFLAGS: -L${{ github.workspace }}/hack/.deps/static/lib -luv -ldqlite -llz4 -lsqlite3 -Wl,-z,stack-size=1048576
+        with:
+          mode: qserver
+          project: ${{ github.event.repository.name }}
+          viewerUrl: https://canonical.tiobe.com/tiobeweb/TICS/api/cfg?name=GoProjects
+          ticsAuthToken: ${{ secrets.TICSAUTHTOKEN }}
+          installTics: true
