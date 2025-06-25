@@ -63,13 +63,13 @@ jobs:
           # We need to have our project built
           sudo make clean
           sudo make -j static
-
+      - name: Set PATH
+        run: echo "${{ github.workspace }}/hack/.deps/static/musl/bin" >> $GITHUB_PATH
       - name: Run TICS
         uses: tiobe/tics-github-action@v3
         env:
           PYTHONPATH: ${{ github.workspace }}/test/performance/tests/
           INSTALL_DIR: ${{ github.workspace }}/hack/.deps/static
-          PATH: ${{ env.PATH }}:${{ github.workspace }}/hack/.deps/static/musl/bin
           CC: musl-gcc
           CGO_CFLAGS: -I${{ github.workspace }}/hack/.deps/static/include
           CGO_LDFLAGS: -L${{ github.workspace }}/hack/.deps/static/lib -luv -ldqlite -llz4 -lsqlite3 -Wl,-z,stack-size=1048576
