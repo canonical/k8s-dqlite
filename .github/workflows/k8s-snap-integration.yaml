@@ -2,7 +2,7 @@ name: Integration Test K8s-snap
 
 on:
   push:
-    branches: ["master"]
+    branches: ["master", "louise-test-cncf"]
   pull_request:
   schedule:
     - cron: "0 0 * * *" # Runs every midnight
@@ -26,7 +26,7 @@ jobs:
         run: |
           set -x
 
-          tags="up_to_weekly"
+          tags="cncf-conformance"
           has_cnfc_label=${{ contains(github.event.pull_request.labels.*.name, 'cncf-conformance') }}
 
           if [[ ${{ github.event_name }} == "schedule" || "$has_cnfc_label" == "true" ]]; then
