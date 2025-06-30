@@ -26,7 +26,7 @@ jobs:
         run: |
           set -x
 
-          tags="cncf-conformance"
+          tags="conformance_tests"
           has_cnfc_label=${{ contains(github.event.pull_request.labels.*.name, 'cncf-conformance') }}
 
           if [[ ${{ github.event_name }} == "schedule" || "$has_cnfc_label" == "true" ]]; then
