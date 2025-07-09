@@ -112,6 +112,7 @@ func New(
 	listen string,
 	enableTLS bool,
 	diskMode bool,
+	dqliteRolesAdjustmentFrequency time.Duration,
 	clientSessionCacheSize uint,
 	minTLSVersion string,
 	watchAvailableStorageInterval time.Duration,
@@ -341,8 +342,8 @@ func New(
 		logrus.Warn("dqlite disk mode operation is current at an experimental state and MUST NOT be used in production. Expect data loss.")
 	}
 
-	// drop role adjustment frequency from the default 30s to 10s to make Dqlite more responsive to role changes
-	app.WithRolesAdjustmentFrequency(10 * time.Second)
+	logrus.WithField("dqliteRolesAdjustmentFrequency", dqliteRolesAdjustmentFrequency).Info("configure dqlite role adjustment frequency")
+	app.WithRolesAdjustmentFrequency(dqliteRolesAdjustmentFrequency)
 	// FIXME: this also starts dqlite. It should be moved to `Start`.
 	app, err := app.New(dir, options...)
 	if err != nil {
