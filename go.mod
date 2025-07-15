@@ -1,6 +1,6 @@
 module github.com/canonical/k8s-dqlite
 
-go 1.24.5
+go 1.24.4
 
 require (
 	github.com/canonical/go-dqlite/v2 v2.0.1
