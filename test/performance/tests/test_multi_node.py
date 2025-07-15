@@ -4,10 +4,11 @@
 from typing import List
 
 import pytest
-from test_util import harness, metrics, util
+from test_util import harness, metrics, util, config
 
 
 @pytest.mark.node_count(3)
+@pytest.mark.bootstrap_config((config.MANIFESTS_DIR / "bootstrap-all.yaml").read_text())
 def test_three_node_load(instances: List[harness.Instance]):
     cluster_node = instances[0]
     joining_node = instances[1]
