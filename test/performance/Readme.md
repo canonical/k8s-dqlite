@@ -4,7 +4,7 @@
 
 End to end tests are written in Python. They are built on top of a [Harness](./tests/conftest.py) fixture so that they can run on multiple environments like LXD or in the future on the local machine.
 
-End to end tests can be configured using environment variables. You can see all available options in [./tests/config.py](./tests/config.py).
+End to end tests can be configured using environment variables. You can see all available options from [here](./tests/test_util/config.py).
 
 ## Running end to end tests
 
