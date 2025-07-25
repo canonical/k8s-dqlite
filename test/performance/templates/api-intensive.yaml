@@ -12,13 +12,14 @@ jobs:
     namespace: api-intensive
     podWait: false
     cleanup: true
-    waitFor: []
     waitWhenFinished: true
     objects:
       - objectTemplate: configmap.yaml
         replicas: 10
+        wait: true
       - objectTemplate: secret.yaml
         replicas: 10
+        wait: true
   - name: remove-configmaps-secrets
     qps: 100
     burst: 100

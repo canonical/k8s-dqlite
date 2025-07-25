@@ -12,8 +12,8 @@ jobs:
     podWait: false
     cleanup: false
     executionMode: sequential
-    waitFor: []
     waitWhenFinished: true
     objects:
       - objectTemplate: application.yaml
         replicas: 1
+        wait: true
