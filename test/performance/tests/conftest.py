@@ -70,7 +70,7 @@ def h() -> harness.Harness:
         h = harness.LXDHarness()
     else:
         raise harness.HarnessError(
-            "TEST_SUBSTRATE must be one of: local, lxd, multipass, juju"
+            "TEST_SUBSTRATE must be one of: lxd"
         )
 
     yield h

@@ -1,0 +1,17 @@
+global:
+  writeToFile: true
+  metricsDirectory: collected-metrics
+
+jobs:
+  - name: read-intensive
+    jobIterations: 20
+    namespacedIterations: false
+    jobIterationDelay: 60s
+    namespace: argocd
+    podWait: false
+    cleanup: false
+    waitFor: []
+    waitWhenFinished: true
+    objects:
+      - objectTemplate: application.yaml
+        replicas: 1

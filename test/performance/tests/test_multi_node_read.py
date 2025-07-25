@@ -4,12 +4,12 @@
 from typing import List
 
 import pytest
-from test_util import harness, metrics, util, config, kube_burner
+from test_util import harness, metrics, util, config, workload, kube_burner
 
 
 @pytest.mark.node_count(3)
 @pytest.mark.bootstrap_config((config.MANIFESTS_DIR / "bootstrap-all.yaml").read_text())
-def test_three_node_load(instances: List[harness.Instance]):
+def test_three_node_read_load(instances: List[harness.Instance]):
     cluster_node = instances[0]
     joining_node = instances[1]
     joining_node_2 = instances[2]
@@ -34,15 +34,15 @@ def test_three_node_load(instances: List[harness.Instance]):
     kube_burner.copy_from_templates(
         cluster_node,
         [
-            "api-intensive.yaml",
-            "configmap.yaml",
-            "secret.yaml",
+            "read-intensive.yaml",
+            "application.yaml",
         ],
     )
+    workload.configure_argocd(cluster_node)
     process_dict = metrics.collect_metrics(instances)
     try:
-        kube_burner.run_kube_burner(cluster_node, "api-intensive.yaml")
+        kube_burner.run_kube_burner(cluster_node, "read-intensive.yaml")
     finally:
-        # Collect the metrics even if kube-burner fails.
+        # Collect the metrics
         metrics.stop_metrics(instances, process_dict)
-        metrics.pull_metrics(instances, "three-node")
+        metrics.pull_metrics(instances, "three-node-read")

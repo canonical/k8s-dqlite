@@ -3,7 +3,6 @@
 #
 import logging
 import os
-import time
 from typing import List
 
 from test_util import config, harness, util
@@ -119,69 +118,3 @@ def pull_metrics(instances: List[harness.Instance], test_name: str):
             instance.exec(["snap", "start", "k8s.k8s-dqlite"])
 
 
-def configure_kube_burner(instance: harness.Instance):
-    """Downloads and sets up `kube-burner` on each instance if it's not already present."""
-    if (
-        not instance.exec(["test", "-f", "/root/kube-burner"], check=False).returncode
-        == 0
-    ):
-        url = config.KUBE_BURNER_URL
-        for retry in range(5):
-            try:
-                instance.exec(["wget", url])
-                break
-            except Exception as ex:
-                if retry < 5:
-                    time.sleep(3)
-                    LOG.exception("Failed to download kube-burner, retrying...")
-                else:
-                    raise ex
-        tarball_name = os.path.basename(url)
-        instance.exec(["tar", "-zxvf", tarball_name, "kube-burner"])
-        instance.exec(["rm", tarball_name])
-        instance.exec(["chmod", "+x", "/root/kube-burner"])
-
-    instance.exec(["mkdir", "-p", "/root/templates"])
-    instance.send_file(
-        (config.MANIFESTS_DIR / "api-intensive.yaml").as_posix(),
-        "/root/api-intensive.yaml",
-    )
-    instance.send_file(
-        (config.MANIFESTS_DIR / "secret.yaml").as_posix(), "/root/secret.yaml"
-    )
-    instance.send_file(
-        (config.MANIFESTS_DIR / "configmap.yaml").as_posix(), "/root/configmap.yaml"
-    )
-
-
-def run_kube_burner(
-    instance: harness.Instance, iterations: int = config.KUBE_BURNER_ITERATIONS
-):
-    """Copies kubeconfig and runs kube-burner on the instance."""
-    instance.exec(["mkdir", "-p", "/root/.kube"])
-    instance.exec(["k8s", "config", ">", "/root/.kube/config"])
-
-    raised_exc = None
-    for iteration in range(iterations):
-        LOG.info("Starting kube-burner iteration %s of %s.", iteration, iterations)
-        try:
-            instance.exec(
-                [
-                    "/root/kube-burner",
-                    "init",
-                    "--timeout",
-                    config.KUBE_BURNER_TIMEOUT,
-                    "-c",
-                    "/root/api-intensive.yaml",
-                ]
-            )
-        except Exception as ex:
-            # We'll continue the loop even after encountering failures
-            # in order to determine if this is a transient failure or if the
-            # dqlite service was completely compromised (e.g. deadlock or crash).
-            LOG.exception("kube-burner job failed, continuing...")
-            raised_exc = ex
-
-    # Raise encountered exceptions, if any.
-    if raised_exc:
-        raise raised_exc
