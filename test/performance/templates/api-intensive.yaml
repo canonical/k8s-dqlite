@@ -1,6 +1,7 @@
-global:
-  writeToFile: true
-  metricsDirectory: collected-metrics
+metricsEndpoints:
+  - indexer:
+      metricsDirectory: collected-metrics
+      type: local
 
 jobs:
   - name: api-intensive
