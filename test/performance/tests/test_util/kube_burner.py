@@ -4,6 +4,7 @@
 import logging
 import os
 import time
+import subprocess
 
 from test_util import config, harness
 
@@ -72,6 +73,10 @@ def run_kube_burner(
             # in order to determine if this is a transient failure or if the
             # dqlite service was completely compromised (e.g. deadlock or crash).
             LOG.exception("kube-burner job failed, continuing...")
+            if isinstance(ex, subprocess.CalledProcessError):
+                LOG.warning(f"  rc={ex.returncode}")
+                LOG.warning(f"  stdout={ex.stdout.decode()}")
+                LOG.warning(f"  stderr={ex.stderr.decode()}")
             raised_exc = ex
 
     # Raise encountered exceptions, if any.
