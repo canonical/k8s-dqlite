@@ -8,7 +8,7 @@ spec:
   source:
     repoURL: https://github.com/argoproj/argocd-example-apps.git
     targetRevision: HEAD
-    path: guestbook
+    path: helm-guestbook
     helm:
       releaseName: guestbook-{{ .Iteration }}
   destination:
