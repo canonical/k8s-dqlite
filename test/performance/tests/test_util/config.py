@@ -39,7 +39,7 @@ SNAP_NAME = os.getenv("TEST_SNAP_NAME") or "k8s"
 # KUBE_BURNER_URL is the version of kube-burner to use.
 KUBE_BURNER_URL = (
     os.getenv("TEST_KUBE_BURNER_URL")
-    or "https://github.com/kube-burner/kube-burner/releases/download/v1.2/kube-burner-1.2-Linux-x86_64.tar.gz"
+    or "https://github.com/kube-burner/kube-burner/releases/download/v1.17.1/kube-burner-V1.17.1-linux-x86_64.tar.gz"
 )
 # Global kube-burner invocation timeout.
 KUBE_BURNER_TIMEOUT = os.getenv("TEST_KUBE_BURNER_TIMEOUT") or "10m"
