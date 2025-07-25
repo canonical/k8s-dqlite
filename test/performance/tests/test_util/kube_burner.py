@@ -34,14 +34,12 @@ def configure_kube_burner(instance: harness.Instance):
         instance.exec(["rm", tarball_name])
         instance.exec(["chmod", "+x", "/root/kube-burner"])
 
-    instance.exec(["mkdir", "-p", "/root/templates"])
-
 def copy_from_templates(instance: harness.Instance, names: list[str]):
     """Copies files from the templates directory to the instance."""
     for name in names:
         instance.send_file(
             (config.MANIFESTS_DIR / name).as_posix(),
-            f"/root/templates/{name}",
+            f"/root/{name}",
         )
 
 
@@ -65,7 +63,7 @@ def run_kube_burner(
                     "--timeout",
                     config.KUBE_BURNER_TIMEOUT,
                     "-c",
-                    f"/root/templates/{kube_burner_config}",
+                    f"/root/{kube_burner_config}",
                 ],
                 text=True, capture_output=True
             )

@@ -22,7 +22,7 @@ def configure_argocd(control_plane: harness.Instance):
     LOG.info("Waiting for ArgoCD application controller pod to show up...")
     util.stubbornly(retries=3, delay_s=10).on(control_plane).until(
         lambda p: "argocd-application-controller" in p.stdout.decode()
-    ).exec(["k8s", "kubectl", "get", "pod", "-o", "json"])
+    ).exec(["k8s", "kubectl", "get", "pod", "-n", "argocd", "-o", "json"])
     LOG.info("ArgoCD application controller pod showed up")
 
     LOG.info("Wait for all pods in argocd namespace to be ready")
@@ -35,7 +35,7 @@ def configure_argocd(control_plane: harness.Instance):
             "pod",
             "--all",
             "-n",
-            "argocd"
+            "argocd",
             "--timeout",
             "180s",
         ]

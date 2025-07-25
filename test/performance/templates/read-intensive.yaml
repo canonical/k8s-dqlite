@@ -10,6 +10,7 @@ jobs:
     namespace: argocd
     podWait: false
     cleanup: false
+    executionMode: sequential
     waitFor: []
     waitWhenFinished: true
     objects:
