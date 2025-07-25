@@ -66,7 +66,8 @@ def run_kube_burner(
                     config.KUBE_BURNER_TIMEOUT,
                     "-c",
                     f"/root/templates/{kube_burner_config}",
-                ]
+                ],
+                text=True, capture_output=True
             )
         except Exception as ex:
             # We'll continue the loop even after encountering failures
@@ -75,8 +76,8 @@ def run_kube_burner(
             LOG.exception("kube-burner job failed, continuing...")
             if isinstance(ex, subprocess.CalledProcessError):
                 LOG.warning(f"  rc={ex.returncode}")
-                LOG.warning(f"  stdout={ex.stdout.decode()}")
-                LOG.warning(f"  stderr={ex.stderr.decode()}")
+                LOG.warning(f"  stdout={ex.stdout}")
+                LOG.warning(f"  stderr={ex.stderr}")
             raised_exc = ex
 
     # Raise encountered exceptions, if any.
