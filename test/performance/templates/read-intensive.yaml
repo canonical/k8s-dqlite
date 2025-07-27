@@ -7,7 +7,7 @@ jobs:
   - name: read-intensive
     jobIterations: 20
     namespacedIterations: false
-    jobIterationDelay: 60s
+    jobIterationDelay: 20s
     namespace: argocd
     podWait: false
     cleanup: false
