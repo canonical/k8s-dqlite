@@ -41,7 +41,7 @@ def test_three_node_read_load(instances: List[harness.Instance]):
     workload.configure_argocd(cluster_node)
     process_dict = metrics.collect_metrics(instances)
     try:
-        kube_burner.run_kube_burner(cluster_node, "read-intensive.yaml")
+        kube_burner.run_kube_burner(cluster_node, "read-intensive.yaml", 1)
     finally:
         # Collect the metrics
         metrics.stop_metrics(instances, process_dict)
