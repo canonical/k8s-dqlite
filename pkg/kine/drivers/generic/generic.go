@@ -585,7 +585,7 @@ func (d *Generic) tryCompact(ctx context.Context, start, end int64) (err error) 
 		DELETE FROM kine
 		WHERE deleted = 1
 			AND id <= ?
-	`, start, end); err != nil {
+	`, end); err != nil {
 		return err
 	}
 
