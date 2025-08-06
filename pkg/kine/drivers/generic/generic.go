@@ -31,7 +31,6 @@ var (
 	deleteCnt        metric.Int64Counter
 	createCnt        metric.Int64Counter
 	updateCnt        metric.Int64Counter
-	fillCnt          metric.Int64Counter
 	currentRevCnt    metric.Int64Counter
 	getCompactRevCnt metric.Int64Counter
 )
@@ -61,10 +60,6 @@ func init() {
 		logrus.WithError(err).Warning("Otel failed to create create counter")
 	}
 	deleteCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.delete", otelName), metric.WithDescription("Number of delete requests"))
-	if err != nil {
-		logrus.WithError(err).Warning("Otel failed to create create counter")
-	}
-	fillCnt, err = otelMeter.Int64Counter(fmt.Sprintf("%s.fill", otelName), metric.WithDescription("Number of fill requests"))
 	if err != nil {
 		logrus.WithError(err).Warning("Otel failed to create create counter")
 	}
@@ -196,10 +191,6 @@ var (
 		FROM kine WHERE id = (SELECT MAX(id) FROM kine WHERE name = ?)
 			AND deleted = 0
 			AND id = ?`
-
-	fillSQL = `
-		INSERT INTO kine(id, name, created, deleted, create_revision, prev_revision, lease, value, old_value)
-		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	getSizeSQL = `
 		SELECT (page_count - freelist_count) * page_size
@@ -593,8 +584,8 @@ func (d *Generic) tryCompact(ctx context.Context, start, end int64) (err error) 
 	if _, err = tx.ExecContext(ctx, `
 		DELETE FROM kine
 		WHERE deleted = 1
-			AND ? < id AND id <= ?
-	`, start, end); err != nil {
+			AND id <= ?
+	`, end); err != nil {
 		return err
 	}
 
@@ -712,16 +703,6 @@ func (d *Generic) After(ctx context.Context, rev, limit int64) (*sql.Rows, error
 		return d.query(ctx, "after_sql_limit", sql, rev, limit)
 	}
 	return d.query(ctx, "after_sql", sql, rev)
-}
-
-func (d *Generic) Fill(ctx context.Context, revision int64) error {
-	fillCnt.Add(ctx, 1)
-	_, err := d.execute(ctx, "fill_sql", fillSQL, revision, fmt.Sprintf("gap-%d", revision), 0, 1, 0, 0, 0, nil, nil)
-	return err
-}
-
-func (d *Generic) IsFill(key string) bool {
-	return strings.HasPrefix(key, "gap-")
 }
 
 func (d *Generic) GetSize(ctx context.Context) (int64, error) {

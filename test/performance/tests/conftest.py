@@ -205,9 +205,9 @@ def session_instance(
     snap = next(snap_versions(request))
     util.setup_k8s_snap(instance, tmp_path, snap)
 
-    bootstrap_config_path = "/root/bootstrap-session.yaml"
+    bootstrap_config_path = "/root/bootstrap-all.yaml"
     instance.send_file(
-        (config.MANIFESTS_DIR / "bootstrap-session.yaml").as_posix(),
+        (config.MANIFESTS_DIR / "bootstrap-all.yaml").as_posix(),
         bootstrap_config_path,
     )
 
