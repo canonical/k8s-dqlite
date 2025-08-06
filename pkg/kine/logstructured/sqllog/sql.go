@@ -71,8 +71,6 @@ type Dialect interface {
 	DeleteRevision(ctx context.Context, revision int64) error
 	GetCompactRevision(ctx context.Context) (int64, int64, error)
 	Compact(ctx context.Context, revision int64) error
-	Fill(ctx context.Context, revision int64) error
-	IsFill(key string) bool
 	GetSize(ctx context.Context) (int64, error)
 	GetCompactInterval() time.Duration
 	GetWatchQueryTimeout() time.Duration
@@ -429,26 +427,18 @@ func (s *SQLLog) poll(result chan interface{}, pollStart int64) {
 					// we don't want to pause all watches forever
 					logrus.Errorf("GAP %s, revision=%d, delete=%v, next=%d", event.KV.Key, event.KV.ModRevision, event.Delete, next)
 				} else if skip != next {
-					// This is the first time we have encountered this missing revision, so record time start
-					// and trigger a quick retry for simple out of order events
+					// First time encountering this missing revision - record it and retry
 					skip = next
 					skipTime = time.Now()
 					select {
 					case s.notify <- next:
 					default:
 					}
-					break
+					break // Exit loop to retry quickly for simple out-of-order events
 				} else {
-					if err := s.d.Fill(s.ctx, next); err == nil {
-						logrus.Debugf("FILL, revision=%d, err=%v", next, err)
-						select {
-						case s.notify <- next:
-						default:
-						}
-					} else {
-						logrus.Debugf("FILL FAILED, revision=%d, err=%v", next, err)
-					}
-					break
+					// We've been waiting for this revision and timeout exceeded
+					logrus.Warnf("Found Gap in watch event stream, skipping revision after timeout: %s, revision=%d, delete=%v, next=%d, skipTime=%v", event.KV.Key, event.KV.ModRevision, event.Delete, next, skipTime)
+					break // Exit loop to move on after timeout
 				}
 			}
 
@@ -459,12 +449,8 @@ func (s *SQLLog) poll(result chan interface{}, pollStart int64) {
 			// the same time we write to the channel.
 			saveLast = true
 			rev = event.KV.ModRevision
-			if s.d.IsFill(event.KV.Key) {
-				logrus.Debugf("NOT TRIGGER FILL %s, revision=%d, delete=%v", event.KV.Key, event.KV.ModRevision, event.Delete)
-			} else {
-				sequential = append(sequential, event)
-				logrus.Debugf("TRIGGERED %s, revision=%d, delete=%v", event.KV.Key, event.KV.ModRevision, event.Delete)
-			}
+			sequential = append(sequential, event)
+			logrus.Debugf("TRIGGERED %s, revision=%d, delete=%v", event.KV.Key, event.KV.ModRevision, event.Delete)
 		}
 
 		if saveLast {

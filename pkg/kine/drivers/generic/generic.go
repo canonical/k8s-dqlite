@@ -576,8 +576,8 @@ func (d *Generic) tryCompact(ctx context.Context, start, end int64) (err error) 
 	if _, err = tx.ExecContext(ctx, `
 		DELETE FROM kine
 		WHERE deleted = 1
-			AND ? < id AND id <= ?
-	`, start, end); err != nil {
+			AND id <= ?
+	`, end); err != nil {
 		return err
 	}
 
@@ -742,15 +742,6 @@ func (d *Generic) After(ctx context.Context, rev, limit int64) (*sql.Rows, error
 		return d.query(ctx, "after_sql_limit", sql, rev, limit)
 	}
 	return d.query(ctx, "after_sql", sql, rev)
-}
-
-func (d *Generic) Fill(ctx context.Context, revision int64) error {
-	_, err := d.execute(ctx, "fill_sql", d.FillSQL, revision, fmt.Sprintf("gap-%d", revision), 0, 1, 0, 0, 0, nil, nil)
-	return err
-}
-
-func (d *Generic) IsFill(key string) bool {
-	return strings.HasPrefix(key, "gap-")
 }
 
 func (d *Generic) Insert(ctx context.Context, key string, create, delete bool, createRevision, previousRevision int64, ttl int64, value, prevValue []byte) (id int64, err error) {
