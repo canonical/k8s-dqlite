@@ -3,6 +3,7 @@ module github.com/canonical/k8s-dqlite
 go 1.21
 
 require (
+	github.com/canonical/go-dqlite v0.9.4
 	github.com/canonical/go-dqlite/v2 v2.0.1
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/mattn/go-sqlite3 v1.14.22
@@ -10,7 +11,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.19.0
 	github.com/sirupsen/logrus v1.9.3
-	github.com/spf13/cobra v1.8.0
+	github.com/spf13/cobra v1.8.1
 	go.etcd.io/etcd/api/v3 v3.5.12
 	go.etcd.io/etcd/client/pkg/v3 v3.5.12
 	go.etcd.io/etcd/client/v3 v3.5.12
@@ -22,13 +23,14 @@ require (
 	go.opentelemetry.io/otel/sdk v1.28.0
 	go.opentelemetry.io/otel/sdk/metric v1.28.0
 	go.opentelemetry.io/otel/trace v1.28.0
-	golang.org/x/sync v0.7.0
+	golang.org/x/sync v0.8.0
 	golang.org/x/sys v0.21.0
 	google.golang.org/grpc v1.65.0
 	gopkg.in/yaml.v2 v2.4.0
 )
 
 require (
+	github.com/CanonicalLtd/go-dqlite v0.9.4 // indirect
 	github.com/Rican7/retry v0.3.1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect

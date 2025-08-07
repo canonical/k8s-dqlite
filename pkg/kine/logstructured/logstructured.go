@@ -397,7 +397,7 @@ func (l *LogStructured) ttl(ctx context.Context) {
 
 			deleteLease := func() error {
 				// retry until we succeed or context is cancelled, if another node has already deleted the key the delete will not return an error and we will exit the retry loop
-				rev, deleted, err := l.Delete(ctx, event.KV.Key, event.KV.ModRevision)
+				rev, _, deleted, err := l.Delete(ctx, event.KV.Key, event.KV.ModRevision)
 				if err != nil {
 					logrus.Errorf("failed to delete %s for TTL: %v, retrying", event.KV.Key, err)
 					return err
