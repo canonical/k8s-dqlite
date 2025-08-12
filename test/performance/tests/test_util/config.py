@@ -74,3 +74,9 @@ OTEL_ENABLED = os.getenv("TEST_OTEL_ENABLED", "1") == "1"
 OTEL_SPAN_NAME_FILTER = os.getenv("TEST_OTEL_SPAN_NAME_FILTER", "")
 # Filter out OpenTelemetry traces below a given interval threshold.
 OTEL_SPAN_MIN_DURATION_FILTER = os.getenv("TEST_OTEL_SPAN_MIN_DURATION_FILTER", "10ms")
+
+# The manifests to use for ArgoCD installation.
+ARGOCD_MANIFESTS = (
+    os.getenv("ARGOCD_MANIFESTS")
+    or "https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml"
+)

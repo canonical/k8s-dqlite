@@ -1,11 +1,48 @@
 #
 # Copyright 2025 Canonical, Ltd.
 #
-from typing import List
-
+import logging
 import pytest
-from test_util import harness, metrics, util, config, workload, kube_burner
+from typing import List
+from test_util import harness, metrics, util, config, kube_burner
 
+LOG = logging.getLogger(__name__)
+
+
+def configure_argocd(control_plane: harness.Instance):
+    """""Configures ArgoCD on the instance."""
+
+    LOG.info("Create argocd namespace")
+    control_plane.exec(
+        ["k8s", "kubectl", "create", "namespace", "argocd"]
+    )
+
+    LOG.info("Apply ArogCD manifests")
+    control_plane.exec(
+        ["k8s", "kubectl", "apply", "-n", "argocd", "-f", config.ARGOCD_MANIFESTS]
+    )
+
+    LOG.info("Waiting for ArgoCD application controller pod to show up...")
+    util.stubbornly(retries=3, delay_s=10).on(control_plane).until(
+        lambda p: "argocd-application-controller" in p.stdout.decode()
+    ).exec(["k8s", "kubectl", "get", "pod", "-n", "argocd", "-o", "json"])
+    LOG.info("ArgoCD application controller pod showed up")
+
+    LOG.info("Wait for all pods in argocd namespace to be ready")
+    util.stubbornly(retries=3, delay_s=1).on(control_plane).exec(
+        [
+            "k8s",
+            "kubectl",
+            "wait",
+            "--for=condition=ready",
+            "pod",
+            "--all",
+            "-n",
+            "argocd",
+            "--timeout",
+            "180s",
+        ]
+    )
 
 @pytest.mark.node_count(3)
 @pytest.mark.bootstrap_config((config.MANIFESTS_DIR / "bootstrap-all.yaml").read_text())
@@ -38,7 +75,7 @@ def test_three_node_read_load(instances: List[harness.Instance]):
             "application.yaml",
         ],
     )
-    workload.configure_argocd(cluster_node)
+    configure_argocd(cluster_node)
     process_dict = metrics.collect_metrics(instances)
     try:
         kube_burner.run_kube_burner(cluster_node, "read-intensive.yaml", 1)
