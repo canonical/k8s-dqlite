@@ -4,7 +4,7 @@
 from typing import List
 
 import pytest
-from test_util import harness, metrics, util, config
+from test_util import harness, metrics, util, config, kube_burner
 
 
 @pytest.mark.node_count(3)
@@ -30,10 +30,18 @@ def test_three_node_load(instances: List[harness.Instance]):
     assert "control-plane" in util.get_local_node_status(joining_node)
     assert "control-plane" in util.get_local_node_status(joining_node_2)
 
-    metrics.configure_kube_burner(cluster_node)
+    kube_burner.configure_kube_burner(cluster_node)
+    kube_burner.copy_from_templates(
+        cluster_node,
+        [
+            "api-intensive.yaml",
+            "configmap.yaml",
+            "secret.yaml",
+        ],
+    )
     process_dict = metrics.collect_metrics(instances)
     try:
-        metrics.run_kube_burner(cluster_node)
+        kube_burner.run_kube_burner(cluster_node, "api-intensive.yaml")
     finally:
         # Collect the metrics even if kube-burner fails.
         metrics.stop_metrics(instances, process_dict)

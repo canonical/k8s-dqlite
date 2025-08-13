@@ -239,7 +239,7 @@ def setup_k8s_snap(
     which_snap = snap or config.SNAP
 
     if not which_snap:
-        pytest.fail("Set TEST_SNAP to the channel, revision, or path to the snap")
+        pytest.fail("Set TEST_SNAP to the channel, revision, or absolute path to the snap")
 
     if isinstance(which_snap, str) and which_snap.startswith("/"):
         LOG.info("Install k8s snap by path")

@@ -1,0 +1,19 @@
+metricsEndpoints:
+  - indexer:
+      metricsDirectory: collected-metrics
+      type: local
+
+jobs:
+  - name: read-intensive
+    jobIterations: 20
+    namespacedIterations: false
+    jobIterationDelay: 20s
+    namespace: argocd
+    podWait: false
+    cleanup: false
+    executionMode: sequential
+    waitWhenFinished: true
+    objects:
+      - objectTemplate: application.yaml
+        replicas: 1
+        wait: true
