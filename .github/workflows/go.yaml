@@ -98,16 +98,19 @@ jobs:
 
       - name: Install Dqlite
         run: |
-          sudo add-apt-repository -y ppa:dqlite/dev 
-          sudo apt install libdqlite-dev
-
+          hack/static-dqlite.sh
+      
       - name: Run benchmarks
+        env:
+          CGO_CFLAGS: -I${{ github.workspace }}/hack/.deps/static/include
+          CGO_LDFLAGS: -L${{ github.workspace }}/hack/.deps/static/lib -ldqlite -luv -llz4 -lsqlite3 -Wl,-z,stack-size=1048576
         id: bench
         run: |
           set -o pipefail
           go test                           \
               -timeout 1h                   \
               -tags libsqlite3 -v -p 1 ./...  \
+              -ldflags '-linkmode "external" -extldflags "-static -lm"' \
               -benchmem -count $BENCH_COUNT   \
               -run "^$$" -bench .             \
             | tee bench-$TARGET_SHA.txt
@@ -121,6 +124,9 @@ jobs:
 
       - name: Run benchmark for base code
         if: steps.bench-cache.outputs.cache-hit != 'true'
+        env:
+          CGO_CFLAGS: -I${{ github.workspace }}/hack/.deps/static/include
+          CGO_LDFLAGS: -L${{ github.workspace }}/hack/.deps/static/lib -ldqlite -luv -llz4 -lsqlite3 -Wl,-z,stack-size=1048576
         run: |
           set -o pipefail
           git fetch origin $BASE_BRANCH
@@ -128,6 +134,7 @@ jobs:
           go test                           \
               -timeout 1h                   \
               -tags libsqlite3 -v -p 1 ./...  \
+              -ldflags '-linkmode "external" -extldflags "-static -lm"' \
               -benchmem -count $BENCH_COUNT   \
               -run "^$$" -bench .             \
             | tee bench-$BASE_SHA.txt
