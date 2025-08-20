@@ -286,9 +286,8 @@ type Driver struct {
 }
 
 type DriverConfig struct {
-	DB         database.Interface
-	LockWrites bool
-	Retry      func(error) bool
+	DB    database.Interface
+	Retry func(error) bool
 }
 
 func NewDriver(ctx context.Context, config *DriverConfig) (*Driver, error) {
@@ -450,12 +449,6 @@ func (d *Driver) execute(ctx context.Context, txName, query string, args ...inte
 	span.SetAttributes(
 		attribute.String("tx_name", txName),
 	)
-
-	if d.config.LockWrites {
-		d.mu.Lock()
-		defer d.mu.Unlock()
-		span.AddEvent("acquired write lock")
-	}
 
 	start := time.Now()
 	retryCount := 0
