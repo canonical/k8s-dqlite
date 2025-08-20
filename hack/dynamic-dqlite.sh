@@ -84,6 +84,9 @@ if [ ! -f "${BUILD_DIR}/sqlite/libsqlite3.la" ]; then
 fi
 
 # build dqlite
+# Note(Reza): Remove -Wno-error=conversion once the build failure on Ubuntu 20.04
+# is resolved.
+# See: https://github.com/canonical/k8s-dqlite/issues/320
 if [ ! -f "${BUILD_DIR}/dqlite/libdqlite.la" ]; then
   (
     cd "${BUILD_DIR}"
