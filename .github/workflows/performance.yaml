@@ -32,6 +32,35 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
+      - name: Set-up R
+        run: |
+          sudo apt-get install -y --no-install-recommends r-base
+
+          sudo mkdir -p /usr/local/lib/R/site-library/
+          # Ensure that actions/cache is allowed to restore the R lib dir.
+          sudo chown $USER /usr/local/lib/R/site-library/
+      - name: Get R cache key
+        id: get-r-cache-key
+        run: |
+          osVersion=$(lsb_release -rs)
+          rVersion=$(dpkg -s r-base | grep Version | cut -d ' ' -f 2)
+          key="r-libs-$osVersion-$rVersion"
+
+          echo "r-cache-key=$key" >> "$GITHUB_OUTPUT"
+      - name: Restore R package cache
+        id: restore-r-cache
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/lib/R/site-library/
+          key: ${{ steps.get-r-cache-key.outputs.r-cache-key }}
+          restore-keys: ${{ steps.get-r-cache-key.outputs.r-cache-key }}
+      - name: Install R dependencies
+        if: steps.restore-r-cache.outputs.cache-hit != 'true'
+        run: |
+          install.packages(
+            c("ggplot2", "dplyr", "optparse"),
+            repos="https://cloud.r-project.org")
+        shell: sudo Rscript {0}
       - name: Install tox
         run: |
           pip install tox
