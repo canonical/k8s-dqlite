@@ -19,6 +19,7 @@ jobs:
     name: Prepare Environment
     runs-on: ubuntu-latest
     outputs:
+      test-tags: ${{ steps.get-e2e-tags.outputs.test-tags }}
       tests: ${{ steps.collect-tests.outputs.tests }}
     steps:
       - name: Check out code
@@ -30,6 +31,7 @@ jobs:
       - name: Install tox
         run: sudo apt-get install -y tox
       - name: Get e2e test tags
+        id: get-e2e-tags
         run: |
           set -x
 
@@ -40,14 +42,14 @@ jobs:
             tags+=" conformance_tests"
           fi
 
-          echo "test-tags=$tags" >> "$GITHUB_ENV"
+          echo "test-tags=$tags" >> "$GITHUB_OUTPUT"
       - name: Collect tests
         id: collect-tests
         run: |
           git clone https://github.com/canonical/k8s-snap.git
           cd k8s-snap/tests/integration
           # Split the input tags into an array and pass them as individual args
-          IFS=' ' read -ra TAGS <<< "${{ env.test-tags }}"
+          IFS=' ' read -ra TAGS <<< "${{ steps.get-e2e-tags.outputs.test-tags }}"
           TAGS_ARGS=""
           for tag in "${TAGS[@]}"; do
             TAGS_ARGS="$TAGS_ARGS --tags $tag"
@@ -105,7 +107,7 @@ jobs:
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports/${{ env.test_name }}
         run: |
           git clone https://github.com/canonical/k8s-snap.git      
-          cd k8s-snap/tests/integration && sg lxd -c "tox -e integration -- ${{ matrix.test }} --tags ${{ env.test-tags }}"
+          cd k8s-snap/tests/integration && sg lxd -c "tox -e integration -- ${{ matrix.test }}"
       - name: Prepare inspection reports
         if: failure()
         run: |
@@ -118,7 +120,7 @@ jobs:
           name: inspection-reports-${{ env.test_name }}
           path: ${{ github.workspace }}/inspection-report-archives/${{ env.test_name }}.tar.gz
       - name: Upload CNCF conformance report artifact
-        if: ${{ failure() && contains(env.test-tags, 'conformance_tests') }}
+        if: ${{ failure() && contains(needs.prepare.outputs.test-tags, 'conformance_tests') }}
         uses: actions/upload-artifact@v4
         with:
           name: sonobuoy-e2e-${{ env.test_name }}
