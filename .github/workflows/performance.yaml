@@ -23,7 +23,7 @@ jobs:
     name: K8s-snap Performance Test
     strategy:
       matrix:
-        test_file: [tests/test_single_node.py, tests/test_multi_node.py, tests/test_multi_node_read.py]
+        test: [tests/test_single_node.py, tests/test_multi_node.py, tests/test_multi_node_read.py]
     runs-on: self-hosted-linux-amd64-jammy-large
     steps:
       - name: Checking out repo
@@ -63,7 +63,7 @@ jobs:
           TEST_KUBE_BURNER_ITERATIONS: 15
         run: |
           cd test/performance
-          sg lxd -c 'tox -e performance -- ${{ matrix.test_file }}'
+          sg lxd -c 'tox -e performance -- ${{ matrix.test }}'
       - name: Run Performance test for base code snap
         env:
           TEST_SNAP: ${{ github.workspace }}/base-code.snap
@@ -75,11 +75,11 @@ jobs:
           TEST_KUBE_BURNER_ITERATIONS: 15
         run: |
           cd test/performance
-          sg lxd -c 'tox -e performance -- ${{ matrix.test_file }}'
+          sg lxd -c 'tox -e performance -- ${{ matrix.test }}'
       - name: Upload results
         uses: actions/upload-artifact@v4
         with:
-          name: results-${{ matrix.test_file }}
+          name: results-${{ matrix.test }}
           path: ${{ github.workspace }}/test/performance/results
   aggregate:
     needs: build
