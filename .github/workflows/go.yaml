@@ -95,19 +95,32 @@ jobs:
         run: |
           echo "model=$(cat /proc/cpuinfo | awk -F ': ' '/model name/ { print $2; exit }')" >> $GITHUB_OUTPUT
           echo count=$(nproc) >> $GITHUB_OUTPUT
-
-      - name: Install Dqlite
+      - name: Get Dqlite version
         run: |
-          sudo add-apt-repository -y ppa:dqlite/dev 
-          sudo apt install libdqlite1.17-dev
-
+          source hack/env.sh
+          echo "TAG_DQLITE=$TAG_DQLITE" >> $GITHUB_ENV
+      - name: Cache Dqlite dependencies
+        id: dqlite-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/hack/.deps/static
+          key: dqlite-cache-${{ runner.os }}-${{ env.TAG_DQLITE }}
+      - name: Install Dqlite
+        if: steps.dqlite-cache.outputs.cache-hit != 'true'
+        run: |
+          hack/static-dqlite.sh
+      
       - name: Run benchmarks
+        env:
+          CGO_CFLAGS: -I${{ github.workspace }}/hack/.deps/static/include
+          CGO_LDFLAGS: -L${{ github.workspace }}/hack/.deps/static/lib -ldqlite -luv -llz4 -lsqlite3 -Wl,-z,stack-size=1048576
         id: bench
         run: |
           set -o pipefail
           go test                           \
               -timeout 1h                   \
               -tags libsqlite3 -v -p 1 ./...  \
+              -ldflags '-linkmode "external" -extldflags "-static -lm"' \
               -benchmem -count $BENCH_COUNT   \
               -run "^$$" -bench .             \
             | tee bench-$TARGET_SHA.txt
@@ -121,6 +134,9 @@ jobs:
 
       - name: Run benchmark for base code
         if: steps.bench-cache.outputs.cache-hit != 'true'
+        env:
+          CGO_CFLAGS: -I${{ github.workspace }}/hack/.deps/static/include
+          CGO_LDFLAGS: -L${{ github.workspace }}/hack/.deps/static/lib -ldqlite -luv -llz4 -lsqlite3 -Wl,-z,stack-size=1048576
         run: |
           set -o pipefail
           git fetch origin $BASE_BRANCH
@@ -128,6 +144,7 @@ jobs:
           go test                           \
               -timeout 1h                   \
               -tags libsqlite3 -v -p 1 ./...  \
+              -ldflags '-linkmode "external" -extldflags "-static -lm"' \
               -benchmem -count $BENCH_COUNT   \
               -run "^$$" -bench .             \
             | tee bench-$BASE_SHA.txt
