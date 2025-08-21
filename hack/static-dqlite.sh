@@ -123,7 +123,7 @@ if [ ! -f "${BUILD_DIR}/dqlite/libdqlite.la" ]; then
     cd dqlite
     autoreconf -i > /dev/null
     ./configure --disable-shared --enable-build-raft \
-      CFLAGS="-g ${CFLAGS} -I${BUILD_DIR}/sqlite -I${BUILD_DIR}/libuv/include -I${BUILD_DIR}/lz4/lib -I${INSTALL_DIR}/musl/include -Wno-error=conversion -Werror=implicit-function-declaration" \
+      CFLAGS="-g ${CFLAGS} -I${BUILD_DIR}/sqlite -I${BUILD_DIR}/libuv/include -I${BUILD_DIR}/lz4/lib -I${INSTALL_DIR}/musl/include -Werror=implicit-function-declaration" \
       LDFLAGS="${LDFLAGS} -L${BUILD_DIR}/libuv/.libs -L${BUILD_DIR}/lz4/lib -L${BUILD_DIR}/libnsl/src" \
       UV_CFLAGS="-I${BUILD_DIR}/libuv/include" \
       UV_LIBS="-L${BUILD_DIR}/libuv/.libs" \
