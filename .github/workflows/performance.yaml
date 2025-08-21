@@ -21,25 +21,17 @@ env:
 jobs:
   build:
     name: K8s-snap Performance Test
+    strategy:
+      matrix:
+        test: [tests/test_single_node.py, tests/test_multi_node.py, tests/test_multi_node_read.py]
     runs-on: self-hosted-linux-amd64-jammy-large
     steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@v2
-        with:
-          egress-policy: audit
       - name: Checking out repo
         uses: actions/checkout@v4
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
-      - name: Install tox
-        run: |
-          pip install tox
-      - name: Install Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
       - name: Set-up R
         run: |
           sudo apt-get install -y --no-install-recommends r-base
@@ -69,6 +61,13 @@ jobs:
             c("ggplot2", "dplyr", "optparse"),
             repos="https://cloud.r-project.org")
         shell: sudo Rscript {0}
+      - name: Install tox
+        run: |
+          pip install tox
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
       - name: Install lxd
         uses: canonical/setup-lxd@v0.1.3
         with:
@@ -93,7 +92,7 @@ jobs:
           TEST_KUBE_BURNER_ITERATIONS: 15
         run: |
           cd test/performance
-          sg lxd -c 'tox -e performance'
+          sg lxd -c 'tox -e performance -- ${{ matrix.test }}'
       - name: Run Performance test for base code snap
         env:
           TEST_SNAP: ${{ github.workspace }}/base-code.snap
@@ -105,7 +104,57 @@ jobs:
           TEST_KUBE_BURNER_ITERATIONS: 15
         run: |
           cd test/performance
-          sg lxd -c 'tox -e performance'
+          sg lxd -c 'tox -e performance -- ${{ matrix.test }}'
+      - name: Generate names for step and artifacts
+        run: |
+          FULL_NAME="${{ matrix.test }}"
+          # Extract test name (part after '::') for the step display name
+          TEST_NAME="${FULL_NAME##*::}"
+          echo "test_name=${TEST_NAME}" >> $GITHUB_ENV
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-${{ env.test_name }}
+          path: ${{ github.workspace }}/test/performance/results
+  aggregate:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:  
+      - name: Checking out repo
+        uses: actions/checkout@v4
+      - name: Set-up R
+        run: |
+          sudo apt-get install -y --no-install-recommends r-base
+
+          sudo mkdir -p /usr/local/lib/R/site-library/
+          # Ensure that actions/cache is allowed to restore the R lib dir.
+          sudo chown $USER /usr/local/lib/R/site-library/
+      - name: Get R cache key
+        id: get-r-cache-key
+        run: |
+          osVersion=$(lsb_release -rs)
+          rVersion=$(dpkg -s r-base | grep Version | cut -d ' ' -f 2)
+          key="r-libs-$osVersion-$rVersion"
+
+          echo "r-cache-key=$key" >> "$GITHUB_OUTPUT"
+      - name: Restore R package cache
+        id: restore-r-cache
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/lib/R/site-library/
+          key: ${{ steps.get-r-cache-key.outputs.r-cache-key }}
+          restore-keys: ${{ steps.get-r-cache-key.outputs.r-cache-key }}
+      - name: Install R dependencies
+        if: steps.restore-r-cache.outputs.cache-hit != 'true'
+        run: |
+          install.packages(
+            c("ggplot2", "dplyr", "optparse"),
+            repos="https://cloud.r-project.org")
+        shell: sudo Rscript {0}
+      - name: Download all results
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ github.workspace }}/test/performance/results
       - name: Generate aggregated Graphs
         if: always()
         run: |
