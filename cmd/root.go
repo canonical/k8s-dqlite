@@ -19,24 +19,25 @@ import (
 
 var (
 	rootCmdOpts struct {
-		dir                       string
-		listen                    string
-		tls                       bool
-		debug                     bool
-		logLevel                  string
-		profiling                 bool
-		profilingAddress          string
-		profilingDir              string
-		diskMode                  bool
-		clientSessionCacheSize    uint
-		minTLSVersion             string
-		metrics                   bool
-		metricsAddress            string
-		otel                      bool
-		otelAddress               string
-		otelDir                   string
-		otelSpanNameFilter        string
-		otelSpanMinDurationFilter string
+		dir                            string
+		listen                         string
+		tls                            bool
+		debug                          bool
+		logLevel                       string
+		profiling                      bool
+		profilingAddress               string
+		profilingDir                   string
+		diskMode                       bool
+		dqliteRolesAdjustmentFrequency time.Duration
+		clientSessionCacheSize         uint
+		minTLSVersion                  string
+		metrics                        bool
+		metricsAddress                 string
+		otel                           bool
+		otelAddress                    string
+		otelDir                        string
+		otelSpanNameFilter             string
+		otelSpanMinDurationFilter      string
 
 		connectionPoolConfig server.ConnectionPoolConfig
 
@@ -147,6 +148,7 @@ var (
 				rootCmdOpts.listen,
 				rootCmdOpts.tls,
 				rootCmdOpts.diskMode,
+				rootCmdOpts.dqliteRolesAdjustmentFrequency,
 				rootCmdOpts.clientSessionCacheSize,
 				rootCmdOpts.minTLSVersion,
 				rootCmdOpts.watchAvailableStorageInterval,
@@ -218,6 +220,7 @@ func init() {
 	rootCmd.Flags().StringVar(&rootCmdOpts.profilingAddress, "profiling-listen", "127.0.0.1:4000", "listen address for pprof endpoint")
 	rootCmd.Flags().StringVar(&rootCmdOpts.profilingDir, "profiling-dir", "", "directory to use for profiling data")
 	rootCmd.Flags().BoolVar(&rootCmdOpts.diskMode, "disk-mode", false, "(experimental) run dqlite store in disk mode")
+	rootCmd.Flags().DurationVar(&rootCmdOpts.dqliteRolesAdjustmentFrequency, "dqlite-roles-adjustment-frequency", 10*time.Second, "sets the frequency at which the current cluster leader will check node roles and perfoms promotions/demotions")
 	rootCmd.Flags().UintVar(&rootCmdOpts.clientSessionCacheSize, "tls-client-session-cache-size", 0, "ClientCacheSession size for dial TLS config")
 	rootCmd.Flags().StringVar(&rootCmdOpts.minTLSVersion, "min-tls-version", "tls12", "Minimum TLS version for dqlite endpoint (tls10|tls11|tls12|tls13). Default is tls12")
 	rootCmd.Flags().BoolVar(&rootCmdOpts.metrics, "metrics", false, "enable metrics endpoint")
