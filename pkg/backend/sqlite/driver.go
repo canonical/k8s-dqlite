@@ -272,8 +272,8 @@ var (
 			AND id = ?`
 
 	getSizeSQL = `
-		SELECT (page_count - freelist_count) * page_size
-		FROM pragma_page_count(), pragma_page_size(), pragma_freelist_count()`
+		SELECT page_count * page_size
+		FROM pragma_page_count(), pragma_page_size()`
 )
 
 const maxRetries = 500
@@ -351,10 +351,14 @@ func setup(ctx context.Context, db database.Interface) (SchemaVersion, error) {
 	}
 	defer conn.Close()
 
+	err = maybeEnableAutovacuum(ctx, conn)
+	if err != nil {
+		return 0, err
+	}
+
 	// Optimistically ask for the user_version without starting a transaction
-	var currentSchemaVersion SchemaVersion
-	row := conn.QueryRowContext(ctx, "PRAGMA user_version")
-	if err := row.Scan(&currentSchemaVersion); err != nil {
+	currentSchemaVersion, err := queryValue[SchemaVersion](ctx, conn, "PRAGMA user_version")
+	if err != nil {
 		return 0, err
 	}
 
@@ -373,8 +377,8 @@ func setup(ctx context.Context, db database.Interface) (SchemaVersion, error) {
 	}
 	defer txn.Rollback()
 
-	row = txn.QueryRowContext(ctx, `PRAGMA user_version`)
-	if err := row.Scan(&currentSchemaVersion); err != nil {
+	currentSchemaVersion, err = queryValue[SchemaVersion](ctx, txn, `PRAGMA user_version`)
+	if err != nil {
 		return 0, err
 	}
 
@@ -400,6 +404,44 @@ func setup(ctx context.Context, db database.Interface) (SchemaVersion, error) {
 	}
 
 	return currentSchemaVersion, txn.Commit()
+}
+
+// maybeEnableAutovacuum enables autovacuum for small databases. This is necessary
+// to avoid having to deal with big transactions which might create issues for clusters.
+func maybeEnableAutovacuum(ctx context.Context, conn *sql.Conn) error {
+	const autovacuumThreshold = 4 * 1024 * 1024 // 4 MiB
+
+	size, err := queryValue[int32](ctx, conn, `
+SELECT (page_count - freelist_count) * page_size
+FROM pragma_page_count(), pragma_freelist_count(), pragma_page_size()`)
+	if err != nil {
+		return err
+	}
+
+	// If the database is small, we can have an initial VACUUM operation which we know it
+	// will always yeald a transaction smaller than its initial size and as such will not
+	// create big problems when using RAFT protocol.
+	if size <= autovacuumThreshold {
+		if _, err := conn.ExecContext(ctx, "PRAGMA auto_vacuum = FULL; VACUUM"); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+type Queryer interface {
+	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
+}
+
+func queryValue[T any](ctx context.Context, db Queryer, query string, args ...interface{}) (T, error) {
+	var value T
+	row := db.QueryRowContext(ctx, query, args...)
+	if err := row.Scan(&value); err != nil {
+		return value, err
+	}
+	return value, nil
 }
 
 func (d *Driver) query(ctx context.Context, txName, query string, args ...interface{}) (rows *sql.Rows, err error) {
