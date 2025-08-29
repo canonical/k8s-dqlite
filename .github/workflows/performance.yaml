@@ -105,10 +105,15 @@ jobs:
         run: |
           cd test/performance
           sg lxd -c 'tox -e performance -- ${{ matrix.test }}'
+      - name: Generate names for step and artifacts
+        run: |
+          FULL_NAME="${{ matrix.test }}" 
+          TEST_NAME=$(basename $FULL_NAME .py)
+          echo "test_name=${TEST_NAME}" >> $GITHUB_ENV
       - name: Upload results
         uses: actions/upload-artifact@v4
         with:
-          name: results-${{ matrix.test }}
+          name: results-${{ env.test_name }}
           path: ${{ github.workspace }}/test/performance/results
   aggregate:
     needs: build
