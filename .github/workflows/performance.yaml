@@ -159,9 +159,9 @@ jobs:
         run: |
           cd test/performance
           mkdir -p ./results/aggregated-results/single-node
-          cp ./results/head/single-node/metrics.log \
+          cp ./results/results-test_single_node/head/single-node/metrics.log \
              ./results/aggregated-results/single-node/head-metrics.log
-          cp ./results/base-code/single-node/metrics.log \
+          cp ./results/results-test_single_node/base-code/single-node/metrics.log \
              ./results/aggregated-results/single-node/base-metrics.log
           sudo Rscript parse-performance-metrics.R \
             -p ./results/aggregated-results/single-node/ \
