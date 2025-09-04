@@ -118,7 +118,7 @@ jobs:
       - name: Prepare inspection reports
         if: always()
         run: |
-          tar -czvf inspection-reports.tar.gz -C ${{ github.workspace }} inspection-reports
+          tar -czvf inspection-reports-${{ env.test_name }}.tar.gz -C ${{ github.workspace }} inspection-reports
           echo "artifact_name=inspection-reports" | sed 's/:/-/g' >> $GITHUB_ENV
       - name: Upload inspection report artifact
         if: always()
