@@ -115,6 +115,30 @@ jobs:
         with:
           name: results-${{ env.test_name }}
           path: ${{ github.workspace }}/test/performance/results
+      - name: Prepare inspection reports
+        if: always()
+        run: |
+          tar -czvf inspection-reports.tar.gz -C ${{ github.workspace }} inspection-reports
+          echo "artifact_name=inspection-reports" | sed 's/:/-/g' >> $GITHUB_ENV
+      - name: Upload inspection report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.artifact_name }}
+          path: ${{ github.workspace }}/inspection-reports.tar.gz
+      - name: Upload base-code.snap
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: base-code.snap
+          path: ${{ github.workspace }}/base-code.snap
+      - name: Upload head.snap
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: head.snap
+          path: ${{ github.workspace }}/head.snap
+
   aggregate:
     needs: build
     runs-on: ubuntu-latest
@@ -173,26 +197,3 @@ jobs:
         with:
           name: performance-results
           path: ${{ github.workspace }}/test/performance/results
-      - name: Prepare inspection reports
-        if: always()
-        run: |
-          tar -czvf inspection-reports.tar.gz -C ${{ github.workspace }} inspection-reports
-          echo "artifact_name=inspection-reports" | sed 's/:/-/g' >> $GITHUB_ENV
-      - name: Upload inspection report artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.artifact_name }}
-          path: ${{ github.workspace }}/inspection-reports.tar.gz
-      - name: Upload base-code.snap
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: base-code.snap
-          path: ${{ github.workspace }}/base-code.snap
-      - name: Upload head.snap
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: head.snap
-          path: ${{ github.workspace }}/head.snap
