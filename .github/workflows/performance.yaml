@@ -65,7 +65,7 @@ jobs:
         run: |
           pip install tox
       - name: Install Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
       - name: Install lxd
