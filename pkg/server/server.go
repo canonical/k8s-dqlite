@@ -113,6 +113,7 @@ func New(
 	listen string,
 	enableTLS bool,
 	diskMode bool,
+	dqliteRolesAdjustmentFrequency time.Duration,
 	clientSessionCacheSize uint,
 	minTLSVersion string,
 	watchAvailableStorageInterval time.Duration,
@@ -146,7 +147,8 @@ func New(
 		return nil, fmt.Errorf("unsupported low available storage action %v (supported values are none, handover, terminate)", lowAvailableStorageAction)
 	}
 
-	if mustInit, err := fileExists(dir, "init.yaml"); err != nil {
+	mustInit, err := fileExists(dir, "init.yaml")
+	if err != nil {
 		return nil, fmt.Errorf("failed to check for init.yaml: %w", err)
 	} else if mustInit {
 		// handle init.yaml
@@ -168,11 +170,6 @@ func New(
 		}
 		if init.Address == "" {
 			return nil, fmt.Errorf("empty address in init.yaml")
-		}
-
-		// delete init.yaml from disk
-		if err := os.Remove(filepath.Join(dir, "init.yaml")); err != nil {
-			return nil, fmt.Errorf("failed to remove init.yaml after init: %w", err)
 		}
 
 		logrus.WithFields(logrus.Fields{"address": init.Address, "cluster": init.Cluster}).Print("will initialize dqlite node")
@@ -356,10 +353,18 @@ func New(
 		logrus.Warn("dqlite disk mode operation is current at an experimental state and MUST NOT be used in production. Expect data loss.")
 	}
 
+	logrus.WithField("dqliteRolesAdjustmentFrequency", dqliteRolesAdjustmentFrequency).Info("configure dqlite role adjustment frequency")
+	app.WithRolesAdjustmentFrequency(dqliteRolesAdjustmentFrequency)
 	// FIXME: this also starts dqlite. It should be moved to `Start`.
 	app, err := app.New(dir, options...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create dqlite app: %w", err)
+	}
+	if mustInit {
+		// after successful initialization and start we can delete the init.yaml from disk
+		if err := os.Remove(filepath.Join(dir, "init.yaml")); err != nil {
+			return nil, fmt.Errorf("failed to remove init.yaml after init: %w", err)
+		}
 	}
 
 	return &Server{
