@@ -106,6 +106,9 @@ if [ ! -f "${BUILD_DIR}/sqlite/libsqlite3.la" ]; then
     cd "${BUILD_DIR}"
     rm -rf sqlite
     git clone "${REPO_SQLITE}" --depth 1 --branch "${TAG_SQLITE}" > /dev/null
+    which tclsh || which tclsh8.6
+    dpkg -S tclConfig.sh 2>/dev/null || true
+    sudo apt-get install -y tcl8.6-dev
     cd sqlite
     ./configure --disable-shared --disable-readline --enable-static \
       CFLAGS="${CFLAGS} -DSQLITE_ENABLE_DBSTAT_VTAB=1" \
