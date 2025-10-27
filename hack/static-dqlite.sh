@@ -108,7 +108,9 @@ if [ ! -f "${BUILD_DIR}/sqlite/libsqlite3.la" ]; then
     git clone "${REPO_SQLITE}" --depth 1 --branch "${TAG_SQLITE}" > /dev/null
     cd sqlite
     ./configure --disable-shared --disable-readline --enable-static \
-    make -j BCC="${CC} -g -O2 ${CFLAGS} ${LDFLAGS}" > /dev/null
+      CFLAGS="${CFLAGS} -DSQLITE_ENABLE_DBSTAT_VTAB=1" \
+      > /dev/null
+    make -j > /dev/null
   )
 fi
 
