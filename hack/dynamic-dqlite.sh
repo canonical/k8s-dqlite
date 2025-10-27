@@ -79,7 +79,7 @@ if [ ! -f "${BUILD_DIR}/sqlite/libsqlite3.la" ]; then
     cd sqlite
     ./configure --disable-readline \
       > /dev/null
-    make libsqlite3.la -j > /dev/null
+    make -j > /dev/null
   )
 fi
 

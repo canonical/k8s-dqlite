@@ -110,7 +110,7 @@ if [ ! -f "${BUILD_DIR}/sqlite/libsqlite3.la" ]; then
     ./configure --disable-shared --disable-readline \
       CFLAGS="${CFLAGS} -DSQLITE_ENABLE_DBSTAT_VTAB=1" \
       > /dev/null
-    make libsqlite3.la -j BCC="${CC} -g -O2 ${CFLAGS} ${LDFLAGS}" > /dev/null
+    make -j BCC="${CC} -g -O2 ${CFLAGS} ${LDFLAGS}" > /dev/null
   )
 fi
 
