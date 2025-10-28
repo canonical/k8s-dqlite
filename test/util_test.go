@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/canonical/go-dqlite/app"
+	"github.com/canonical/go-dqlite/v2/app"
 	"github.com/canonical/k8s-dqlite/pkg/instrument"
 	"github.com/canonical/k8s-dqlite/pkg/kine/endpoint"
 	"github.com/canonical/k8s-dqlite/pkg/kine/server"
