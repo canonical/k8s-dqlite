@@ -101,7 +101,7 @@ if [ ! -f "${BUILD_DIR}/lz4/lib/liblz4.a" ] || [ ! -f "${BUILD_DIR}/lz4/lib/libl
 fi
 
 # build sqlite3
-if [ ! -f "${BUILD_DIR}/sqlite/libsqlite3.la" ]; then
+if [ ! -f "${BUILD_DIR}/sqlite/libsqlite3.a" ]; then
   (
     cd "${BUILD_DIR}"
     rm -rf sqlite
@@ -110,7 +110,7 @@ if [ ! -f "${BUILD_DIR}/sqlite/libsqlite3.la" ]; then
     ./configure --disable-shared --disable-readline \
       CFLAGS="${CFLAGS} -DSQLITE_ENABLE_DBSTAT_VTAB=1" \
       > /dev/null
-    make libsqlite3.la -j BCC="${CC} -g -O2 ${CFLAGS} ${LDFLAGS}" > /dev/null
+    make libsqlite3.a -j BCC="${CC} -g -O2 ${CFLAGS} ${LDFLAGS}" > /dev/null
   )
 fi
 
@@ -143,7 +143,7 @@ fi
   cp libuv/.libs/* "${INSTALL_DIR}/lib"
   cp lz4/lib/*.a "${INSTALL_DIR}/lib"
   cp lz4/lib/*.so* "${INSTALL_DIR}/lib"
-  cp sqlite/.libs/*.a "${INSTALL_DIR}/lib"
+  cp sqlite/*.a "${INSTALL_DIR}/lib"
   cp dqlite/.libs/*.a "${INSTALL_DIR}/lib"
 )
 
