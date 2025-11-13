@@ -43,6 +43,8 @@ jobs:
     steps:
       - name: Checking out repo
         uses: actions/checkout@v4
+      - name: get disk usage before tests
+        run: df -h
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -59,6 +61,12 @@ jobs:
           bridges: "lxdbr0,dualstack-br0,ipv6-br0"
       - name: Patch k8s snap
         uses: ./.github/actions/patch-k8s-snap
+      - name: clear our cache to free space
+        run: |
+          sudo apt-get clean
+          sudo rm -rf /var/lib/apt/lists/*
+          sudo docker system prune -af || true
+          df -h
       - name: Running
         env:
           TEST_SNAP: ${{ github.workspace }}/k8s-updated.snap
@@ -84,3 +92,8 @@ jobs:
         with:
          name: sonobuoy-e2e-${{ env.artifact_name }}
          path: k8s-snap/tests/integration/sonobuoy_e2e.tar.gz
+      - name: final cleanup
+        run: |
+          rm -rf ${{ github.workspace }}/k8s-snap}
+          rm -rf ${{ github.workspace }}/inspection-reports
+          df -h
