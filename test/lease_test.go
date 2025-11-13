@@ -73,7 +73,7 @@ func TestLease(t *testing.T) {
 						resp, err := kine.client.Get(ctx, "/leaseTestKey", clientv3.WithRange(""))
 						g.Expect(err).To(BeNil())
 						return resp.Kvs
-					}, time.Duration(ttl*5)*time.Second, testExpirePollPeriod, ctx).Should(BeEmpty())
+					}, time.Duration(ttl*2500)*time.Millisecond, testExpirePollPeriod, ctx).Should(BeEmpty())
 				})
 			})
 		})
