@@ -21,7 +21,7 @@ jobs:
       - name: Checking out repo
         uses: actions/checkout@v4
       - name: Install Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
       - name: Build k8s-dqlite
