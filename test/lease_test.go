@@ -44,7 +44,7 @@ func TestLease(t *testing.T) {
 				resp, err := server.client.Get(ctx, leaseKey, clientv3.WithRange(""))
 				g.Expect(err).To(BeNil())
 				return resp.Kvs
-			}, time.Duration(ttlSeconds*5000)*time.Millisecond, testExpirePollPeriod, ctx).Should(BeEmpty())
+			}, time.Duration(ttlSeconds*2500)*time.Millisecond, testExpirePollPeriod, ctx).Should(BeEmpty())
 		})
 	}
 }
