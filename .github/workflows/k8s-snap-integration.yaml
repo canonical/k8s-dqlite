@@ -44,7 +44,7 @@ jobs:
           IFS=' ' read -ra TAGS <<< "${{steps.get-e2e-tags.outputs.test-tags}}"
           TAGS_ARGS=""
           for tag in "${TAGS[@]}"; do
-            TAGS_ARGS="TAGS_ARGS --tags $tag"
+            TAGS_ARGS+=" --tags $tag"
           done
           
           # get test name into JSON array for Github Actions, we filter by name to
