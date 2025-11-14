@@ -20,62 +20,63 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       test-tags: ${{ steps.get-e2e-tags.outputs.test-tags }}
+      tests: ${{ steps.collect-tests.outputs.tests }}
     steps:
-    - name: Check out code
-      uses: actions/checkout@v4
-    - name: Setup Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.12"
-    - name: Install tox
-      run: sudo apt-get install -y tox
-    - name: Get e2e test tags
-      id: get-e2e-tags
-      run: |
-        set -x
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install tox
+        run: sudo apt-get install -y tox
+      - name: Get e2e test tags
+        id: get-e2e-tags
+        run: |
+          set -x
 
-        tags="up_to_weekly"
-        has_cnfc_label=${{ contains(github.event.pull_request.labels.*.name, 'cncf-conformance') }}
+          tags="up_to_weekly"
+          has_cnfc_label=${{ contains(github.event.pull_request.labels.*.name, 'cncf-conformance') }}
 
-        if [[ ${{ github.event_name }} == "schedule" || "$has_cnfc_label" == "true" ]]; then
-          tags+=" conformance_tests"
-        fi
+          if [[ ${{ github.event_name }} == "schedule" || "$has_cnfc_label" == "true" ]]; then
+            tags+=" conformance_tests"
+          fi
 
-        echo "test-tags=$tags" >> "$GITHUB_OUTPUT"
-    - name: Collect tests
-      id: collect-tests
-      run: |
-        git clone https://github.com/canonical/k8s-snap.git
-        cd k8s-snap/tests/integration
-        # Split the input tags into an array and pass them as individual args
-        IFS=' ' read -ra TAGS <<< "${{ steps.get-e2e-tags.outputs.test-tags }}"
-        TAGS_ARGS=""
-        for tag in "${TAGS[@]}"; do
-          TAGS_ARGS="$TAGS_ARGS --tags $tag"
-        done
-        # Collect test names and convert to JSON array for GitHub Actions
-        # There is no easy way to get the test names from pytest, so we use the --collect-only flag
-        # and parse the output to extract the test names.
-        TEST_FILES=$(tox -e integration -- --collect-only $TAGS_ARGS --quiet --no-header tests/ | grep ::)
-        # Convert to JSON array for GitHub Actions
-        JSON_ARRAY=$(echo "$TEST_FILES" | jq -R -s -c 'split("\n") | map(select(length > 0))')
-        echo "tests=$JSON_ARRAY" >> $GITHUB_OUTPUT
-        echo "Found test files: $TEST_FILES"
+          echo "test-tags=$tags" >> "$GITHUB_OUTPUT"
+      - name: Collect tests
+        id: collect-tests
+        run: |
+          git clone https://github.com/canonical/k8s-snap.git
+          cd k8s-snap/tests/integration
+          # Split the input tags into an array and pass them as individual args
+          IFS=' ' read -ra TAGS <<< "${{ steps.get-e2e-tags.outputs.test-tags }}"
+          TAGS_ARGS=""
+          for tag in "${TAGS[@]}"; do
+            TAGS_ARGS="$TAGS_ARGS --tags $tag"
+          done
+
+          # Collect test names and convert to JSON array for GitHub Actions
+          # There is no easy way to get the test names from pytest, so we use the --collect-only flag
+          # and parse the output to extract the test names.
+          TEST_FILES=$(tox -e integration -- --collect-only $TAGS_ARGS --quiet --no-header tests/ | grep ::)
+
+          # Convert to JSON array for GitHub Actions
+          JSON_ARRAY=$(echo "$TEST_FILES" | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "tests=$JSON_ARRAY" >> $GITHUB_OUTPUT
+          echo "Found test files: $TEST_FILES"
 
   build:
     name: ${{ matrix.test }}
-    runs-on: self-hosted-linux-amd64-jammy-large
     needs: prepare
     strategy:
       fail-fast: false
       matrix:
         test: ${{ fromJson(needs.prepare.outputs.tests) }}
+    runs-on: self-hosted-linux-amd64-jammy-large
 
     steps:
       - name: Checking out repo
         uses: actions/checkout@v4
-      - name: get disk usage before tests
-        run: df -h
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -92,13 +93,7 @@ jobs:
           bridges: "lxdbr0,dualstack-br0,ipv6-br0"
       - name: Patch k8s snap
         uses: ./.github/actions/patch-k8s-snap
-      - name: clear our cache to free space
-        run: |
-          sudo apt-get clean
-          sudo rm -rf /var/lib/apt/lists/*
-          sudo docker system prune -af || true
-          df -h
-      - name: Generate names for steps and artifacts
+      - name: Generate names for step and artifacts
         run: |
           FULL_TEST_NODE_ID="${{ matrix.test }}"
           # Extract test name (part after '::') for the step display name
@@ -112,7 +107,8 @@ jobs:
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports/${{ env.test_name }}
         run: |
           git clone https://github.com/canonical/k8s-snap.git      
-          cd k8s-snap/tests/integration && sg lxd -c "tox -e integration -- ${{matrix.test}}"
+          cd k8s-snap/tests/integration && sg lxd -c "tox -e integration -- ${{ matrix.test }}"
+      - name: Prepare inspection reports
         if: failure()
         run: |
           mkdir -p inspection-report-archives
@@ -127,10 +123,5 @@ jobs:
         if: ${{ failure() && contains(needs.prepare.outputs.test-tags, 'conformance_tests') }}
         uses: actions/upload-artifact@v4
         with:
-         name: sonobuoy-e2e-${{ env.test_name }}
-         path: k8s-snap/tests/integration/sonobuoy_e2e.tar.gz
-      - name: final cleanup
-        run: |
-          rm -rf ${{ github.workspace }}/k8s-snap}
-          rm -rf ${{ github.workspace }}/inspection-reports
-          df -h
+          name: sonobuoy-e2e-${{ env.test_name }}
+          path: k8s-snap/tests/integration/sonobuoy_e2e.tar.gz
