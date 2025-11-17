@@ -419,7 +419,7 @@ FROM pragma_page_count(), pragma_freelist_count(), pragma_page_size()`)
 	}
 
 	// If the database is small, we can have an initial VACUUM operation which we know it
-	// will always yeald a transaction smaller than its initial size and as such will not
+	// will always yield a transaction smaller than its initial size and as such will not
 	// create big problems when using RAFT protocol.
 	if size <= autovacuumThreshold {
 		if _, err := conn.ExecContext(ctx, "PRAGMA auto_vacuum = FULL; VACUUM"); err != nil {
