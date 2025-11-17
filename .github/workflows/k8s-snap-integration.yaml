@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   prepare: 
-    name: Preare Environment
+    name: Prepare Environment
     runs-on: ubuntu-latest
     outputs:
       test-tags: ${{steps.get-e2e-tags.outputs.test-tags}}
