@@ -90,7 +90,7 @@ jobs:
       - name: Install lxd
         uses: canonical/setup-lxd@v0.1.3
         with:
-          bridges: "lxdbr0,dualstack-br0,ipv6-br0"
+          bridges: "lxdbr0,dualstack-br0,ipv6-br0,jumbo-br0,dual-nic-br0"
       - name: Patch k8s snap
         uses: ./.github/actions/patch-k8s-snap
       - name: Generate names for step and artifacts
