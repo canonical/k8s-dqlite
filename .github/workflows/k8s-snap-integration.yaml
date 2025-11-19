@@ -13,8 +13,53 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  prepare: 
+    name: Prepare Environment
+    runs-on: ubuntu-latest
+    outputs:
+      test-tags: ${{steps.get-e2e-tags.outputs.test-tags}}
+      tests: ${{steps.collect-tests.outputs.tests}}
+    steps:
+      - name: checkout repo
+        uses: actions/checkout@v4
+      - name: setup python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: install tox
+        run: sudo apt-get install -y tox
+      - name: Get e2e test tags
+        id: get-e2e-tags
+        run: |
+          set -x
+          tags="up_to_weekly"
+          has_cnfc_label=${{contains(github.event.pull_request.labels.*.name, 'cnfc-conformance')}}
+          
+          echo "test-tags=$tags" >> "$GITHUB_OUTPUT"
+      - name: Collect tests to run
+        id: collect-tests
+        run: |
+          git clone https://github.com/canonical/k8s-snap.git
+          cd k8s-snap/tests/integration
+          IFS=' ' read -ra TAGS <<< "${{steps.get-e2e-tags.outputs.test-tags}}"
+          TAGS_ARGS=""
+          for tag in "${TAGS[@]}"; do
+            TAGS_ARGS+=" --tags $tag"
+          done
+          
+          # get test name into JSON array for Github Actions, we filter by name to
+          # get the list of test names to run. 
+          TEST_FILES=$(tox -e integration -- --collect-only $TAGS_ARGS --quiet --no-header tests/ | grep ::)
+          JSON_ARRAY=$(echo "$TEST_FILES" | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "tests=$JSON_ARRAY" >> $GITHUB_OUTPUT
+          echo "Found test files: $TEST_FILES"
   build:
-    name: K8s-snap Integration Test
+    name: ${{matrix.test}}
+    needs: prepare
+    strategy:
+      matrix:
+        test: ${{fromJson(needs.prepare.outputs.tests)}}
+      fail-fast: false
     runs-on: self-hosted-linux-amd64-jammy-large
 
     steps:
@@ -36,7 +81,7 @@ jobs:
       - name: Install lxd
         uses: canonical/setup-lxd@v0.1.3
         with:
-          bridges: "lxdbr0,dualstack-br0,ipv6-br0"
+          bridges: "lxdbr0,dualstack-br0,ipv6-br0,jumbo-br0,dual-nic-br0"
       - name: Build k8s-dqlite
         run: |
           make static
@@ -52,22 +97,29 @@ jobs:
       - name: Repack Snap
         run: |
           sudo mksquashfs snap-unpack-dir k8s-updated.snap -noappend -comp lzo -no-fragments
-      - name: Running
+      - name: Generate names for step and artifacts
+        run: |
+          FULL_TEST_NODE_ID="${{ matrix.test }}"
+          # Extract test name (part after '::') for the step display name
+          TEST_NAME="${FULL_TEST_NODE_ID##*::}"
+          echo "test_name=${TEST_NAME}" >> $GITHUB_ENV
+      - name: Running ${{ env.test_name }}
         env:
           TEST_SNAP: ${{ github.workspace }}/k8s-updated.snap
           TEST_SUBSTRATE: lxd
           TEST_LXD_IMAGE: ubuntu:22.04
-          TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports
+          TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports/${{ env.test_name }}
         run: |
           git clone https://github.com/canonical/k8s-snap.git      
-          cd k8s-snap/tests/integration && sg lxd -c 'tox -e integration'
+          cd k8s-snap/tests/integration && sg lxd -c "tox -e integration -- ${{ matrix.test }}"
       - name: Prepare inspection reports
         if: failure()
         run: |
-          tar -czvf inspection-reports.tar.gz -C ${{ github.workspace }} inspection-reports
+          mkdir -p inspection-report-archives
+          tar -czvf inspection-report-archives/${{ env.test_name }}.tar.gz -C ${{ github.workspace }} inspection-reports/${{ env.test_name }}
       - name: Upload inspection report artifact
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: inspection-reports
-          path: ${{ github.workspace }}/inspection-reports.tar.gz
+          name: inspection-reports-${{ env.test_name }}
+          path: ${{ github.workspace }}/inspection-report-archives/${{ env.test_name }}.tar.gz
