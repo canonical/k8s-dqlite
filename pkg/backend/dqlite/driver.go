@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/canonical/go-dqlite/v3"
 	"github.com/canonical/go-dqlite/v3/app"
 	"github.com/canonical/go-dqlite/v3/driver"
 	"github.com/canonical/k8s-dqlite/pkg/backend/sqlite"
@@ -14,13 +13,6 @@ import (
 	"github.com/mattn/go-sqlite3"
 	"github.com/sirupsen/logrus"
 )
-
-func init() {
-	// We assume SQLite will be used multi-threaded
-	if err := dqlite.ConfigMultiThread(); err != nil {
-		panic(fmt.Errorf("failed to set dqlite multithreaded mode: %v", err))
-	}
-}
 
 type Driver struct {
 	*sqlite.Driver
