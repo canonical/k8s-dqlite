@@ -71,7 +71,7 @@ if [ ! -f "${BUILD_DIR}/lz4/lib/liblz4.a" ] || [ ! -f "${BUILD_DIR}/lz4/lib/libl
 fi
 
 # build sqlite3
-if [ ! -f "${BUILD_DIR}/sqlite/libsqlite3.la" ]; then
+if [ ! -f "${BUILD_DIR}/sqlite/libsqlite3.a" ]; then
   (
     cd "${BUILD_DIR}"
     rm -rf sqlite
@@ -79,7 +79,7 @@ if [ ! -f "${BUILD_DIR}/sqlite/libsqlite3.la" ]; then
     cd sqlite
     ./configure --disable-readline \
       > /dev/null
-    make libsqlite3.la -j > /dev/null
+    make libsqlite3.a -j > /dev/null
   )
 fi
 
@@ -111,7 +111,7 @@ fi
   cd "${BUILD_DIR}"
   cp libuv/.libs/* "${INSTALL_DIR}/lib"
   cp lz4/lib/*.so* "${INSTALL_DIR}/lib"
-  cp sqlite/.libs/* "${INSTALL_DIR}/lib"
+  cp sqlite/libsqlite3.a "${INSTALL_DIR}/lib"
   cp dqlite/.libs/* "${INSTALL_DIR}/lib"
 )
 
@@ -124,7 +124,7 @@ fi
 )
 
 export CGO_CFLAGS="-I${INSTALL_DIR}/include"
-export CGO_LDFLAGS="-L${INSTALL_DIR}/lib -ldqlite -luv -llz4 -lsqlite3 -Wl,-z,stack-size=1048576"
+export CGO_LDFLAGS="-L${INSTALL_DIR}/lib -ldqlite -luv -llz4 -lsqlite3 -lm -Wl,-z,stack-size=1048576"
 export LD_LIBRARY_PATH="${INSTALL_DIR}/lib"
 
 echo "Libraries are in '${INSTALL_DIR}/lib'"
