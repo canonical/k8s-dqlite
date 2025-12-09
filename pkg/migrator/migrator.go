@@ -24,11 +24,18 @@ func dataFileName(dir string, index int) string {
 
 // BackupEtcd makes a back up of the contents of an etcd database into a filesystem directory.
 func BackupEtcd(ctx context.Context, endpoint, dir string) error {
+	return BackupEtcdPrefix(ctx, endpoint, "", dir)
+}
+
+// BackupEtcdPrefix makes a back up of some or all of the key space of an etcd database into a filesystem
+// directory. To back up the whole database use a prefix of "", to back up just part of the database use
+// a prefix like "/registry/secrets".
+func BackupEtcdPrefix(ctx context.Context, endpoint, prefix, dir string) error {
 	client, err := clientv3.New(clientv3.Config{Endpoints: []string{endpoint}})
 	if err != nil {
 		return fmt.Errorf("failed to create etcd client: %w", err)
 	}
-	resp, err := client.Get(ctx, "", clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortDescend))
+	resp, err := client.Get(ctx, prefix, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortDescend))
 	if err != nil {
 		return fmt.Errorf("failed to list keys from etcd: %w", err)
 	}
@@ -88,11 +95,23 @@ func RestoreToDqlite(ctx context.Context, endpoint, dir string) error {
 
 // BackupDqlite makes a back up of the contents of a k8s-dqlite database into a filesystem directory.
 func BackupDqlite(ctx context.Context, endpoint, dir string) error {
+	return BackupDqlitePrefix(ctx, endpoint, "", dir)
+}
+
+// BackupDqlitePrefix makes a back up of some or all of the key space of a k8s-dqlite database into a
+// filesystem directory.  To back up the whole database use a prefix of "/", to back up just part of
+// the database use a prefix like "/registry/secrets".
+func BackupDqlitePrefix(ctx context.Context, endpoint, prefix, dir string) error {
+	if prefix == "" {
+		// dqlite doesn't support an empty prefix, so use the minimal prefix "/"
+		// that is a prefix of all valid k8s keys
+		prefix = "/"
+	}
 	client, err := client.New(k8s_dqlite_endpoint.ETCDConfig{Endpoints: []string{endpoint}})
 	if err != nil {
 		return fmt.Errorf("failed to create k8s-dqlite client: %w", err)
 	}
-	resp, err := client.List(ctx, "/", 0)
+	resp, err := client.List(ctx, prefix, 0)
 	if err != nil {
 		return fmt.Errorf("failed to list keys from dqlite: %w", err)
 	}
