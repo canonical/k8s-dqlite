@@ -115,13 +115,13 @@ jobs:
           tar -czvf inspection-report-archives/${{ env.test_name }}.tar.gz -C ${{ github.workspace }} inspection-reports/${{ env.test_name }}
       - name: Upload inspection report artifact
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: inspection-reports-${{ env.test_name }}
           path: ${{ github.workspace }}/inspection-report-archives/${{ env.test_name }}.tar.gz
       - name: Upload CNCF conformance report artifact
         if: ${{ failure() && contains(needs.prepare.outputs.test-tags, 'conformance_tests') }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sonobuoy-e2e-${{ env.test_name }}
           path: k8s-snap/tests/integration/sonobuoy_e2e.tar.gz
