@@ -111,7 +111,7 @@ jobs:
           TEST_NAME=$(basename $FULL_NAME .py)
           echo "test_name=${TEST_NAME}" >> $GITHUB_ENV
       - name: Upload results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: results-${{ env.test_name }}
           path: ${{ github.workspace }}/test/performance/results
@@ -122,19 +122,19 @@ jobs:
           echo "artifact_name=inspection-reports" | sed 's/:/-/g' >> $GITHUB_ENV
       - name: Upload inspection report artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ env.artifact_name }}
           path: ${{ github.workspace }}/inspection-reports.tar.gz
       - name: Upload base-code.snap
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: base-code.snap
           path: ${{ github.workspace }}/base-code.snap
       - name: Upload head.snap
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: head.snap
           path: ${{ github.workspace }}/head.snap
@@ -192,7 +192,7 @@ jobs:
             -o ./results/aggregated-results/single-node/ \
             -f *metrics.log
       - name: Upload performance result
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: performance-results
