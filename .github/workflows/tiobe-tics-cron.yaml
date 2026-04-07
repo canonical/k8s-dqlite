@@ -19,9 +19,9 @@ jobs:
 
     steps:
       - name: Checking out repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.12'
 
@@ -32,7 +32,7 @@ jobs:
           pip install -r test/performance/requirements-test.txt
 
       - name: Install Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
 
@@ -56,7 +56,7 @@ jobs:
           echo "TAG_DQLITE=$TAG_DQLITE" >> $GITHUB_ENV
       - name: Cache Dqlite dependencies
         id: dqlite-cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ github.workspace }}/hack/.deps/static
           key: dqlite-cache-${{ runner.os }}-${{ env.TAG_DQLITE }}
@@ -78,7 +78,7 @@ jobs:
       - name: Set PATH
         run: echo "${{ github.workspace }}/hack/.deps/static/musl/bin" >> $GITHUB_PATH
       - name: Run TICS
-        uses: tiobe/tics-github-action@v3
+        uses: tiobe/tics-github-action@a53037a6bb9f71b6a97cdeb0ac41632266804b9e # v3
         env:
           PYTHONPATH: ${{ github.workspace }}/test/performance/tests/
           INSTALL_DIR: ${{ github.workspace }}/hack/.deps/static

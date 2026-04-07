@@ -27,9 +27,9 @@ jobs:
     runs-on: self-hosted-linux-amd64-jammy-large
     steps:
       - name: Checking out repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.10"
       - name: Set-up R
@@ -49,7 +49,7 @@ jobs:
           echo "r-cache-key=$key" >> "$GITHUB_OUTPUT"
       - name: Restore R package cache
         id: restore-r-cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: /usr/local/lib/R/site-library/
           key: ${{ steps.get-r-cache-key.outputs.r-cache-key }}
@@ -65,11 +65,11 @@ jobs:
         run: |
           pip install tox
       - name: Install Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
       - name: Install lxd
-        uses: canonical/setup-lxd@v0.1.3
+        uses: canonical/setup-lxd@a3c85fc6fb7fff43fcfeae87659e41a8f635b7dd # v0.1.3
         with:
           bridges: "lxdbr0"
       - name: Patch k8s snap (head)
@@ -111,7 +111,7 @@ jobs:
           TEST_NAME=$(basename $FULL_NAME .py)
           echo "test_name=${TEST_NAME}" >> $GITHUB_ENV
       - name: Upload results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: results-${{ env.test_name }}
           path: ${{ github.workspace }}/test/performance/results
@@ -122,19 +122,19 @@ jobs:
           echo "artifact_name=inspection-reports" | sed 's/:/-/g' >> $GITHUB_ENV
       - name: Upload inspection report artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ env.artifact_name }}
           path: ${{ github.workspace }}/inspection-reports.tar.gz
       - name: Upload base-code.snap
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: base-code.snap
           path: ${{ github.workspace }}/base-code.snap
       - name: Upload head.snap
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: head.snap
           path: ${{ github.workspace }}/head.snap
@@ -144,7 +144,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:  
       - name: Checking out repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Set-up R
         run: |
           sudo apt-get install -y --no-install-recommends r-base
@@ -162,7 +162,7 @@ jobs:
           echo "r-cache-key=$key" >> "$GITHUB_OUTPUT"
       - name: Restore R package cache
         id: restore-r-cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: /usr/local/lib/R/site-library/
           key: ${{ steps.get-r-cache-key.outputs.r-cache-key }}
@@ -175,7 +175,7 @@ jobs:
             repos="https://cloud.r-project.org")
         shell: sudo Rscript {0}
       - name: Download all results
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: ${{ github.workspace }}/test/performance/results
       - name: Generate aggregated Graphs
@@ -192,7 +192,7 @@ jobs:
             -o ./results/aggregated-results/single-node/ \
             -f *metrics.log
       - name: Upload performance result
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: performance-results
