@@ -75,6 +75,8 @@ func (conf *ConnectionPoolConfig) apply(db *sql.DB) {
 		maxIdle = 0
 	} else if conf.MaxIdle == 0 {
 		maxIdle = defaultMaxIdleConns
+	} else {
+		maxIdle = conf.MaxIdle
 	}
 
 	logrus.Infof(
@@ -84,7 +86,7 @@ func (conf *ConnectionPoolConfig) apply(db *sql.DB) {
 		conf.MaxLifetime,
 		conf.MaxIdleTime,
 	)
-	db.SetMaxIdleConns(conf.MaxIdle)
+	db.SetMaxIdleConns(maxIdle)
 	db.SetMaxOpenConns(conf.MaxOpen)
 	db.SetConnMaxLifetime(conf.MaxLifetime)
 	db.SetConnMaxIdleTime(conf.MaxIdleTime)
