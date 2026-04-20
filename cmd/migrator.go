@@ -10,6 +10,7 @@ var (
 	migratorCmdOpts struct {
 		endpoint string
 		mode     string
+		prefix   string
 		dbDir    string
 		debug    bool
 	}
@@ -22,6 +23,7 @@ Copy data between etcd and k8s-dqlite
 
 		k8s-dqlite migrator --mode [backup-etcd|restore-etcd|backup-dqlite|restore-dqlite] --endpoint [etcd or k8s-dqlite endpoint] --db-dir [dir to store entries]
 
+To back up only part of the key space, use the optional parameter --prefix /registry/...
 `,
 		Run: func(cmd *cobra.Command, args []string) {
 			if migratorCmdOpts.debug {
@@ -30,10 +32,10 @@ Copy data between etcd and k8s-dqlite
 
 			ctx := cmd.Context()
 
-			logrus.WithFields(logrus.Fields{"mode": migratorCmdOpts.mode, "endpoint": migratorCmdOpts.endpoint, "dir": migratorCmdOpts.dbDir}).Print("starting migrator")
+			logrus.WithFields(logrus.Fields{"mode": migratorCmdOpts.mode, "endpoint": migratorCmdOpts.endpoint, "prefix": migratorCmdOpts.prefix, "dir": migratorCmdOpts.dbDir}).Print("starting migrator")
 			switch migratorCmdOpts.mode {
 			case "backup", "backup-etcd":
-				if err := migrator.BackupEtcd(ctx, migratorCmdOpts.endpoint, migratorCmdOpts.dbDir); err != nil {
+				if err := migrator.BackupEtcdPrefix(ctx, migratorCmdOpts.endpoint, migratorCmdOpts.prefix, migratorCmdOpts.dbDir); err != nil {
 					logrus.WithError(err).Fatal("failed to backup etcd")
 				}
 			case "restore", "restore-to-dqlite", "restore-dqlite":
@@ -41,7 +43,7 @@ Copy data between etcd and k8s-dqlite
 					logrus.WithError(err).Fatal("failed to restore to etcd")
 				}
 			case "backup-dqlite":
-				if err := migrator.BackupDqlite(ctx, migratorCmdOpts.endpoint, migratorCmdOpts.dbDir); err != nil {
+				if err := migrator.BackupDqlitePrefix(ctx, migratorCmdOpts.endpoint, migratorCmdOpts.prefix, migratorCmdOpts.dbDir); err != nil {
 					logrus.WithError(err).Fatal("failed to backup dqlite")
 				}
 			case "restore-to-etcd", "restore-etcd":
@@ -56,6 +58,7 @@ Copy data between etcd and k8s-dqlite
 func init() {
 	migratorCmd.Flags().StringVar(&migratorCmdOpts.endpoint, "endpoint", "unix:///var/snap/microk8s/current/var/kubernetes/backend/kine.sock", "")
 	migratorCmd.Flags().StringVar(&migratorCmdOpts.mode, "mode", "backup", "")
+	migratorCmd.Flags().StringVar(&migratorCmdOpts.prefix, "prefix", "", "")
 	migratorCmd.Flags().StringVar(&migratorCmdOpts.dbDir, "db-dir", "db", "")
 	migratorCmd.Flags().BoolVar(&migratorCmdOpts.debug, "debug", false, "")
 	rootCmd.AddCommand(migratorCmd)
