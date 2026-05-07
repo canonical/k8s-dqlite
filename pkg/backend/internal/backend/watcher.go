@@ -201,10 +201,15 @@ func (s *Backend) poll(ctx context.Context) {
 		}
 		events, err := s.getLatestEvents(ctx, s.pollRevision)
 		if err != nil {
-			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-				return
-			}
+		    if ctx.Err() != nil {
+		        return
+		    }
 			logrus.Errorf("fail to get latest events: %v", err)
+		    select {
+		    case <-ctx.Done():
+		        return
+		    case <-time.After(s.Config.PollInterval):
+		    }
 			continue
 		}
 
