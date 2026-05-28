@@ -71,10 +71,12 @@ func (s *Backend) ttl(ctx context.Context) {
 			go run(ctx, key, revision, time.Duration(lease)*time.Second)
 		}
 
-		// watchFromRevision tracks where to re-subscribe from after a watch group
-		// is unexpectedly closed. Initialized to startRevision and advanced as
-		// updates are received so restarts replay only unseen events.
-		watchFromRevision := startRevision
+		// watchFromRevision is the next revision to subscribe from. It starts at
+		// startRevision+1 (to skip already-processed leases) and is advanced past
+		// each received batch on every successful drain. Because Watch startRevision
+		// is inclusive (per etcd API), always storing lastSeen+1 ensures we never
+		// replay a batch and schedule duplicate TTL deletes on restart.
+		watchFromRevision := startRevision + 1
 		ttlBackoff := s.Config.PollInterval
 
 		for ctx.Err() == nil {
@@ -94,6 +96,9 @@ func (s *Backend) ttl(ctx context.Context) {
 
 			if err := group.Watch(1, []byte{0}, []byte{255}, watchFromRevision); err != nil {
 				logrus.WithError(err).Warning("ttl watch failed")
+				// Cancel the group's AfterFunc to remove it from WatcherGroups
+				// immediately rather than waiting for ctx cancellation.
+				group.Unwatch(1)
 				select {
 				case <-ctx.Done():
 					return
@@ -109,7 +114,9 @@ func (s *Backend) ttl(ctx context.Context) {
 			ttlBackoff = s.Config.PollInterval
 
 			for update := range group.Updates() {
-				watchFromRevision = update.Revision()
+				// Advance past this batch. Watch startRevision is inclusive, so
+				// storing lastSeen+1 prevents replaying it on restart.
+				watchFromRevision = update.Revision() + 1
 				for _, watcher := range update.Watchers() {
 					for _, event := range watcher.Events {
 						if event.Kv.Lease > 0 {
