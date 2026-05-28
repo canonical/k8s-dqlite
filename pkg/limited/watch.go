@@ -90,7 +90,11 @@ func (ws *watchStream) ServeUpdates() error {
 			return err
 		}
 	}
-	return nil
+	// Updates channel was closed. Return any error recorded by the publisher.
+	// A non-nil error (e.g. ErrWatcherLagged) propagates through the errgroup,
+	// cancels the stream context, and causes kube-apiserver to reconnect.
+	// A nil error means clean backend shutdown; the gRPC layer handles both.
+	return ws.watcherGroup.Err()
 }
 
 func (ws *watchStream) sendUpdates(updates []WatcherUpdate) error {

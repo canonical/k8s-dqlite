@@ -12,6 +12,10 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
+// ErrWatcherLagged is set on a WatcherGroup that is closed because the
+// consumer could not drain the updates channel fast enough.
+var ErrWatcherLagged = errors.New("watcher group closed: consumer lagged")
+
 type WatcherGroup struct {
 	mu              sync.Mutex
 	ctx             context.Context
@@ -20,7 +24,27 @@ type WatcherGroup struct {
 	watchers        map[int64]*watcher
 	updates         chan limited.WatcherGroupUpdate
 	stop            func() bool
+
+	// closeOnce ensures updates is closed exactly once regardless of whether
+	// the trigger is context cancellation (via AfterFunc) or a slow consumer
+	// (via publishEvents). terminalErr is written inside Do() before the close
+	// so that Err() readers see a consistent value after the range exits.
+	closeOnce   sync.Once
+	terminalErr error
 }
+
+// closeUpdates closes the updates channel exactly once, recording err as the
+// reason (nil means clean context-driven shutdown).
+func (w *WatcherGroup) closeUpdates(err error) {
+	w.closeOnce.Do(func() {
+		w.terminalErr = err
+		close(w.updates)
+	})
+}
+
+// Err returns the reason the Updates channel was closed abnormally, or nil
+// for a clean shutdown. Must only be called after Updates() is fully drained.
+func (w *WatcherGroup) Err() error { return w.terminalErr }
 
 type watcher struct {
 	watchId       int64
@@ -201,10 +225,16 @@ func (s *Backend) poll(ctx context.Context) {
 		}
 		events, err := s.getLatestEvents(ctx, s.pollRevision)
 		if err != nil {
-			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			if ctx.Err() != nil {
 				return
 			}
 			logrus.Errorf("fail to get latest events: %v", err)
+			waitForMore = true
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(s.Config.PollInterval):
+			}
 			continue
 		}
 
@@ -221,9 +251,10 @@ func (s *Backend) publishEvents(events []*limited.Event) {
 	}
 	for _, w := range s.WatcherGroups {
 		if !w.publish(s.pollRevision, events) {
+			logrus.Warnf("watcher group consumer lagged; closing group")
+			w.closeUpdates(ErrWatcherLagged)
 			if w.stop() {
 				delete(s.WatcherGroups, w)
-				close(w.updates)
 			}
 		}
 	}
@@ -279,7 +310,7 @@ func (s *Backend) WatcherGroup(ctx context.Context) (limited.WatcherGroup, error
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		delete(s.WatcherGroups, wg)
-		close(wg.updates)
+		wg.closeUpdates(nil)
 	})
 	wg.stop = stop
 	s.WatcherGroups[wg] = wg
