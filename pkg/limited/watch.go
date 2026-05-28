@@ -1,6 +1,7 @@
 package limited
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -24,6 +25,7 @@ func (s *KVServerBridge) Watch(ws etcdserverpb.Watch_WatchServer) error {
 	}
 
 	stream := &watchStream{
+		ctx:                ctx,
 		watcherGroup:       watcherGroup,
 		notifyInterval:     s.limited.notifyInterval,
 		server:             ws,
@@ -38,7 +40,12 @@ func (s *KVServerBridge) Watch(ws etcdserverpb.Watch_WatchServer) error {
 }
 
 type watchStream struct {
-	mu                 sync.Mutex
+	mu sync.Mutex
+	// ctx is the errgroup context derived from the gRPC stream context.
+	// It is cancelled when any of the three stream goroutines returns an error,
+	// allowing ServeRequests and ServeProgress to unblock and exit cleanly
+	// even if the underlying gRPC Recv() would otherwise block indefinitely.
+	ctx                context.Context
 	watcherGroup       WatcherGroup
 	notifyInterval     time.Duration
 	revision           int64
@@ -48,36 +55,66 @@ type watchStream struct {
 }
 
 func (ws *watchStream) ServeRequests() error {
+	type recvResult struct {
+		msg *etcdserverpb.WatchRequest
+		err error
+	}
+	recvCh := make(chan recvResult, 1)
+	// Run Recv in a dedicated goroutine so we can select on ws.ctx.Done().
+	// ws.server.Recv() blocks on the gRPC stream context (ws.server.Context()),
+	// which is the *parent* of the errgroup ctx, so it would not be unblocked
+	// by errgroup cancellation alone. This wrapper ensures ServeRequests exits
+	// promptly when ServeUpdates returns an error (e.g. ErrWatcherLagged).
+	// The goroutine itself exits when the stream is eventually torn down.
+	go func() {
+		for {
+			msg, err := ws.server.Recv()
+			select {
+			case recvCh <- recvResult{msg, err}:
+				if err != nil {
+					return
+				}
+			case <-ws.ctx.Done():
+				return
+			}
+		}
+	}()
+
 	nextWatcherId := int64(1)
 	for {
-		msg, err := ws.server.Recv()
-		if err != nil {
-			return err
-		}
-
-		if cr := msg.GetCreateRequest(); cr != nil {
-			if cr.WatchId != clientv3.AutoWatchID {
-				return unsupported("WatchId")
+		select {
+		case <-ws.ctx.Done():
+			return ws.ctx.Err()
+		case r := <-recvCh:
+			if r.err != nil {
+				return r.err
 			}
-			rangeEnd := cr.RangeEnd
-			if len(rangeEnd) == 0 {
-				rangeEnd = append(cr.Key, 0)
-			}
-			if err := ws.Create(nextWatcherId, cr.Key, rangeEnd, cr.StartRevision); err != nil {
-				return err
-			}
-			nextWatcherId++
-		}
+			msg := r.msg
 
-		if cr := msg.GetCancelRequest(); cr != nil {
-			logrus.Tracef("WATCH CANCEL REQ id=%d", cr.WatchId)
-			ws.Close(cr.WatchId)
-		}
+			if cr := msg.GetCreateRequest(); cr != nil {
+				if cr.WatchId != clientv3.AutoWatchID {
+					return unsupported("WatchId")
+				}
+				rangeEnd := cr.RangeEnd
+				if len(rangeEnd) == 0 {
+					rangeEnd = append(cr.Key, 0)
+				}
+				if err := ws.Create(nextWatcherId, cr.Key, rangeEnd, cr.StartRevision); err != nil {
+					return err
+				}
+				nextWatcherId++
+			}
 
-		if pr := msg.GetProgressRequest(); pr != nil {
-			if err := ws.RequestProgress(); err != nil {
-				logrus.WithError(err).Errorf("couldn't send progress response")
-				return err
+			if cr := msg.GetCancelRequest(); cr != nil {
+				logrus.Tracef("WATCH CANCEL REQ id=%d", cr.WatchId)
+				ws.Close(cr.WatchId)
+			}
+
+			if pr := msg.GetProgressRequest(); pr != nil {
+				if err := ws.RequestProgress(); err != nil {
+					logrus.WithError(err).Errorf("couldn't send progress response")
+					return err
+				}
 			}
 		}
 	}
@@ -126,7 +163,7 @@ func (ws *watchStream) ServeProgress() error {
 			if err := ws.sendProgress(); err != nil {
 				return err
 			}
-		case <-ws.server.Context().Done():
+		case <-ws.ctx.Done():
 			return nil
 		}
 	}
