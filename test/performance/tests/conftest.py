@@ -180,16 +180,30 @@ def instances(
             instance = h.new_instance(network_type=network_type)
             if not no_setup:
                 util.setup_core_dumps(instance)
-                util.setup_k8s_snap(instance, tmp_path, snap_version)
+                
+                if USE_MICROK8S:
+                    # Use MicroK8s instead of k8s-snap
+                    microk8s_util.setup_microk8s_snap(instance, tmp_path, snap_version)
+                    microk8s_util.patch_k8s_dqlite(instance, tmp_path)
+                else:
+                    util.setup_k8s_snap(instance, tmp_path, snap_version)
 
             if bootstrap:
-                if bootstrap_config:
-                    instance.exec(
-                        ["k8s", "bootstrap", "--file", "-"],
-                        input=str.encode(bootstrap_config),
-                    )
+                if USE_MICROK8S:
+                    # MicroK8s uses addons instead of bootstrap config
+                    # Parse bootstrap config and enable relevant addons
+                    addons = ["dns", "storage"]
+                    if "ingress" in bootstrap_config or not bootstrap_config:
+                        addons.append("ingress")
+                    microk8s_util.bootstrap_microk8s(instance, addons)
                 else:
-                    instance.exec(["k8s", "bootstrap"])
+                    if bootstrap_config:
+                        instance.exec(
+                            ["k8s", "bootstrap", "--file", "-"],
+                            input=str.encode(bootstrap_config),
+                        )
+                    else:
+                        instance.exec(["k8s", "bootstrap"])
 
             with lock:
                 instance_map[idx] = instance
@@ -260,27 +274,53 @@ def session_instance(
     tmp_path = tmp_path_factory.mktemp("data")
     instance = h.new_instance()
     snap = next(snap_versions(request))
-    util.setup_k8s_snap(instance, tmp_path, snap)
+    
+    if USE_MICROK8S:
+        # Use MicroK8s
+        microk8s_util.setup_microk8s_snap(instance, tmp_path, snap)
+        microk8s_util.patch_k8s_dqlite(instance, tmp_path)
+        
+        # Enable all MicroK8s addons for testing
+        addons = ["dns", "storage", "ingress", "metrics-server"]
+        microk8s_util.bootstrap_microk8s(instance, addons)
+        
+        instance_default_ip = util.get_default_ip(instance)
+        instance_default_cidr = util.get_default_cidr(instance, instance_default_ip)
+        
+        lb_cidr = util.find_suitable_cidr(
+            parent_cidr=instance_default_cidr,
+            excluded_ips=[instance_default_ip],
+        )
+        
+        # Enable load-balancer with MetalLB
+        instance.exec(["microk8s", "enable", f"metallb:{lb_cidr}"])
+        
+        # Wait for cluster to be ready
+        instance.exec(["microk8s", "kubectl", "wait", 
+                       "--for=condition=ready", "node", "--all", "--timeout=5m"])
+    else:
+        # Use k8s-snap
+        util.setup_k8s_snap(instance, tmp_path, snap)
 
-    bootstrap_config = (config.MANIFESTS_DIR / "bootstrap-all.yaml").read_text()
+        bootstrap_config = (config.MANIFESTS_DIR / "bootstrap-all.yaml").read_text()
 
-    instance_default_ip = util.get_default_ip(instance)
+        instance_default_ip = util.get_default_ip(instance)
 
-    instance.exec(
-        ["k8s", "bootstrap", "--file", "-"], input=str.encode(bootstrap_config)
-    )
-    instance_default_cidr = util.get_default_cidr(instance, instance_default_ip)
+        instance.exec(
+            ["k8s", "bootstrap", "--file", "-"], input=str.encode(bootstrap_config)
+        )
+        instance_default_cidr = util.get_default_cidr(instance, instance_default_ip)
 
-    lb_cidr = util.find_suitable_cidr(
-        parent_cidr=instance_default_cidr,
-        excluded_ips=[instance_default_ip],
-    )
+        lb_cidr = util.find_suitable_cidr(
+            parent_cidr=instance_default_cidr,
+            excluded_ips=[instance_default_ip],
+        )
 
-    instance.exec(
-        ["k8s", "set", f"load-balancer.cidrs={lb_cidr}", "load-balancer.l2-mode=true"]
-    )
-    util.wait_until_k8s_ready(instance, [instance])
-    util.wait_for_network(instance)
-    util.wait_for_dns(instance)
+        instance.exec(
+            ["k8s", "set", f"load-balancer.cidrs={lb_cidr}", "load-balancer.l2-mode=true"]
+        )
+        util.wait_until_k8s_ready(instance, [instance])
+        util.wait_for_network(instance)
+        util.wait_for_dns(instance)
 
     yield instance
