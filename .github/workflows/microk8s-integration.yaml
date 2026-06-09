@@ -90,10 +90,9 @@ jobs:
           cd microk8s
           # Install test dependencies
           sudo -E tox -e simple --notest
-          # Activate the venv and run pytest with filter
+          # Run pytest using the tox environment's python
           # Skip test_microk8s_stop_start which is flaky and not k8s-dqlite specific
-          source .tox/simple/bin/activate
-          sudo -E pytest -rA -s tests/test-simple.py -k 'not test_microk8s_stop_start'
+          sudo -E PATH=".tox/simple/bin:$PATH" pytest -rA -s tests/test-simple.py -k 'not test_microk8s_stop_start'
 
       - name: Run clustering unit tests
         run: |
