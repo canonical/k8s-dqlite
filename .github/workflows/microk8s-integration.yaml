@@ -88,11 +88,12 @@ jobs:
       - name: Run simple integration tests
         run: |
           cd microk8s
-          # Install test dependencies if needed  
+          # Install test dependencies
           sudo -E tox -e simple --notest
-          # Run the simple test suite directly with pytest, skipping flaky test
+          # Activate the venv and run pytest with filter
           # Skip test_microk8s_stop_start which is flaky and not k8s-dqlite specific
-          sudo -E .tox/simple/bin/pytest -rA -s tests/test-simple.py -k 'not test_microk8s_stop_start'
+          source .tox/simple/bin/activate
+          sudo -E pytest -rA -s tests/test-simple.py -k 'not test_microk8s_stop_start'
 
       - name: Run clustering unit tests
         run: |
