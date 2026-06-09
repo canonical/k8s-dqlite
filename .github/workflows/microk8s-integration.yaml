@@ -69,6 +69,7 @@ jobs:
         run: |
           sudo snap install microk8s --classic --channel=latest/stable
           sudo usermod -a -G microk8s $USER
+          mkdir -p ~/.kube
           sudo chown -R $USER ~/.kube
 
       - name: Patch k8s-dqlite in MicroK8s
