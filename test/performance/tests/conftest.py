@@ -189,7 +189,12 @@ def instances(
                         input=str.encode(bootstrap_config),
                     )
                 else:
-                    instance.exec(["k8s", "bootstrap"])
+                    # Default to k8s-dqlite datastore for k8s-dqlite repository tests
+                    default_config = "datastore-type: k8s-dqlite\n"
+                    instance.exec(
+                        ["k8s", "bootstrap", "--file", "-"],
+                        input=str.encode(default_config),
+                    )
 
             with lock:
                 instance_map[idx] = instance

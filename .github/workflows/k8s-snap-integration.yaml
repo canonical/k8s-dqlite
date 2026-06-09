@@ -105,6 +105,7 @@ jobs:
           TEST_SUBSTRATE: lxd
           TEST_LXD_IMAGE: ubuntu:22.04
           TEST_INSPECTION_REPORTS_DIR: ${{ github.workspace }}/inspection-reports/${{ env.test_name }}
+          TEST_DATASTORE: k8s-dqlite
         run: |
           git clone https://github.com/canonical/k8s-snap.git      
           cd k8s-snap/tests/integration && sg lxd -c "tox -e integration -- ${{ matrix.test }}"

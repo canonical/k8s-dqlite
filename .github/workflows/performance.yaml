@@ -90,6 +90,7 @@ jobs:
           TEST_METRICS_DIR: ${{ github.workspace }}/test/performance/results
           TEST_RUN_NAME: head
           TEST_KUBE_BURNER_ITERATIONS: 15
+          TEST_DATASTORE: k8s-dqlite
         run: |
           cd test/performance
           sg lxd -c 'tox -e performance -- ${{ matrix.test }}'
@@ -102,6 +103,7 @@ jobs:
           TEST_METRICS_DIR: ${{ github.workspace }}/test/performance/results
           TEST_RUN_NAME: base-code
           TEST_KUBE_BURNER_ITERATIONS: 15
+          TEST_DATASTORE: k8s-dqlite
         run: |
           cd test/performance
           sg lxd -c 'tox -e performance -- ${{ matrix.test }}'
