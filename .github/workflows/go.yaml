@@ -130,7 +130,7 @@ jobs:
         with:
           path: |
             bench-${{ env.BASE_SHA }}.txt
-          key: ${{ runner.os }}-${{ steps.cpuinfo.outputs.model }}-${{ steps.cpuinfo.outputs.count }}-bench-${{ env.BENCH_COUNT }}-${{ github.workflow_sha }}-${{ env.BASE_SHA }}
+          key: ${{ runner.os }}-${{ steps.cpuinfo.outputs.model }}-${{ steps.cpuinfo.outputs.count }}-bench-${{ env.BENCH_COUNT }}-${{ github.workflow_ref }}-${{ env.BASE_SHA }}
 
       - name: Run benchmark for base code
         if: steps.bench-cache.outputs.cache-hit != 'true'
