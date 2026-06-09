@@ -88,9 +88,11 @@ jobs:
       - name: Run simple integration tests
         run: |
           cd microk8s
-          # Run the simple test suite (pods, services, ingress)
+          # Install test dependencies if needed  
+          sudo -E tox -e simple --notest
+          # Run the simple test suite directly with pytest, skipping flaky test
           # Skip test_microk8s_stop_start which is flaky and not k8s-dqlite specific
-          sudo -E tox -e simple -- -k 'not test_microk8s_stop_start'
+          sudo -E .tox/simple/bin/pytest -rA -s tests/test-simple.py -k 'not test_microk8s_stop_start'
 
       - name: Run clustering unit tests
         run: |
