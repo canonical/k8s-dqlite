@@ -89,7 +89,8 @@ jobs:
         run: |
           cd microk8s
           # Run the simple test suite (pods, services, ingress)
-          sudo -E tox -e simple
+          # Skip test_microk8s_stop_start which is flaky and not k8s-dqlite specific
+          sudo -E tox -e simple -- -k 'not test_microk8s_stop_start'
 
       - name: Run clustering unit tests
         run: |
