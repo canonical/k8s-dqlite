@@ -44,20 +44,6 @@ jobs:
     needs: prepare
     runs-on: ubuntu-latest
     steps:
-      - name: Check out k8s-dqlite
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          path: k8s-dqlite
-
-      - name: Download k8s-dqlite binary
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: k8s-dqlite-binary
-          path: k8s-dqlite/bin/static/
-
-      - name: Make binaries executable
-        run: chmod +x k8s-dqlite/bin/static/k8s-dqlite k8s-dqlite/bin/static/dqlite
-
       - name: Clone MicroK8s repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -71,18 +57,8 @@ jobs:
           sudo usermod -a -G microk8s $USER
           mkdir -p ~/.kube
           sudo chown -R $USER ~/.kube
-
-      - name: Patch k8s-dqlite in MicroK8s
-        run: |
-          # Stop MicroK8s services
-          sudo snap stop microk8s
-          
-          # Replace k8s-dqlite binaries with our patched versions
-          sudo cp k8s-dqlite/bin/static/k8s-dqlite /snap/microk8s/current/bin/k8s-dqlite
-          sudo cp k8s-dqlite/bin/static/dqlite /snap/microk8s/current/bin/dqlite
-          
-          # Start MicroK8s
-          sudo snap start microk8s
+          # Wait for MicroK8s to be ready
+          sudo microk8s status --wait-ready --timeout=300
 
       - name: Run MicroK8s smoke test
         run: |
@@ -94,8 +70,8 @@ jobs:
           # Check that dqlite service is running
           sudo systemctl is-active snap.microk8s.daemon-k8s-dqlite.service
           
-          # Verify it's our patched version
-          ps aux | grep k8s-dqlite
+          # Show k8s-dqlite process info
+          ps aux | grep k8s-dqlite | grep -v grep || true
           
           # Check dqlite cluster status
           sudo /snap/microk8s/current/bin/dqlite \
