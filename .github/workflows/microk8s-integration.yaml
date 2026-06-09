@@ -88,11 +88,10 @@ jobs:
       - name: Run simple integration tests
         run: |
           cd microk8s
-          # Install test dependencies
-          sudo -E tox -e simple --notest
-          # Run pytest using the tox environment's python with absolute path
-          # Skip test_microk8s_stop_start which is flaky and not k8s-dqlite specific
-          sudo -E $PWD/.tox/simple/bin/python -m pytest -rA -s tests/test-simple.py -k 'not test_microk8s_stop_start'
+          # Run simple tests, skipping the flaky stop/start test
+          # We skip test_microk8s_stop_start as it's a MicroK8s lifecycle test
+          # (not k8s-dqlite specific) that's known to be flaky
+          sudo -E tox -e simple -- -k 'not test_microk8s_stop_start'
 
       - name: Run clustering unit tests
         run: |
