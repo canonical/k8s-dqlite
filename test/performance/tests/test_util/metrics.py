@@ -1,5 +1,5 @@
 #
-# Copyright 2025 Canonical, Ltd.
+# Copyright 2026 Canonical, Ltd.
 #
 import logging
 import os
@@ -8,6 +8,9 @@ from typing import List
 from test_util import config, harness, util
 
 LOG = logging.getLogger(__name__)
+
+USE_MICROK8S = os.environ.get("USE_MICROK8S", "").lower() == "true"
+K8S_DQLITE_SERVICE = "microk8s.daemon-k8s-dqlite" if USE_MICROK8S else "k8s.k8s-dqlite"
 
 
 def stop_metrics(instances: List[harness.Instance], process_dict: dict):
@@ -90,7 +93,7 @@ def pull_metrics(instances: List[harness.Instance], test_name: str):
         if config.ENABLE_PROFILING:
             # Stop k8s-dqlite, triggering a pprof data dump. Don't start it back
             # until we've processed the data, otherwise it's going to override the file.
-            instance.exec(["snap", "stop", "k8s.k8s-dqlite"])
+            instance.exec(["snap", "stop", K8S_DQLITE_SERVICE])
             try:
                 # Pull pprof data. We could also run "go tool pprof" on the host machine
                 # but then we wouldn't have access to the binary symbols.
@@ -115,6 +118,4 @@ def pull_metrics(instances: List[harness.Instance], test_name: str):
                 )
             except Exception:
                 LOG.exception("failed to retrieve pprof data")
-            instance.exec(["snap", "start", "k8s.k8s-dqlite"])
-
-
+            instance.exec(["snap", "start", K8S_DQLITE_SERVICE])

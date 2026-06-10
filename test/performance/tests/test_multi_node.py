@@ -1,10 +1,10 @@
 #
-# Copyright 2025 Canonical, Ltd.
+# Copyright 2026 Canonical, Ltd.
 #
 from typing import List
 
 import pytest
-from test_util import harness, metrics, util, config, kube_burner
+from test_util import config, harness, kube_burner, metrics, util
 
 
 @pytest.mark.node_count(3)

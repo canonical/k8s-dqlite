@@ -1,5 +1,5 @@
 #
-# Copyright 2025 Canonical, Ltd.
+# Copyright 2026 Canonical, Ltd.
 #
 import ipaddress
 import json
@@ -239,7 +239,9 @@ def setup_k8s_snap(
     which_snap = snap or config.SNAP
 
     if not which_snap:
-        pytest.fail("Set TEST_SNAP to the channel, revision, or absolute path to the snap")
+        pytest.fail(
+            "Set TEST_SNAP to the channel, revision, or absolute path to the snap"
+        )
 
     if isinstance(which_snap, str) and which_snap.startswith("/"):
         LOG.info("Install k8s snap by path")
@@ -395,7 +397,9 @@ def tracks_least_risk(track: str, arch: str) -> str:
     if track == "latest":
         return f"latest/edge/{config.FLAVOR or 'classic'}"
 
-    INFO_URL = f"https://api.snapcraft.io/v2/snaps/info/{config.SNAP_NAME}"
+    INFO_URL = (
+        f"https://api.snapcraft.io/v2/snaps/info/{config.SNAP_NAME}"  # noqa: E231
+    )
     HEADERS = {
         "Snap-Device-Series": "16",
         "User-Agent": "Mozilla/5.0",

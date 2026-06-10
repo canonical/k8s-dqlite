@@ -1,21 +1,20 @@
 #
-# Copyright 2025 Canonical, Ltd.
+# Copyright 2026 Canonical, Ltd.
 #
 import logging
-import pytest
 from typing import List
-from test_util import harness, metrics, util, config, kube_burner
+
+import pytest
+from test_util import config, harness, kube_burner, metrics, util
 
 LOG = logging.getLogger(__name__)
 
 
 def configure_argocd(control_plane: harness.Instance):
-    """""Configures ArgoCD on the instance."""
+    """ ""Configures ArgoCD on the instance."""
 
     LOG.info("Create argocd namespace")
-    control_plane.exec(
-        ["k8s", "kubectl", "create", "namespace", "argocd"]
-    )
+    control_plane.exec(["k8s", "kubectl", "create", "namespace", "argocd"])
 
     LOG.info("Apply ArogCD manifests")
     control_plane.exec(
@@ -43,6 +42,7 @@ def configure_argocd(control_plane: harness.Instance):
             "180s",
         ]
     )
+
 
 @pytest.mark.node_count(3)
 @pytest.mark.bootstrap_config((config.MANIFESTS_DIR / "bootstrap-all.yaml").read_text())

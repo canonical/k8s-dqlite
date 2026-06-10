@@ -1,5 +1,5 @@
 #
-# Copyright 2025 Canonical, Ltd.
+# Copyright 2026 Canonical, Ltd.
 #
 import os
 from pathlib import Path

@@ -1,5 +1,5 @@
 #
-# Copyright 2025 Canonical, Ltd.
+# Copyright 2026 Canonical, Ltd.
 #
 import logging
 import os
@@ -93,8 +93,9 @@ class LXDHarness(Harness):
             profile = run(
                 [
                     "curl",
-                    "s",
-                    "https://raw.githubusercontent.com/canonical/k8s-snap/refs/heads/main/tests/integration/lxd-profile.yaml",
+                    "-s",
+                    "https://raw.githubusercontent.com/canonical/k8s-snap"
+                    "/refs/heads/main/tests/integration/lxd-profile.yaml",
                 ],
                 capture_output=True,
             ).stdout

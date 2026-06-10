@@ -1,5 +1,5 @@
 #
-# Copyright 2025 Canonical, Ltd.
+# Copyright 2026 Canonical, Ltd.
 #
 import subprocess
 from functools import cached_property, partial
@@ -38,7 +38,7 @@ class Instance:
         ).stdout.strip()
 
     def __str__(self) -> str:
-        return f"{self._h.name}:{self.id}"
+        return f"{self._h.name}:{self.id}"  # noqa: E231
 
 
 class Harness:
