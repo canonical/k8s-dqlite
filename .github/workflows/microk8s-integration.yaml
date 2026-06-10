@@ -104,7 +104,6 @@ jobs:
     name: High Availability Tests
     needs: prepare
     runs-on: ubuntu-latest
-    if: github.event_name == 'schedule' || github.event_name == 'push' && github.ref == 'refs/heads/master'
     steps:
       - name: Check out code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -134,8 +133,7 @@ jobs:
   performance:
     name: Performance Benchmarks
     needs: prepare
-    runs-on: self-hosted-linux-amd64-jammy-large
-    if: github.event_name == 'schedule' || github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest  # Changed from self-hosted to ubuntu-latest for PR testing
     steps:
       - name: Check out code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
