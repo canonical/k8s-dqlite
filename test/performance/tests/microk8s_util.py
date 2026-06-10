@@ -120,13 +120,21 @@ def patch_k8s_dqlite(instance: harness.Instance):
     # Stop MicroK8s services
     instance.exec(["snap", "stop", "microk8s"])
 
-    # Upload and replace binaries
+    # Upload binaries to a writable location
     instance.send_file(str(local_k8s_dqlite), "/tmp/k8s-dqlite")
     instance.send_file(str(local_dqlite), "/tmp/dqlite")
 
     instance.exec(["chmod", "+x", "/tmp/k8s-dqlite", "/tmp/dqlite"])
-    instance.exec(["cp", "/tmp/k8s-dqlite", "/snap/microk8s/current/bin/k8s-dqlite"])
-    instance.exec(["cp", "/tmp/dqlite", "/snap/microk8s/current/bin/dqlite"])
+
+    # /snap/microk8s/current/ is a read-only squashfs mount so we cannot
+    # use cp.  Bind-mount the new binaries over the snap files instead.
+    # The LXD profile is privileged + unconfined so bind mounts work.
+    instance.exec(
+        ["mount", "--bind", "/tmp/k8s-dqlite", "/snap/microk8s/current/bin/k8s-dqlite"]
+    )
+    instance.exec(
+        ["mount", "--bind", "/tmp/dqlite", "/snap/microk8s/current/bin/dqlite"]
+    )
 
     # Start MicroK8s
     instance.exec(["snap", "start", "microk8s"])
