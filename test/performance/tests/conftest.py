@@ -3,12 +3,19 @@
 #
 import itertools
 import logging
+import os
 import threading
 from pathlib import Path
 from typing import Dict, Generator, Iterator, List, Optional, Union
 
 import pytest
 from test_util import config, harness, util
+
+# Check if we should use MicroK8s instead of k8s-snap
+USE_MICROK8S = os.environ.get("USE_MICROK8S", "").lower() == "true"
+
+if USE_MICROK8S:
+    from . import microk8s_util
 
 LOG = logging.getLogger(__name__)
 
