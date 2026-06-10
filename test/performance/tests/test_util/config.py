@@ -12,6 +12,12 @@ DEFAULT_WAIT_DELAY_S = int(os.getenv("TEST_DEFAULT_WAIT_DELAY_S") or 10)
 
 MANIFESTS_DIR = DIR / ".." / ".." / "templates"
 
+# K8S_DQLITE_BIN_DIR is the directory containing locally built k8s-dqlite binaries.
+# In CI, binaries are copied to test/performance/bin/static/ before running tox.
+K8S_DQLITE_BIN_DIR = Path(
+    os.getenv("TEST_K8S_DQLITE_BIN_DIR") or (DIR / ".." / ".." / "bin" / "static")
+)
+
 METRICS_DIR = os.getenv("TEST_METRICS_DIR") or DIR / ".." / ".." / "results"
 
 METRICS_PARSE_SCRIPT = DIR / ".." / ".." / "parse-performance-metrics.R"

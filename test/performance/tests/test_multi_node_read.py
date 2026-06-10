@@ -50,7 +50,7 @@ def configure_argocd(control_plane: harness.Instance):
 
 @pytest.mark.skipif(
     USE_MICROK8S,
-    reason="Multi-node MicroK8s clustering not yet implemented - see PR #369 Priority 2"
+    reason="Multi-node MicroK8s clustering not yet implemented - see PR #369 Priority 2",
 )
 @pytest.mark.node_count(3)
 @pytest.mark.bootstrap_config((config.MANIFESTS_DIR / "bootstrap-all.yaml").read_text())

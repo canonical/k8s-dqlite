@@ -4,22 +4,20 @@
 """MicroK8s-specific utility functions for performance testing."""
 
 import logging
-from pathlib import Path
 from typing import Optional
 
-from test_util import harness
+from test_util import config, harness
 
 LOG = logging.getLogger(__name__)
 
+MICROK8S_DQLITE_ARGS_FILE = "/var/snap/microk8s/current/args/k8s-dqlite"
 
-def setup_microk8s_snap(
-    instance: harness.Instance, tmp_path: Path, channel: Optional[str] = None
-):
+
+def setup_microk8s_snap(instance: harness.Instance, channel: Optional[str] = None):
     """Install and set up MicroK8s snap on an instance.
 
     Args:
         instance: The harness instance to set up.
-        tmp_path: Temporary path for artifacts.
         channel: MicroK8s snap channel (default: latest/stable).
     """
     if channel is None:
@@ -36,29 +34,95 @@ def setup_microk8s_snap(
     LOG.info("MicroK8s installed and ready")
 
 
-def patch_k8s_dqlite(instance: harness.Instance, tmp_path: Path):
+def configure_microk8s_dqlite(instance: harness.Instance):
+    """Configure k8s-dqlite args for MicroK8s (OTEL, profiling).
+
+    Mirrors the logic in test_util.util.configure_dqlite but targets the
+    MicroK8s args file path.  The service is restarted after to apply changes.
+    """
+    if config.DQLITE_TRACE_LEVEL:
+        instance.exec(
+            [
+                "echo",
+                f"LIBDQLITE_TRACE={config.DQLITE_TRACE_LEVEL}",
+                ">>",
+                "/var/snap/microk8s/current/args/k8s-dqlite-env",
+            ]
+        )
+    if config.RAFT_TRACE_LEVEL:
+        instance.exec(
+            [
+                "echo",
+                f"LIBRAFT_TRACE={config.RAFT_TRACE_LEVEL}",
+                ">>",
+                "/var/snap/microk8s/current/args/k8s-dqlite-env",
+            ]
+        )
+    if config.K8S_DQLITE_DEBUG:
+        instance.exec(["echo", "--debug", ">>", MICROK8S_DQLITE_ARGS_FILE])
+
+    if config.ENABLE_PROFILING:
+        instance.exec(["echo", "--profiling", ">>", MICROK8S_DQLITE_ARGS_FILE])
+        instance.exec(
+            ["echo", "--profiling-dir=/root", ">>", MICROK8S_DQLITE_ARGS_FILE]
+        )
+
+    if config.OTEL_ENABLED:
+        instance.exec(["echo", "--otel", ">>", MICROK8S_DQLITE_ARGS_FILE])
+        instance.exec(["echo", "--otel-dir=/root", ">>", MICROK8S_DQLITE_ARGS_FILE])
+
+        if config.OTEL_SPAN_NAME_FILTER:
+            instance.exec(
+                [
+                    "echo",
+                    f"--otel-span-name-filter='{config.OTEL_SPAN_NAME_FILTER}'",
+                    ">>",
+                    MICROK8S_DQLITE_ARGS_FILE,
+                ]
+            )
+
+        if config.OTEL_SPAN_MIN_DURATION_FILTER:
+            instance.exec(
+                [
+                    "echo",
+                    f"--otel-span-min-duration-filter={config.OTEL_SPAN_MIN_DURATION_FILTER}",
+                    ">>",
+                    MICROK8S_DQLITE_ARGS_FILE,
+                ]
+            )
+
+    # Restart only the dqlite daemon so changes take effect
+    instance.exec(["snap", "restart", "microk8s.daemon-k8s-dqlite"])
+    instance.exec(["microk8s", "status", "--wait-ready", "--timeout=300"])
+
+
+def patch_k8s_dqlite(instance: harness.Instance):
     """Patch k8s-dqlite binaries in MicroK8s with locally built versions.
+
+    Uses config.K8S_DQLITE_BIN_DIR to locate the binaries.  After patching,
+    configures k8s-dqlite args (OTEL, profiling) to match what k8s-snap
+    integration tests expect.
 
     Args:
         instance: The harness instance to patch.
-        tmp_path: Temporary path containing the k8s-dqlite binaries.
     """
     LOG.info("Patching k8s-dqlite binaries in MicroK8s")
 
-    # Path to local binaries (built in CI)
-    local_dqlite = tmp_path / "bin" / "static" / "k8s-dqlite"
-    local_dqlite_bin = tmp_path / "bin" / "static" / "dqlite"
+    local_k8s_dqlite = config.K8S_DQLITE_BIN_DIR / "k8s-dqlite"
+    local_dqlite = config.K8S_DQLITE_BIN_DIR / "dqlite"
 
-    if not local_dqlite.exists():
-        LOG.warning(f"k8s-dqlite binary not found at {local_dqlite}, skipping patch")
+    if not local_k8s_dqlite.exists():
+        LOG.warning(
+            "k8s-dqlite binary not found at %s, skipping patch", local_k8s_dqlite
+        )
         return
 
     # Stop MicroK8s services
     instance.exec(["snap", "stop", "microk8s"])
 
     # Upload and replace binaries
-    instance.send_file(str(local_dqlite), "/tmp/k8s-dqlite")
-    instance.send_file(str(local_dqlite_bin), "/tmp/dqlite")
+    instance.send_file(str(local_k8s_dqlite), "/tmp/k8s-dqlite")
+    instance.send_file(str(local_dqlite), "/tmp/dqlite")
 
     instance.exec(["chmod", "+x", "/tmp/k8s-dqlite", "/tmp/dqlite"])
     instance.exec(["cp", "/tmp/k8s-dqlite", "/snap/microk8s/current/bin/k8s-dqlite"])
@@ -71,6 +135,10 @@ def patch_k8s_dqlite(instance: harness.Instance, tmp_path: Path):
     instance.exec(["microk8s", "status", "--wait-ready", "--timeout=300"])
 
     LOG.info("k8s-dqlite binaries patched successfully")
+
+    # Configure k8s-dqlite args (OTEL, profiling) now that we know the binary
+    # supports these features (it is our own build).
+    configure_microk8s_dqlite(instance)
 
 
 def bootstrap_microk8s(instance: harness.Instance, addons: Optional[list[str]] = None):

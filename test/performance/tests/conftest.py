@@ -188,8 +188,8 @@ def instances(
 
                 if USE_MICROK8S:
                     # Use MicroK8s instead of k8s-snap
-                    microk8s_util.setup_microk8s_snap(instance, tmp_path, snap_version)
-                    microk8s_util.patch_k8s_dqlite(instance, tmp_path)
+                    microk8s_util.setup_microk8s_snap(instance, snap_version)
+                    microk8s_util.patch_k8s_dqlite(instance)
                 else:
                     util.setup_k8s_snap(instance, tmp_path, snap_version)
 
@@ -282,8 +282,8 @@ def session_instance(
 
     if USE_MICROK8S:
         # Use MicroK8s
-        microk8s_util.setup_microk8s_snap(instance, tmp_path, snap)
-        microk8s_util.patch_k8s_dqlite(instance, tmp_path)
+        microk8s_util.setup_microk8s_snap(instance, snap)
+        microk8s_util.patch_k8s_dqlite(instance)
 
         # Enable all MicroK8s addons for testing
         addons = ["dns", "storage", "ingress", "metrics-server"]

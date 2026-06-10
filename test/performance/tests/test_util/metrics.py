@@ -85,10 +85,15 @@ def pull_metrics(instances: List[harness.Instance], test_name: str):
         if config.OTEL_ENABLED:
             for otel_file in ["k8s-dqlite-metrics", "k8s-dqlite-traces"]:
                 out_file = os.path.join(out_dir, f"{file_prefix}otel-{otel_file}.txt")
-                instance.pull_file(
-                    f"/root/{otel_file}.txt",
-                    out_file,
-                )
+                try:
+                    instance.pull_file(
+                        f"/root/{otel_file}.txt",
+                        out_file,
+                    )
+                except harness.HarnessError:
+                    LOG.warning(
+                        "Could not pull OTEL file %s.txt (may not exist)", otel_file
+                    )
 
         if config.ENABLE_PROFILING:
             # Stop k8s-dqlite, triggering a pprof data dump. Don't start it back
