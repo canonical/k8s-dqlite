@@ -2,12 +2,16 @@
 # Copyright 2026 Canonical, Ltd.
 #
 import logging
+import os
 from typing import List
 
 import pytest
 from test_util import config, harness, kube_burner, metrics, util
 
 LOG = logging.getLogger(__name__)
+
+# Check if we should use MicroK8s instead of k8s-snap
+USE_MICROK8S = os.environ.get("USE_MICROK8S", "").lower() == "true"
 
 
 def configure_argocd(control_plane: harness.Instance):
@@ -44,6 +48,10 @@ def configure_argocd(control_plane: harness.Instance):
     )
 
 
+@pytest.mark.skipif(
+    USE_MICROK8S,
+    reason="Multi-node MicroK8s clustering not yet implemented - see PR #369 Priority 2"
+)
 @pytest.mark.node_count(3)
 @pytest.mark.bootstrap_config((config.MANIFESTS_DIR / "bootstrap-all.yaml").read_text())
 def test_three_node_read_load(instances: List[harness.Instance]):
