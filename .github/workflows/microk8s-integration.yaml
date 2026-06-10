@@ -182,8 +182,8 @@ jobs:
           mkdir -p bin/static
           cp ../../bin/static/k8s-dqlite bin/static/
           cp ../../bin/static/dqlite bin/static/
-          # Run tox with MicroK8s backend
-          tox -e single_node,multi_node
+          # Run tox with the 'performance' environment
+          tox -e performance
 
       - name: Upload performance results
         if: always()
