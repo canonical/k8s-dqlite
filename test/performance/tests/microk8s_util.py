@@ -210,6 +210,9 @@ def get_join_token(primary: harness.Instance, _joining_node: harness.Instance) -
 def join_cluster(instance: harness.Instance, join_token: str):
     """Join an existing MicroK8s cluster. Nodes join as control-plane by default."""
     instance.exec(["microk8s", "join", join_token])
+    # Wait for this node's services to be fully up before returning so that
+    # wait_until_ready() can immediately query kubectl get nodes.
+    instance.exec(["microk8s", "status", "--wait-ready", "--timeout=300"])
 
 
 def wait_until_ready(
@@ -245,17 +248,17 @@ def ready_nodes(control_node: harness.Instance) -> List[Any]:
 
 
 def get_local_node_status(instance: harness.Instance) -> str:
-    """Return a string describing the node role (mirrors util.get_local_node_status).
+    """Return a string describing the node role.
 
-    All nodes joined via ``microk8s join`` without ``--worker`` are control-plane
-    members, so this always returns a string containing "control-plane".
+    In MicroK8s HA, nodes that joined without --worker run the dqlite daemon
+    and are control-plane members.  Check the service state rather than
+    Kubernetes labels (which MicroK8s does not set for control-plane nodes).
     """
-    node_name = util.hostname(instance)
     result = instance.exec(
-        ["microk8s", "kubectl", "get", "node", node_name, "--show-labels"],
+        ["systemctl", "is-active", "snap.microk8s.daemon-k8s-dqlite.service"],
         capture_output=True,
+        check=False,
     )
-    labels = result.stdout.decode()
-    if "node-role.kubernetes.io/control-plane" in labels:
+    if result.stdout.decode().strip() == "active":
         return "control-plane"
     return "worker"
