@@ -3,10 +3,11 @@
 #
 """MicroK8s-specific utility functions for performance testing."""
 
+import json
 import logging
-from typing import Optional
+from typing import Any, List, Optional
 
-from test_util import config, harness
+from test_util import config, harness, util
 
 LOG = logging.getLogger(__name__)
 
@@ -182,13 +183,79 @@ def bootstrap_microk8s(instance: harness.Instance, addons: Optional[list[str]] =
 
 
 def get_kubeconfig(instance: harness.Instance) -> str:
-    """Get the kubeconfig from a MicroK8s instance.
-
-    Args:
-        instance: The harness instance.
-
-    Returns:
-        The kubeconfig as a string.
-    """
+    """Get the kubeconfig from a MicroK8s instance."""
     result = instance.exec(["microk8s", "config"])
     return result.stdout.decode("utf-8")
+
+
+def get_join_token(primary: harness.Instance, _joining_node: harness.Instance) -> str:
+    """Generate a single-use join token on the primary node.
+
+    Each call to ``microk8s add-node`` produces a unique token, so calling
+    this twice for different joining nodes naturally yields distinct tokens.
+    The ``_joining_node`` argument is accepted for API compatibility with
+    ``test_util.util.get_join_token`` but is not used.
+    """
+    out = primary.exec(["microk8s", "add-node"], capture_output=True)
+    for line in out.stdout.decode().splitlines():
+        line = line.strip()
+        if line.startswith("microk8s join ") and "--worker" not in line:
+            return line.split("microk8s join ", 1)[1].strip()
+    raise harness.HarnessError(
+        "Failed to parse join token from microk8s add-node output:\n"
+        + out.stdout.decode()
+    )
+
+
+def join_cluster(instance: harness.Instance, join_token: str):
+    """Join an existing MicroK8s cluster. Nodes join as control-plane by default."""
+    instance.exec(["microk8s", "join", join_token])
+
+
+def wait_until_ready(
+    control_node: harness.Instance,
+    instances: List[harness.Instance],
+    retries: int = config.DEFAULT_WAIT_RETRIES,
+    delay_s: int = config.DEFAULT_WAIT_DELAY_S,
+):
+    """Wait until all instances appear as Ready nodes in the MicroK8s cluster."""
+    for instance in instances:
+        node_name = util.hostname(instance)
+        util.stubbornly(retries=retries, delay_s=delay_s).on(control_node).until(
+            lambda p: " Ready" in p.stdout.decode()
+        ).exec(["microk8s", "kubectl", "get", "node", node_name, "--no-headers"])
+    LOG.info("All MicroK8s nodes ready")
+
+
+def ready_nodes(control_node: harness.Instance) -> List[Any]:
+    """Return the list of nodes in Ready state."""
+    result = control_node.exec(
+        ["microk8s", "kubectl", "get", "nodes", "-o", "json"], capture_output=True
+    )
+    node_list = json.loads(result.stdout.decode())
+    return [
+        node
+        for node in node_list["items"]
+        if all(
+            condition["status"] == "False"
+            for condition in node["status"]["conditions"]
+            if condition["type"] != "Ready"
+        )
+    ]
+
+
+def get_local_node_status(instance: harness.Instance) -> str:
+    """Return a string describing the node role (mirrors util.get_local_node_status).
+
+    All nodes joined via ``microk8s join`` without ``--worker`` are control-plane
+    members, so this always returns a string containing "control-plane".
+    """
+    node_name = util.hostname(instance)
+    result = instance.exec(
+        ["microk8s", "kubectl", "get", "node", node_name, "--show-labels"],
+        capture_output=True,
+    )
+    labels = result.stdout.decode()
+    if "node-role.kubernetes.io/control-plane" in labels:
+        return "control-plane"
+    return "worker"
