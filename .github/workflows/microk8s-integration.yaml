@@ -91,11 +91,6 @@ jobs:
           sudo -E python -m pytest -rA -s tests/test-simple.py -k "not test_microk8s_stop_start"
 
       - name: Run stop/start lifecycle test
-        # canonical/microk8s#5546 fixed test_microk8s_stop_start by calling
-        # wait_for_installation() after microk8s.start, so coredns is
-        # guaranteed to be up before the assertion.  Run separately so it is
-        # clear which step fails if the fix hasn't landed yet.
-        continue-on-error: true
         run: |
           cd microk8s
           sudo -E python -m pytest -rA -s tests/test-simple.py -k "test_microk8s_stop_start"
