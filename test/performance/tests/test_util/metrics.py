@@ -9,8 +9,7 @@ from test_util import config, harness, util
 
 LOG = logging.getLogger(__name__)
 
-USE_MICROK8S = os.environ.get("USE_MICROK8S", "").lower() == "true"
-K8S_DQLITE_SERVICE = "microk8s.daemon-k8s-dqlite" if USE_MICROK8S else "k8s.k8s-dqlite"
+K8S_DQLITE_SERVICE = "microk8s.daemon-k8s-dqlite"
 
 
 def stop_metrics(instances: List[harness.Instance], process_dict: dict):

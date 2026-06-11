@@ -10,8 +10,6 @@ from test_util import config, harness
 
 LOG = logging.getLogger(__name__)
 
-USE_MICROK8S = os.environ.get("USE_MICROK8S", "").lower() == "true"
-
 
 def configure_kube_burner(instance: harness.Instance):
     """Downloads and sets up `kube-burner` on each instance if it's not already present."""
@@ -52,8 +50,7 @@ def run_kube_burner(
 ):
     """Copies kubeconfig and runs kube-burner on the instance."""
     instance.exec(["mkdir", "-p", "/root/.kube"])
-    kubeconfig_cmd = "microk8s" if USE_MICROK8S else "k8s"
-    instance.exec([kubeconfig_cmd, "config", ">", "/root/.kube/config"])
+    instance.exec(["microk8s", "config", ">", "/root/.kube/config"])
 
     raised_exc = None
     for iteration in range(iterations):

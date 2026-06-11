@@ -147,13 +147,10 @@ jobs:
       - name: Run performance benchmarks
         run: |
           cd test/performance
-          # Set environment variable to use MicroK8s
-          export USE_MICROK8S=true
           # Copy local k8s-dqlite binaries to test directory
           mkdir -p bin/static
           cp ../../bin/static/k8s-dqlite bin/static/
           cp ../../bin/static/dqlite bin/static/
-          # Run tox with the 'performance' environment
           tox -e performance
 
       - name: Upload performance results
