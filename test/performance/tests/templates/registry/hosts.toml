@@ -1,0 +1,4 @@
+server = "http://$IP:$PORT"
+
+[host."http://$IP:$PORT"]
+capabilities = ["pull", "resolve"]

@@ -3,11 +3,8 @@
 #
 """MicroK8s-specific utility functions for performance testing."""
 
-import base64
 import json
 import logging
-import os
-from pathlib import Path
 from typing import Any, List, Optional
 
 from test_util import config, harness, util
@@ -16,90 +13,30 @@ LOG = logging.getLogger(__name__)
 
 MICROK8S_DQLITE_ARGS_FILE = "/var/snap/microk8s/current/args/k8s-dqlite"
 
-# Host docker config used to inject registry credentials into containers so
-# they can pull images from Docker Hub without hitting unauthenticated rate limits.
-_DOCKER_CONFIG_PATH = Path.home() / ".docker" / "config.json"
 
-
-def _configure_registry_auth(instance: harness.Instance):
-    """Push host Docker Hub credentials into the container's containerd config.
-
-    Reads ~/.docker/config.json from the host and overwrites the MicroK8s
-    certs.d/docker.io/hosts.toml to add an Authorization header so image
-    pulls are authenticated.  This avoids Docker Hub's unauthenticated pull
-    rate limit (100 pulls / 6 hours per IP).
-
-    MicroK8s containerd already ships with:
-      config_path = ".../args/certs.d"
-    so no containerd.toml patching is needed.
-    """
-    # Prefer env-var credentials (CI) over ~/.docker/config.json (local).
-    # In GitHub Actions, set TEST_DOCKER_HUB_USERNAME + TEST_DOCKER_HUB_TOKEN
-    # as repository secrets and pass them via the workflow env.
-    docker_auth = ""
-    hub_user = os.environ.get("TEST_DOCKER_HUB_USERNAME", "")
-    hub_token = os.environ.get("TEST_DOCKER_HUB_TOKEN", "")
-    if hub_user and hub_token:
-        docker_auth = base64.b64encode(f"{hub_user}:{hub_token}".encode()).decode()
-        LOG.debug("Using Docker Hub credentials from environment variables")
-    elif _DOCKER_CONFIG_PATH.exists():
-        try:
-            with open(_DOCKER_CONFIG_PATH) as f:
-                docker_cfg = json.load(f)
-            docker_auth = (
-                docker_cfg.get("auths", {})
-                .get("https://index.docker.io/v1/", {})
-                .get("auth", "")
-            )
-        except Exception as e:
-            LOG.warning("Failed to read host docker config: %s", e)
-
-    if not docker_auth:
-        LOG.warning(
-            "No Docker Hub credentials found; image pulls may be rate-limited. "
-            "Set TEST_DOCKER_HUB_USERNAME and TEST_DOCKER_HUB_TOKEN, "
-            "or run 'docker login' on the host."
-        )
-        return
-
-    LOG.info("Injecting Docker Hub credentials into MicroK8s containerd certs.d")
-
-    # MicroK8s ships /var/snap/microk8s/current/args/certs.d/docker.io/hosts.toml
-    # already pointing at registry-1.docker.io.  Extend it with an auth header.
-    certs_dir = "/var/snap/microk8s/current/args/certs.d/docker.io"
-    hosts_toml = (
-        'server = "https://docker.io"\n\n'
-        '[host."https://registry-1.docker.io"]\n'
-        '  capabilities = ["pull", "resolve"]\n'
-        '  [host."https://registry-1.docker.io".header]\n'
-        f'    Authorization = ["Basic {docker_auth}"]\n'
-    )
-    # Encode as base64 to avoid any shell quoting issues with the TOML content.
-    encoded = base64.b64encode(hosts_toml.encode()).decode()
-    instance.exec(["bash", "-c", f"mkdir -p {certs_dir}"])
-    instance.exec(["bash", "-c", f"echo {encoded} | base64 -d > {certs_dir}/hosts.toml"])
-
-
-def setup_microk8s_snap(instance: harness.Instance, channel: Optional[str] = None):
+def setup_microk8s_snap(
+    instance: harness.Instance,
+    channel: Optional[str] = None,
+    registry=None,
+):
     """Install and set up MicroK8s snap on an instance.
 
     Args:
         instance: The harness instance to set up.
         channel: MicroK8s snap channel (default: latest/stable).
+        registry: Optional Registry instance; if provided, containerd will be
+            configured to pull images through the local mirror instead of
+            reaching out to Docker Hub directly.
     """
     if channel is None:
         channel = "latest/stable"
 
     LOG.info(f"Installing MicroK8s from channel {channel}")
 
-    # Install MicroK8s snap
     instance.exec(["snap", "install", "microk8s", "--classic", f"--channel={channel}"])
 
-    # Inject Docker Hub credentials so calico/coredns images can be pulled
-    # without hitting the unauthenticated rate limit (100 pulls/6h per IP).
-    # MicroK8s containerd already has config_path set to args/certs.d so
-    # just writing hosts.toml there is enough — no containerd.toml changes.
-    _configure_registry_auth(instance)
+    if registry is not None:
+        registry.apply_to_microk8s(instance)
 
     # Wait for MicroK8s to be ready
     instance.exec(["microk8s", "status", "--wait-ready", "--timeout=300"])

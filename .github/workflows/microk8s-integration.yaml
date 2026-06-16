@@ -147,9 +147,6 @@ jobs:
           bridges: "lxdbr0"
 
       - name: Run performance benchmarks
-        env:
-          TEST_DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
-          TEST_DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}
         run: |
           cd test/performance
           # Copy local k8s-dqlite binaries to test directory

@@ -10,6 +10,7 @@ from typing import Dict, Generator, Iterator, List, Optional, Union
 import microk8s_util
 import pytest
 from test_util import config, harness, util
+from test_util.registry import Registry
 
 LOG = logging.getLogger(__name__)
 
@@ -38,6 +39,32 @@ def h() -> harness.Harness:
     yield h
 
     _harness_clean(h)
+
+
+@pytest.fixture(scope="session")
+def registry(h: harness.Harness) -> Generator[Optional[Registry], None, None]:
+    """Session-scoped pull-through registry mirror.
+
+    Spins up a dedicated LXD container running CNCF Distribution as a
+    pull-through proxy for docker.io (and optionally other registries).
+    This eliminates Docker Hub unauthenticated rate-limit failures in CI.
+
+    Set TEST_USE_LOCAL_MIRROR=0 to disable (e.g. when Docker Hub creds are
+    available via TEST_DOCKER_HUB_USERNAME / TEST_DOCKER_HUB_TOKEN).
+    """
+    if not config.USE_LOCAL_MIRROR:
+        LOG.info("Registry mirror disabled (TEST_USE_LOCAL_MIRROR=0)")
+        yield None
+        return
+
+    LOG.info("Starting local registry mirror …")
+    reg = Registry(h)
+    LOG.info("Registry mirror running at %s", reg.ip)
+
+    yield reg
+
+    if not config.SKIP_CLEANUP:
+        reg.cleanup()
 
 
 def pytest_configure(config):
@@ -108,6 +135,7 @@ def instances(
     bootstrap_config: Union[str, None],
     request,
     network_type: str,
+    registry: Optional[Registry],
 ) -> Generator[List[harness.Instance], None, None]:
     """Construct instances for a cluster."""
     if node_count <= 0:
@@ -128,7 +156,7 @@ def instances(
             instance = h.new_instance(network_type=network_type)
             if not no_setup:
                 util.setup_core_dumps(instance)
-                microk8s_util.setup_microk8s_snap(instance, snap_version)
+                microk8s_util.setup_microk8s_snap(instance, snap_version, registry=registry)
                 if bootstrap:
                     addons = ["dns", "storage"]
                     if not bootstrap_config or "ingress" in bootstrap_config:
@@ -169,7 +197,10 @@ def instances(
 
 @pytest.fixture(scope="session")
 def session_instance(
-    h: harness.Harness, tmp_path_factory: pytest.TempPathFactory, request
+    h: harness.Harness,
+    tmp_path_factory: pytest.TempPathFactory,
+    request,
+    registry: Optional[Registry],
 ) -> Generator[harness.Instance, None, None]:
     """Constructs and bootstraps an instance that persists over a test session."""
     LOG.info("Setup node and enable all features")
@@ -177,7 +208,7 @@ def session_instance(
     instance = h.new_instance()
     snap = next(snap_versions(request))
 
-    microk8s_util.setup_microk8s_snap(instance, snap)
+    microk8s_util.setup_microk8s_snap(instance, snap, registry=registry)
 
     # Bootstrap addons before patching so that ``microk8s enable`` never runs
     # after the dqlite daemon restart in patch_k8s_dqlite.  When dqlite
