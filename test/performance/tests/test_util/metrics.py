@@ -48,9 +48,19 @@ def collect_metrics(instances: List[harness.Instance]):
 
 
 def generate_graphs(test_metrics_dir: str):
-    """Generate plots based on the resource usage metrics."""
+    """Generate plots based on the resource usage metrics.
+
+    Requires Rscript and the parse-performance-metrics.R script.  If Rscript
+    is not installed this step is skipped with a warning rather than failing
+    the test — the raw metrics log is still preserved.
+    """
+    import shutil
+
+    if not shutil.which("Rscript"):
+        LOG.warning("Rscript not found, skipping graph generation")
+        return
+
     cmd = [
-        "sudo",
         "Rscript",
         config.METRICS_PARSE_SCRIPT.as_posix(),
         "-p",
