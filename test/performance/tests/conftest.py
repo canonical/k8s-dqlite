@@ -129,13 +129,12 @@ def instances(
             if not no_setup:
                 util.setup_core_dumps(instance)
                 microk8s_util.setup_microk8s_snap(instance, snap_version)
+                if bootstrap:
+                    addons = ["dns", "storage"]
+                    if not bootstrap_config or "ingress" in bootstrap_config:
+                        addons.append("ingress")
+                    microk8s_util.bootstrap_microk8s(instance, addons)
                 microk8s_util.patch_k8s_dqlite(instance)
-
-            if bootstrap:
-                addons = ["dns", "storage"]
-                if not bootstrap_config or "ingress" in bootstrap_config:
-                    addons.append("ingress")
-                microk8s_util.bootstrap_microk8s(instance, addons)
 
             with lock:
                 instance_map[idx] = instance
@@ -179,8 +178,12 @@ def session_instance(
     snap = next(snap_versions(request))
 
     microk8s_util.setup_microk8s_snap(instance, snap)
-    microk8s_util.patch_k8s_dqlite(instance)
 
+    # Bootstrap addons before patching so that ``microk8s enable`` never runs
+    # after the dqlite daemon restart in patch_k8s_dqlite.  When dqlite
+    # restarts it briefly disconnects from the apiserver; during that window
+    # ``microk8s enable`` crashes (apiserver unavailable), which causes LXD to
+    # report exit 243 (websocket reset) instead of a clean exit code.
     addons = ["dns", "storage", "ingress", "metrics-server"]
     microk8s_util.bootstrap_microk8s(instance, addons)
 
@@ -203,5 +206,7 @@ def session_instance(
             "--timeout=5m",
         ]
     )
+
+    microk8s_util.patch_k8s_dqlite(instance)
 
     yield instance
