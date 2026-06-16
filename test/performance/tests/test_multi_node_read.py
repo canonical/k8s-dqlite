@@ -7,28 +7,42 @@ from typing import List
 import microk8s_util
 import pytest
 from test_util import config, harness, kube_burner, metrics, util
+from test_util.util import stubbornly
 
 LOG = logging.getLogger(__name__)
 
 
 def configure_argocd(control_plane: harness.Instance):
-    """Configure ArgoCD on the instance."""
+    """Configures ArgoCD on the instance."""
     LOG.info("Create argocd namespace")
     control_plane.exec(["microk8s", "kubectl", "create", "namespace", "argocd"])
 
+    LOG.info("Downloading ArgoCD manifests")
+    # Download with retries to avoid transient network failures from inside the container.
+    control_plane.exec([
+        "bash", "-c",
+        "for i in 1 2 3 4 5; do "
+        f"curl -fsSL '{config.ARGOCD_MANIFESTS}' -o /tmp/argocd-install.yaml && break; "
+        "echo \"Download attempt $i failed, retrying in $((i * 10))s...\"; "
+        "sleep $((i * 10)); "
+        "done; "
+        "test -f /tmp/argocd-install.yaml",
+    ])
+
     LOG.info("Apply ArgoCD manifests")
-    control_plane.exec(
-        ["microk8s", "kubectl", "apply", "-n", "argocd", "-f", config.ARGOCD_MANIFESTS]
+    # Apply from the local file, retrying on transient API-server errors.
+    stubbornly(retries=5, delay_s=15).on(control_plane).exec(
+        ["microk8s", "kubectl", "apply", "-n", "argocd", "-f", "/tmp/argocd-install.yaml"],
     )
 
     LOG.info("Waiting for ArgoCD application controller pod to show up...")
-    util.stubbornly(retries=3, delay_s=10).on(control_plane).until(
+    util.stubbornly(retries=30, delay_s=10).on(control_plane).until(
         lambda p: "argocd-application-controller" in p.stdout.decode()
     ).exec(["microk8s", "kubectl", "get", "pod", "-n", "argocd", "-o", "json"])
     LOG.info("ArgoCD application controller pod showed up")
 
     LOG.info("Wait for all pods in argocd namespace to be ready")
-    util.stubbornly(retries=3, delay_s=1).on(control_plane).exec(
+    util.stubbornly(retries=5, delay_s=10).on(control_plane).exec(
         [
             "microk8s",
             "kubectl",
@@ -39,8 +53,8 @@ def configure_argocd(control_plane: harness.Instance):
             "-n",
             "argocd",
             "--timeout",
-            "180s",
-        ]
+            "300s",
+        ],
     )
 
 
