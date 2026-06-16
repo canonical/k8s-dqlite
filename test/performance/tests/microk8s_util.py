@@ -33,23 +33,33 @@ def _configure_registry_auth(instance: harness.Instance):
       config_path = ".../args/certs.d"
     so no containerd.toml patching is needed.
     """
-    if not _DOCKER_CONFIG_PATH.exists():
-        LOG.debug("No host docker config found, skipping registry auth setup")
-        return
+    # Prefer env-var credentials (CI) over ~/.docker/config.json (local).
+    # In GitHub Actions, set TEST_DOCKER_HUB_USERNAME + TEST_DOCKER_HUB_TOKEN
+    # as repository secrets and pass them via the workflow env.
+    docker_auth = ""
+    hub_user = os.environ.get("TEST_DOCKER_HUB_USERNAME", "")
+    hub_token = os.environ.get("TEST_DOCKER_HUB_TOKEN", "")
+    if hub_user and hub_token:
+        docker_auth = base64.b64encode(f"{hub_user}:{hub_token}".encode()).decode()
+        LOG.debug("Using Docker Hub credentials from environment variables")
+    elif _DOCKER_CONFIG_PATH.exists():
+        try:
+            with open(_DOCKER_CONFIG_PATH) as f:
+                docker_cfg = json.load(f)
+            docker_auth = (
+                docker_cfg.get("auths", {})
+                .get("https://index.docker.io/v1/", {})
+                .get("auth", "")
+            )
+        except Exception as e:
+            LOG.warning("Failed to read host docker config: %s", e)
 
-    try:
-        with open(_DOCKER_CONFIG_PATH) as f:
-            docker_cfg = json.load(f)
-        docker_auth = (
-            docker_cfg.get("auths", {})
-            .get("https://index.docker.io/v1/", {})
-            .get("auth", "")
+    if not docker_auth:
+        LOG.warning(
+            "No Docker Hub credentials found; image pulls may be rate-limited. "
+            "Set TEST_DOCKER_HUB_USERNAME and TEST_DOCKER_HUB_TOKEN, "
+            "or run 'docker login' on the host."
         )
-        if not docker_auth:
-            LOG.debug("No Docker Hub auth in host docker config, skipping")
-            return
-    except Exception as e:
-        LOG.warning("Failed to read host docker config: %s", e)
         return
 
     LOG.info("Injecting Docker Hub credentials into MicroK8s containerd certs.d")
