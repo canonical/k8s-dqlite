@@ -7,7 +7,6 @@ from typing import List
 import microk8s_util
 import pytest
 from test_util import config, harness, kube_burner, metrics, util
-from test_util.util import stubbornly
 
 LOG = logging.getLogger(__name__)
 
@@ -30,10 +29,15 @@ def configure_argocd(control_plane: harness.Instance):
     ])
 
     LOG.info("Apply ArgoCD manifests")
-    # Apply from the local file, retrying on transient API-server errors.
-    stubbornly(retries=5, delay_s=15).on(control_plane).exec(
-        ["microk8s", "kubectl", "apply", "-n", "argocd", "-f", "/tmp/argocd-install.yaml"],
-    )
+    # Use server-side apply to avoid the "metadata.annotations: Too long" error
+    # that occurs with client-side apply because the applicationsets CRD exceeds
+    # the 256KB last-applied-configuration annotation limit.
+    control_plane.exec([
+        "microk8s", "kubectl", "apply",
+        "--server-side", "--force-conflicts",
+        "-n", "argocd",
+        "-f", "/tmp/argocd-install.yaml",
+    ])
 
     LOG.info("Waiting for ArgoCD application controller pod to show up...")
     util.stubbornly(retries=30, delay_s=10).on(control_plane).until(
