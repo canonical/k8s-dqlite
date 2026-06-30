@@ -1,6 +1,7 @@
 #
-# Copyright 2025 Canonical, Ltd.
+# Copyright 2026 Canonical, Ltd.
 #
+import json
 import os
 from pathlib import Path
 
@@ -11,6 +12,12 @@ DEFAULT_WAIT_RETRIES = int(os.getenv("TEST_DEFAULT_WAIT_RETRIES") or 50)
 DEFAULT_WAIT_DELAY_S = int(os.getenv("TEST_DEFAULT_WAIT_DELAY_S") or 10)
 
 MANIFESTS_DIR = DIR / ".." / ".." / "templates"
+
+# K8S_DQLITE_BIN_DIR is the directory containing locally built k8s-dqlite binaries.
+# In CI, binaries are copied to test/performance/bin/static/ before running tox.
+K8S_DQLITE_BIN_DIR = Path(
+    os.getenv("TEST_K8S_DQLITE_BIN_DIR") or (DIR / ".." / ".." / "bin" / "static")
+)
 
 METRICS_DIR = os.getenv("TEST_METRICS_DIR") or DIR / ".." / ".." / "results"
 
@@ -80,3 +87,37 @@ ARGOCD_MANIFESTS = (
     os.getenv("ARGOCD_MANIFESTS")
     or "https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml"
 )
+
+# Registry mirror configuration.
+# REGISTRY_DIR points to the templates directory for the mirror.
+REGISTRY_DIR = DIR / ".." / "templates" / "registry"
+
+# URL and version of the CNCF Distribution (registry) binary to download.
+REGISTRY_URL = (
+    os.getenv("TEST_REGISTRY_URL")
+    or "https://github.com/distribution/distribution/releases/download"
+)
+REGISTRY_VERSION = os.getenv("TEST_REGISTRY_VERSION") or "v2.8.3"
+
+# USE_LOCAL_MIRROR: set to "1" to spin up a local registry mirror.
+# Defaults to True when no Docker Hub credentials are provided.
+_explicit_use_mirror = os.getenv("TEST_USE_LOCAL_MIRROR")
+if _explicit_use_mirror is not None:
+    USE_LOCAL_MIRROR = _explicit_use_mirror == "1"
+else:
+    USE_LOCAL_MIRROR = not (
+        os.getenv("TEST_DOCKER_HUB_USERNAME") and os.getenv("TEST_DOCKER_HUB_TOKEN")
+    )
+
+# MIRROR_LIST defines the upstream registries to proxy.
+# Can be overridden via TEST_MIRROR_LIST (JSON array of dicts with keys:
+#   name, port, remote, username (opt), password (opt)).
+_mirror_list_env = os.getenv("TEST_MIRROR_LIST")
+if _mirror_list_env:
+    MIRROR_LIST = json.loads(_mirror_list_env)
+else:
+    MIRROR_LIST = [
+        {"name": "docker.io", "port": 5001, "remote": "https://registry-1.docker.io"},
+        {"name": "ghcr.io",   "port": 5000, "remote": "https://ghcr.io"},
+        {"name": "quay.io",   "port": 5002, "remote": "https://quay.io"},
+    ]

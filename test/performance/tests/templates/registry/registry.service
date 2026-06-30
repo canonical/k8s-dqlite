@@ -1,0 +1,15 @@
+    [Unit]
+    Description=registry-$NAME
+    Documentation=https://github.com/distribution/distribution
+
+    [Service]
+    Type=simple
+    Restart=always
+    RestartSec=5s
+    LimitNOFILE=40000
+    TimeoutStartSec=0
+
+    ExecStart=/bin/registry serve /etc/distribution/$NAME.yaml
+
+    [Install]
+    WantedBy=multi-user.target

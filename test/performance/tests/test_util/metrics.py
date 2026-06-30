@@ -1,5 +1,5 @@
 #
-# Copyright 2025 Canonical, Ltd.
+# Copyright 2026 Canonical, Ltd.
 #
 import logging
 import os
@@ -8,6 +8,8 @@ from typing import List
 from test_util import config, harness, util
 
 LOG = logging.getLogger(__name__)
+
+K8S_DQLITE_SERVICE = "microk8s.daemon-k8s-dqlite"
 
 
 def stop_metrics(instances: List[harness.Instance], process_dict: dict):
@@ -46,9 +48,19 @@ def collect_metrics(instances: List[harness.Instance]):
 
 
 def generate_graphs(test_metrics_dir: str):
-    """Generate plots based on the resource usage metrics."""
+    """Generate plots based on the resource usage metrics.
+
+    Requires Rscript and the parse-performance-metrics.R script.  If Rscript
+    is not installed this step is skipped with a warning rather than failing
+    the test — the raw metrics log is still preserved.
+    """
+    import shutil
+
+    if not shutil.which("Rscript"):
+        LOG.warning("Rscript not found, skipping graph generation")
+        return
+
     cmd = [
-        "sudo",
         "Rscript",
         config.METRICS_PARSE_SCRIPT.as_posix(),
         "-p",
@@ -82,15 +94,20 @@ def pull_metrics(instances: List[harness.Instance], test_name: str):
         if config.OTEL_ENABLED:
             for otel_file in ["k8s-dqlite-metrics", "k8s-dqlite-traces"]:
                 out_file = os.path.join(out_dir, f"{file_prefix}otel-{otel_file}.txt")
-                instance.pull_file(
-                    f"/root/{otel_file}.txt",
-                    out_file,
-                )
+                try:
+                    instance.pull_file(
+                        f"/root/{otel_file}.txt",
+                        out_file,
+                    )
+                except harness.HarnessError:
+                    LOG.warning(
+                        "Could not pull OTEL file %s.txt (may not exist)", otel_file
+                    )
 
         if config.ENABLE_PROFILING:
             # Stop k8s-dqlite, triggering a pprof data dump. Don't start it back
             # until we've processed the data, otherwise it's going to override the file.
-            instance.exec(["snap", "stop", "k8s.k8s-dqlite"])
+            instance.exec(["snap", "stop", K8S_DQLITE_SERVICE])
             try:
                 # Pull pprof data. We could also run "go tool pprof" on the host machine
                 # but then we wouldn't have access to the binary symbols.
@@ -115,6 +132,4 @@ def pull_metrics(instances: List[harness.Instance], test_name: str):
                 )
             except Exception:
                 LOG.exception("failed to retrieve pprof data")
-            instance.exec(["snap", "start", "k8s.k8s-dqlite"])
-
-
+            instance.exec(["snap", "start", K8S_DQLITE_SERVICE])

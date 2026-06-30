@@ -1,5 +1,5 @@
 #
-# Copyright 2025 Canonical, Ltd.
+# Copyright 2026 Canonical, Ltd.
 #
 import logging
 import os
@@ -7,6 +7,8 @@ import shlex
 import subprocess
 from pathlib import Path
 from typing import List
+
+import pylxd
 
 from test_util import config
 from test_util.harness import Harness, HarnessError, Instance
@@ -31,6 +33,7 @@ class LXDHarness(Harness):
         self.profile = config.LXD_PROFILE_NAME
         self.image = config.LXD_IMAGE
         self.instances = set()
+        self._lxd = pylxd.Client()
 
         self._configure_profile(self.profile)
 
@@ -93,8 +96,9 @@ class LXDHarness(Harness):
             profile = run(
                 [
                     "curl",
-                    "s",
-                    "https://raw.githubusercontent.com/canonical/k8s-snap/refs/heads/main/tests/integration/lxd-profile.yaml",
+                    "-s",
+                    "https://raw.githubusercontent.com/canonical/k8s-snap"
+                    "/refs/heads/main/tests/integration/lxd-profile.yaml",
                 ],
                 capture_output=True,
             ).stdout
@@ -170,19 +174,70 @@ class LXDHarness(Harness):
 
         LOG.debug("Execute command %s in instance %s", command, instance_id)
 
-        if ">" in " ".join(command):
-            command_str = " ".join(command)
+        # Wrap command in bash unless it's already a bash invocation.
+        # This ensures shell operators (>, >>, |) work correctly, while
+        # avoiding double-wrapping ["bash", "-c", "..."] calls.
+        if command[0] == "bash":
+            full_cmd = command
         else:
-            command_str = shlex.join(command)
+            full_cmd = ["bash", "-c", " ".join(command)]
+
+        command_str = shlex.join(command)
+
         if background:
-            return run_popen(
-                ["lxc", "shell", instance_id, "--", "bash", "-c", command_str],
-                **kwargs,
-            )
-        return run(
-            ["lxc", "shell", instance_id, "--", "bash", "-c", command_str],
-            **kwargs,
+            # Background (fire-and-forget) tasks use the lxc CLI. The 243 issue
+            # only triggers for long-running snap/microk8s commands that stream
+            # substantial output; short-lived background monitors (pidstat) are
+            # not affected.
+            lxc_cmd = ["lxc", "exec", instance_id, "--"] + full_cmd
+            return run_popen(lxc_cmd, stdin=subprocess.DEVNULL, **kwargs)
+
+        # Extract subprocess-style kwargs that pylxd doesn't accept.
+        check = kwargs.pop("check", True)
+        text = kwargs.pop("text", False)
+        kwargs.pop("capture_output", None)
+        kwargs.pop("stdin", None)
+        kwargs.pop("stdout", None)
+        kwargs.pop("stderr", None)
+        # Ignore any remaining kwargs (e.g. env, cwd) — not supported via pylxd.
+        if kwargs:
+            LOG.debug("Ignoring unsupported exec kwargs: %s", list(kwargs))
+
+        # Use pylxd (LXD REST API) instead of the lxc CLI to avoid exit 243
+        # ("websocket connection reset") that occurs when lxc exec is called
+        # from within a pytest/tox subprocess where stdout is a pipe rather
+        # than a TTY.
+        lxd_inst = self._lxd.instances.get(instance_id)
+        result = lxd_inst.execute(full_cmd)
+
+        if result.stdout:
+            for line in result.stdout.rstrip("\n").splitlines():
+                LOG.debug("[%s] %s", instance_id, line)
+        if result.stderr:
+            for line in result.stderr.rstrip("\n").splitlines():
+                LOG.debug("[%s] stderr: %s", instance_id, line)
+
+        if text:
+            stdout_val = result.stdout or ""
+            stderr_val = result.stderr or ""
+        else:
+            stdout_val = (result.stdout or "").encode()
+            stderr_val = (result.stderr or "").encode()
+
+        completed = subprocess.CompletedProcess(
+            args=command,
+            returncode=result.exit_code,
+            stdout=stdout_val,
+            stderr=stderr_val,
         )
+
+        if check and result.exit_code != 0:
+            err = subprocess.CalledProcessError(
+                result.exit_code, command_str, stdout_val, stderr_val
+            )
+            raise err
+
+        return completed
 
     def delete_instance(self, instance_id: str):
         if instance_id not in self.instances:

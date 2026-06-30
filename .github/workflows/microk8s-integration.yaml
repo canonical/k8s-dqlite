@@ -1,0 +1,157 @@
+name: Integration Test MicroK8s
+
+on:
+  push:
+    branches: ["master"]
+  pull_request:
+  schedule:
+    - cron: "0 0 * * 0" # Weekly on Sunday
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prepare:
+    name: Build k8s-dqlite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build k8s-dqlite
+        run: make static
+
+      - name: Upload k8s-dqlite binary
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: k8s-dqlite-binary
+          path: |
+            bin/static/k8s-dqlite
+            bin/static/dqlite
+          retention-days: 1
+
+  test-microk8s-upstream:
+    name: MicroK8s Upstream Tests
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone MicroK8s repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: canonical/microk8s
+          path: microk8s
+          ref: master
+
+      - name: Install MicroK8s
+        run: |
+          sudo snap install microk8s --classic --channel=latest/stable
+          sudo usermod -a -G microk8s $USER
+          mkdir -p ~/.kube
+          sudo chown -R $USER ~/.kube
+          # Wait for MicroK8s to be ready
+          sudo microk8s status --wait-ready --timeout=300
+
+      - name: Run MicroK8s smoke test
+        run: |
+          cd microk8s
+          ./tests/smoke-test.sh
+
+      - name: Verify k8s-dqlite is running
+        run: |
+          # Check that dqlite service is running
+          sudo systemctl is-active snap.microk8s.daemon-k8s-dqlite.service
+          
+          # Show k8s-dqlite process info
+          ps aux | grep k8s-dqlite | grep -v grep || true
+          
+          # Check dqlite cluster status
+          sudo /snap/microk8s/current/bin/dqlite \
+            -s file:///var/snap/microk8s/current/var/kubernetes/backend/cluster.yaml \
+            .cluster || true
+
+      - name: Install test dependencies
+        run: |
+          cd microk8s
+          sudo apt-get update
+          sudo apt-get install -y tox python3-pip
+          pip3 install -r tests/requirements.txt
+
+      - name: Run simple integration tests
+        run: |
+          cd microk8s
+          sudo -E python -m pytest -rA -s tests/test-simple.py
+
+      - name: Run clustering unit tests
+        run: |
+          cd microk8s
+          # Run unit tests for join/leave operations with dqlite
+          sudo -E tox -e cluster
+
+  performance:
+    name: Performance Benchmarks
+    needs: prepare
+    runs-on: ubuntu-latest  # Changed from self-hosted to ubuntu-latest for PR testing
+    steps:
+      - name: Check out code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.10"
+
+      - name: Set-up R
+        run: |
+          sudo apt-get install -y --no-install-recommends r-base
+          sudo mkdir -p /usr/local/lib/R/site-library/
+          sudo chown $USER /usr/local/lib/R/site-library/
+
+      - name: Install R dependencies
+        run: |
+          install.packages(
+            c("ggplot2", "dplyr", "optparse"),
+            repos="https://cloud.r-project.org")
+        shell: sudo Rscript {0}
+
+      - name: Install tox
+        run: pip install tox
+
+      - name: Download k8s-dqlite binary
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: k8s-dqlite-binary
+          path: bin/static/
+
+      - name: Make binaries executable
+        run: chmod +x bin/static/k8s-dqlite bin/static/dqlite
+
+      - name: Install lxd
+        uses: canonical/setup-lxd@a3c85fc6fb7fff43fcfeae87659e41a8f635b7dd # v0.1.3
+        with:
+          bridges: "lxdbr0"
+
+      - name: Run performance benchmarks
+        run: |
+          cd test/performance
+          # Copy local k8s-dqlite binaries to test directory
+          mkdir -p bin/static
+          cp ../../bin/static/k8s-dqlite bin/static/
+          cp ../../bin/static/dqlite bin/static/
+          tox -e performance
+
+      - name: Upload performance results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: performance-results
+          path: test/performance/results/
+          retention-days: 30

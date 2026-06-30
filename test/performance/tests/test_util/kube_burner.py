@@ -1,15 +1,14 @@
 #
-# Copyright 2025 Canonical, Ltd.
+# Copyright 2026 Canonical, Ltd.
 #
 import logging
 import os
-import time
 import subprocess
+import time
 
 from test_util import config, harness
 
 LOG = logging.getLogger(__name__)
-
 
 
 def configure_kube_burner(instance: harness.Instance):
@@ -34,6 +33,7 @@ def configure_kube_burner(instance: harness.Instance):
         instance.exec(["rm", tarball_name])
         instance.exec(["chmod", "+x", "/root/kube-burner"])
 
+
 def copy_from_templates(instance: harness.Instance, names: list[str]):
     """Copies files from the templates directory to the instance."""
     for name in names:
@@ -44,13 +44,13 @@ def copy_from_templates(instance: harness.Instance, names: list[str]):
 
 
 def run_kube_burner(
-    instance: harness.Instance, 
+    instance: harness.Instance,
     kube_burner_config: str,
     iterations: int = config.KUBE_BURNER_ITERATIONS,
 ):
     """Copies kubeconfig and runs kube-burner on the instance."""
     instance.exec(["mkdir", "-p", "/root/.kube"])
-    instance.exec(["k8s", "config", ">", "/root/.kube/config"])
+    instance.exec(["microk8s", "config", ">", "/root/.kube/config"])
 
     raised_exc = None
     for iteration in range(iterations):
@@ -65,7 +65,8 @@ def run_kube_burner(
                     "-c",
                     f"/root/{kube_burner_config}",
                 ],
-                text=True, capture_output=True
+                text=True,
+                capture_output=True,
             )
         except Exception as ex:
             # We'll continue the loop even after encountering failures

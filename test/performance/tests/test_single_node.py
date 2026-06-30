@@ -1,7 +1,7 @@
 #
-# Copyright 2025 Canonical, Ltd.
+# Copyright 2026 Canonical, Ltd.
 #
-from test_util import harness, metrics, kube_burner
+from test_util import harness, kube_burner, metrics
 
 
 def test_single_node_load(session_instance: harness.Instance):
