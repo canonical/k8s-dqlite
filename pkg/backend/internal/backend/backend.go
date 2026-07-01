@@ -297,7 +297,29 @@ func (s *Backend) startWatch(ctx context.Context) error {
 
 	go func() {
 		defer s.wg.Done()
-		s.poll(ctx)
+		pollBackoff := s.Config.PollInterval
+		for {
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						logrus.Errorf("poll goroutine recovered from panic: %v", r)
+					}
+				}()
+				s.poll(ctx)
+			}()
+			if ctx.Err() != nil {
+				return
+			}
+			logrus.Errorf("poll exited unexpectedly; restarting in %v", pollBackoff)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(pollBackoff):
+			}
+			if pollBackoff < 30*time.Second {
+				pollBackoff *= 2
+			}
+		}
 	}()
 
 	return nil

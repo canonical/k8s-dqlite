@@ -71,28 +71,79 @@ func (s *Backend) ttl(ctx context.Context) {
 			go run(ctx, key, revision, time.Duration(lease)*time.Second)
 		}
 
-		group, err := s.WatcherGroup(ctx)
-		if err != nil {
-			logrus.Errorf("failed to create watch group for ttl: %v", err)
-			return
-		}
+		// watchFromRevision is the next revision to subscribe from. It starts at
+		// startRevision+1 (to skip already-processed leases) and is advanced past
+		// each received batch on every successful drain. Because Watch startRevision
+		// is inclusive (per etcd API), always storing lastSeen+1 ensures we never
+		// replay a batch and schedule duplicate TTL deletes on restart.
+		watchFromRevision := startRevision + 1
+		ttlBackoff := s.Config.PollInterval
 
-		// TODO needs to be restarted, never cancelled/dropped
-		err = group.Watch(1, []byte{0}, []byte{255}, startRevision)
-		if err != nil {
-			logrus.WithError(err).Warning("ttl watch failed")
-		}
+		for ctx.Err() == nil {
+			group, err := s.WatcherGroup(ctx)
+			if err != nil {
+				logrus.Errorf("failed to create watch group for ttl: %v", err)
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(ttlBackoff):
+				}
+				if ttlBackoff < 30*time.Second {
+					ttlBackoff *= 2
+				}
+				continue
+			}
 
-		for group := range group.Updates() {
-			for _, watcher := range group.Watchers() {
-				for _, event := range watcher.Events {
-					if event.Kv.Lease > 0 {
-						// add some jitter to avoid ttl expiry and deletion on all nodes at the same time with the goal of
-						// one of them succeeding if the DB is under high load (busy)
-						jitterDelay := time.Duration(rand.Intn(1000)) * time.Millisecond // Jitter up to 1 second as api-server does not expect sub-second precision
-						go run(ctx, []byte(event.Kv.Key), event.Kv.ModRevision, time.Duration(event.Kv.Lease)*time.Second+jitterDelay)
+			if err := group.Watch(1, []byte{0}, []byte{255}, watchFromRevision); err != nil {
+				logrus.WithError(err).Warning("ttl watch failed")
+				// Cancel the group's AfterFunc to remove it from WatcherGroups
+				// immediately rather than waiting for ctx cancellation.
+				group.Unwatch(1)
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(ttlBackoff):
+				}
+				if ttlBackoff < 30*time.Second {
+					ttlBackoff *= 2
+				}
+				continue
+			}
+
+			// Reset backoff after a successful subscription.
+			ttlBackoff = s.Config.PollInterval
+
+			for update := range group.Updates() {
+				// Advance past this batch. Watch startRevision is inclusive, so
+				// storing lastSeen+1 prevents replaying it on restart.
+				watchFromRevision = update.Revision() + 1
+				for _, watcher := range update.Watchers() {
+					for _, event := range watcher.Events {
+						if event.Kv.Lease > 0 {
+							// add some jitter to avoid ttl expiry and deletion on all nodes at the same time with the goal of
+							// one of them succeeding if the DB is under high load (busy)
+							jitterDelay := time.Duration(rand.Intn(1000)) * time.Millisecond // Jitter up to 1 second as api-server does not expect sub-second precision
+							go run(ctx, []byte(event.Kv.Key), event.Kv.ModRevision, time.Duration(event.Kv.Lease)*time.Second+jitterDelay)
+						}
 					}
 				}
+			}
+
+			if ctx.Err() != nil {
+				return
+			}
+
+			// group.Updates() closed unexpectedly; log and re-subscribe from last revision.
+			if groupErr := group.Err(); groupErr != nil {
+				logrus.WithError(groupErr).Warnf("ttl watcher group closed unexpectedly, restarting from revision %d", watchFromRevision)
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(ttlBackoff):
+			}
+			if ttlBackoff < 30*time.Second {
+				ttlBackoff *= 2
 			}
 		}
 	}()

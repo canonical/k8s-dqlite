@@ -54,6 +54,10 @@ type WatcherGroup interface {
 	Watch(watcherId int64, key, rangeEnd []byte, startRevision int64) error
 	Unwatch(watcherId int64)
 	Updates() <-chan WatcherGroupUpdate
+	// Err returns the reason the Updates channel was closed abnormally, or nil
+	// for a clean context-driven shutdown. Must only be called after Updates()
+	// is fully drained (e.g. after a range loop exits).
+	Err() error
 }
 
 type WatcherGroupUpdate interface {
