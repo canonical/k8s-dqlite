@@ -32,11 +32,16 @@ def configure_argocd(control_plane: harness.Instance):
     # Use server-side apply to avoid the "metadata.annotations: Too long" error
     # that occurs with client-side apply because the applicationsets CRD exceeds
     # the 256KB last-applied-configuration annotation limit.
+    # Retry to handle transient dqlite "database is locked" errors that occur
+    # when a bulk write lands while the Raft cluster is still settling leadership
+    # after the nodes have just joined.
     control_plane.exec([
-        "microk8s", "kubectl", "apply",
-        "--server-side", "--force-conflicts",
-        "-n", "argocd",
-        "-f", "/tmp/argocd-install.yaml",
+        "bash", "-c",
+        "for i in 1 2 3 4 5; do "
+        "microk8s kubectl apply --server-side --force-conflicts -n argocd -f /tmp/argocd-install.yaml && break; "
+        "echo \"Apply attempt $i failed, retrying in 15s...\"; "
+        "sleep 15; "
+        "done",
     ])
 
     LOG.info("Waiting for ArgoCD application controller pod to show up...")
