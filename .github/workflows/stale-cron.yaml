@@ -19,15 +19,11 @@ jobs:
       - uses: actions/stale@5bef64f19d7facfb25b37b414482c7164d639639 # v9
         with:
           days-before-stale: 150
-          days-before-close: 30
+          days-before-close: -1 # never auto-close; only label as inactive
           stale-issue-label: inactive
           stale-issue-message: >
             This issue has been automatically marked as stale because it has
-            not had recent activity. It will be closed if no further activity
-            occurs. Thank you for your contributions.
-          close-issue-message: >
-            This issue was closed because it has been inactive for 30 days
-            since being marked as stale.
+            not had recent activity. Thank you for your contributions.
           exempt-pr-labels: pinned,security
           exempt-issue-labels: pinned,security
           repo-token: ${{ secrets.GITHUB_TOKEN }}
