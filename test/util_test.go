@@ -169,8 +169,10 @@ func startSqlite(ctx context.Context, tb testing.TB, dir string) (limited.Backen
 	return backend, db
 }
 
-func startDqlite(ctx context.Context, tb testing.TB, dir string, listener *instrument.Listener) (limited.Backend, *sql.DB) {
-	app, err := app.New(dir,
+// newDqliteApp starts a single-node dqlite app in dir, serving on listener.
+// Extra options are appended to the defaults. In case of an error, tb.Fatal is called.
+func newDqliteApp(ctx context.Context, tb testing.TB, dir string, listener *instrument.Listener, options ...app.Option) *app.App {
+	options = append([]app.Option{
 		app.WithAddress(listener.Address),
 		app.WithExternalConn(listener.Connect, listener.AcceptedConns),
 		app.WithSnapshotParams(dqlitedrv.SnapshotParams{
@@ -178,16 +180,23 @@ func startDqlite(ctx context.Context, tb testing.TB, dir string, listener *instr
 			Trailing:  4096,
 			Strategy:  dqlitedrv.TrailingStrategyDynamic,
 		}),
-	)
+	}, options...)
+	app, err := app.New(dir, options...)
 	if err != nil {
 		tb.Fatalf("failed to create dqlite app: %v", err)
 	}
 	if err := app.Ready(ctx); err != nil {
+		app.Close()
 		tb.Fatalf("failed to initialize dqlite: %v", err)
 	}
 	tb.Cleanup(func() {
 		app.Close()
 	})
+	return app
+}
+
+func startDqlite(ctx context.Context, tb testing.TB, dir string, listener *instrument.Listener) (limited.Backend, *sql.DB) {
+	app := newDqliteApp(ctx, tb, dir, listener)
 
 	db, err := app.Open(ctx, "k8s")
 	if err != nil {

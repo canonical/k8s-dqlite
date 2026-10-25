@@ -28,6 +28,7 @@ var (
 		profilingAddress          string
 		profilingDir              string
 		diskMode                  bool
+		busyTimeout               time.Duration
 		clientSessionCacheSize    uint
 		minTLSVersion             string
 		metrics                   bool
@@ -147,6 +148,7 @@ var (
 				rootCmdOpts.listen,
 				rootCmdOpts.tls,
 				rootCmdOpts.diskMode,
+				rootCmdOpts.busyTimeout,
 				rootCmdOpts.clientSessionCacheSize,
 				rootCmdOpts.minTLSVersion,
 				rootCmdOpts.watchAvailableStorageInterval,
@@ -227,6 +229,7 @@ func init() {
 	rootCmd.Flags().StringVar(&rootCmdOpts.otelSpanNameFilter, "otel-span-name-filter", "", "drop OpenTelemetry trace spans that do not match the specified regex filter")
 	rootCmd.Flags().StringVar(&rootCmdOpts.otelSpanMinDurationFilter, "otel-span-min-duration-filter", "", "drop OpenTelemetry trace spans below the specified time interval (e.g. 10ms)")
 	rootCmd.Flags().StringVar(&rootCmdOpts.metricsAddress, "metrics-listen", "127.0.0.1:9042", "listen address for metrics endpoint")
+	rootCmd.Flags().DurationVar(&rootCmdOpts.busyTimeout, "datastore-busy-timeout", 1*time.Second, "Maximum amount of time a write waits for a concurrent write transaction to finish before failing with 'database is locked'. If value = 0, writes fail immediately (dqlite default).")
 	rootCmd.Flags().IntVar(&rootCmdOpts.connectionPoolConfig.MaxIdle, "datastore-max-idle-connections", 5, "Maximum number of idle connections retained by datastore. If value = 0, the system default will be used. If value < 0, idle connections will not be reused.")
 	rootCmd.Flags().IntVar(&rootCmdOpts.connectionPoolConfig.MaxOpen, "datastore-max-open-connections", 5, "Maximum number of open connections used by datastore. If value <= 0, then there is no limit")
 	rootCmd.Flags().DurationVar(&rootCmdOpts.connectionPoolConfig.MaxLifetime, "datastore-connection-max-lifetime", 60*time.Second, "Maximum amount of time a connection may be reused. If value <= 0, then there is no limit.")
