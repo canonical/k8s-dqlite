@@ -26,6 +26,7 @@ The following configuration options are available listed in a table format:
 | `--otel-span-name-filter` | Drop OpenTelemetry trace spans that do not match the specified regular expression (regex) filter | - |
 | `--otel-span-min-duration-filter` | Drop OpenTelemetry trace spans below the specified time interval (e.g., 10ms) | - |
 | `--metrics-listen` | The address to listen for metrics endpoint | `127.0.0.1:9042` |
+| `--datastore-busy-timeout` | Maximum amount of time a write waits for a concurrent write transaction to finish before failing with `database is locked`. `0` keeps Dqlite's fail-fast behaviour | `1s` |
 | `--datastore-max-idle-connections` | Maximum number of idle connections retained by datastore | `5` |
 | `--datastore-max-open-connections` | Maximum number of open connections used by datastore | `5` |
 | `--datastore-connection-max-lifetime` | Maximum amount of time a connection may be reused | `60s` |
@@ -77,6 +78,14 @@ The connection pool configuration options are available to control the connectio
 
 We recommend allowing at least two maximum open connections to Dqlite. For larger clusters,
 you may find it advantageous to increase the maximum open connections to Dqlite.
+
+## Write Contention
+
+The Dqlite leader runs one write transaction at a time. `--datastore-busy-timeout` sets how long a
+write from another connection, or from another node's k8s-dqlite, waits in Dqlite's queue for the
+current transaction to finish. With `0`, Dqlite rejects the colliding write immediately with
+`SQLITE_BUSY` and k8s-dqlite retries it in a tight loop; on the leader node those retries can be
+exhausted within a few milliseconds and surface as `exec (try: 500): database is locked`.
 
 ## Changing the Default Configuration
 

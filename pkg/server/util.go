@@ -4,12 +4,33 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
+	"time"
 
+	"github.com/canonical/go-dqlite/v3/app"
 	"golang.org/x/sys/unix"
 	"gopkg.in/yaml.v2"
 )
+
+// busyTimeoutOption returns the dqlite option that makes a write wait up to
+// timeout for a concurrent write transaction to finish, instead of failing
+// immediately with SQLITE_BUSY ("database is locked"). A zero timeout keeps
+// dqlite's fail-fast default and returns a nil option. dqlite takes the
+// timeout as unsigned milliseconds, so sub-millisecond precision is dropped.
+func busyTimeoutOption(timeout time.Duration) (app.Option, error) {
+	if timeout < 0 {
+		return nil, fmt.Errorf("invalid busy timeout %v: must not be negative", timeout)
+	}
+	if timeout.Milliseconds() > math.MaxUint32 {
+		return nil, fmt.Errorf("invalid busy timeout %v: must not exceed %v", timeout, time.Duration(math.MaxUint32)*time.Millisecond)
+	}
+	if timeout.Milliseconds() == 0 {
+		return nil, nil
+	}
+	return app.WithBusyTimeout(timeout), nil
+}
 
 func fileUnmarshal(v interface{}, path ...string) error {
 	b, err := os.ReadFile(filepath.Join(path...))

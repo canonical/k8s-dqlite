@@ -113,6 +113,7 @@ func New(
 	listen string,
 	enableTLS bool,
 	diskMode bool,
+	busyTimeout time.Duration,
 	clientSessionCacheSize uint,
 	minTLSVersion string,
 	watchAvailableStorageInterval time.Duration,
@@ -144,6 +145,15 @@ func New(
 	case "none", "handover", "terminate":
 	default:
 		return nil, fmt.Errorf("unsupported low available storage action %v (supported values are none, handover, terminate)", lowAvailableStorageAction)
+	}
+
+	busyOption, err := busyTimeoutOption(busyTimeout)
+	if err != nil {
+		return nil, err
+	}
+	if busyOption != nil {
+		logrus.WithField("busy_timeout", busyTimeout).Print("configure dqlite busy timeout")
+		options = append(options, busyOption)
 	}
 
 	if mustInit, err := fileExists(dir, "init.yaml"); err != nil {
