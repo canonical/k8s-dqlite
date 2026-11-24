@@ -246,18 +246,28 @@ func (s *Backend) poll(ctx context.Context) {
 func (s *Backend) publishEvents(events []*limited.Event) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.publishEventsLocked(events)
+}
+
+func (s *Backend) publishEventsLocked(events []*limited.Event) {
 	if len(events) > 0 {
 		s.pollRevision = events[len(events)-1].Kv.ModRevision
 	}
 	for _, w := range s.WatcherGroups {
 		if !w.publish(s.pollRevision, events) {
 			logrus.Warnf("watcher group consumer lagged; closing group")
-			w.closeUpdates(ErrWatcherLagged)
-			if w.stop() {
-				delete(s.WatcherGroups, w)
-			}
+			s.dropLaggedLocked(w)
 		}
 	}
+}
+
+// dropLaggedLocked closes a lagged group and always unregisters it: if its
+// AfterFunc already started, it waits on s.mu and the next publish would
+// otherwise send on the closed channel.
+func (s *Backend) dropLaggedLocked(w *WatcherGroup) {
+	w.closeUpdates(ErrWatcherLagged)
+	w.stop()
+	delete(s.WatcherGroups, w)
 }
 
 func (s *Backend) getLatestEvents(ctx context.Context, pollRevision int64) ([]*limited.Event, error) {
