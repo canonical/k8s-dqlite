@@ -10,6 +10,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // explicit interface check
@@ -127,11 +129,12 @@ func (ws *watchStream) ServeUpdates() error {
 			return err
 		}
 	}
-	// Updates channel was closed. Return any error recorded by the publisher.
-	// A non-nil error (e.g. ErrWatcherLagged) propagates through the errgroup,
-	// cancels the stream context, and causes kube-apiserver to reconnect.
-	// A nil error means clean backend shutdown; the gRPC layer handles both.
-	return ws.watcherGroup.Err()
+	// Unavailable makes clientv3 resume the stream's watches from their last
+	// revision; other codes make it fail them all.
+	if err := ws.watcherGroup.Err(); err != nil {
+		return status.Error(codes.Unavailable, err.Error())
+	}
+	return nil
 }
 
 func (ws *watchStream) sendUpdates(updates []WatcherUpdate) error {

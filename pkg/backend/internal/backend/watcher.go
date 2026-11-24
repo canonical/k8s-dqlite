@@ -65,11 +65,11 @@ func (w *WatcherGroup) publish(currentRevision int64, events []*limited.Event) b
 	_, span := backendOtelTracer.Start(w.ctx, fmt.Sprintf("%s.publish", backendOtelName))
 	span.SetAttributes(attribute.Int64("currentRevision", currentRevision))
 	span.SetAttributes(attribute.Int("events", len(events)))
-	span.SetAttributes(attribute.Int("watchers", len(w.watchers)))
 	span.SetAttributes(attribute.Int("updates", len(w.updates)))
 	defer span.End()
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	span.SetAttributes(attribute.Int("watchers", len(w.watchers)))
 
 	w.currentRevision = currentRevision
 	updates := []limited.WatcherUpdate{}
@@ -138,9 +138,11 @@ func (w *WatcherGroup) Watch(watchId int64, key, rangeEnd []byte, startRevision 
 
 		compactRev, rev, err := w.driver.GetCompactRevision(ctx)
 		if err != nil {
+			w.Unwatch(watchId)
 			return fmt.Errorf("failed to get compact revision: %w", err)
 		}
 		if startRevision < compactRev {
+			w.Unwatch(watchId)
 			return &limited.CompactedError{CompactRevision: compactRev, CurrentRevision: rev}
 		}
 
@@ -246,18 +248,28 @@ func (s *Backend) poll(ctx context.Context) {
 func (s *Backend) publishEvents(events []*limited.Event) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.publishEventsLocked(events)
+}
+
+func (s *Backend) publishEventsLocked(events []*limited.Event) {
 	if len(events) > 0 {
 		s.pollRevision = events[len(events)-1].Kv.ModRevision
 	}
 	for _, w := range s.WatcherGroups {
 		if !w.publish(s.pollRevision, events) {
 			logrus.Warnf("watcher group consumer lagged; closing group")
-			w.closeUpdates(ErrWatcherLagged)
-			if w.stop() {
-				delete(s.WatcherGroups, w)
-			}
+			s.dropLaggedLocked(w)
 		}
 	}
+}
+
+// dropLaggedLocked closes a lagged group and always unregisters it: if its
+// AfterFunc already started, it waits on s.mu and the next publish would
+// otherwise send on the closed channel.
+func (s *Backend) dropLaggedLocked(w *WatcherGroup) {
+	w.closeUpdates(ErrWatcherLagged)
+	w.stop()
+	delete(s.WatcherGroups, w)
 }
 
 func (s *Backend) getLatestEvents(ctx context.Context, pollRevision int64) ([]*limited.Event, error) {
@@ -290,7 +302,6 @@ func (s *Backend) WatcherGroup(ctx context.Context) (limited.WatcherGroup, error
 
 	watcherGroupCnt.Add(ctx, 1)
 	ctx, span := backendOtelTracer.Start(ctx, fmt.Sprintf("%s.WatcherGroup", backendOtelName))
-	span.SetAttributes(attribute.Int64("currentRevision", s.pollRevision))
 	defer func() {
 		span.RecordError(err)
 		span.End()
@@ -298,6 +309,7 @@ func (s *Backend) WatcherGroup(ctx context.Context) (limited.WatcherGroup, error
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	span.SetAttributes(attribute.Int64("currentRevision", s.pollRevision))
 
 	wg := &WatcherGroup{
 		ctx:             ctx,
