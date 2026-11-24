@@ -25,6 +25,7 @@ type WatcherGroup struct {
 type watcher struct {
 	watchId       int64
 	key, rangeEnd []byte
+	startRevision int64
 	initialized   bool
 	events        []*limited.Event
 }
@@ -41,11 +42,11 @@ func (w *WatcherGroup) publish(currentRevision int64, events []*limited.Event) b
 	_, span := backendOtelTracer.Start(w.ctx, fmt.Sprintf("%s.publish", backendOtelName))
 	span.SetAttributes(attribute.Int64("currentRevision", currentRevision))
 	span.SetAttributes(attribute.Int("events", len(events)))
-	span.SetAttributes(attribute.Int("watchers", len(w.watchers)))
 	span.SetAttributes(attribute.Int("updates", len(w.updates)))
 	defer span.End()
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	span.SetAttributes(attribute.Int("watchers", len(w.watchers)))
 
 	w.currentRevision = currentRevision
 	updates := []limited.WatcherUpdate{}
@@ -73,20 +74,26 @@ func (w *WatcherGroup) publish(currentRevision int64, events []*limited.Event) b
 
 func (w *watcher) update(events []*limited.Event) []*limited.Event {
 	if !w.initialized {
-		w.events = appendEvents(events, w.events, w.key, w.rangeEnd)
+		w.events = w.appendEvents(w.events, events)
 		return nil
-	} else if len(w.events) > 0 {
-		initialEvents := w.events
-		w.events = nil
-		return appendEvents(events, initialEvents, w.key, w.rangeEnd)
 	}
-
-	filtered := make([]*limited.Event, 0, len(events))
-	return appendEvents(events, filtered, w.key, w.rangeEnd)
+	return w.appendEvents(nil, events)
 }
 
-func (w *WatcherGroup) Watch(watchId int64, key, rangeEnd []byte, startRevision int64) error {
-	var err error
+// appendEvents appends the events in the watcher's key range from its start
+// revision on; the poll can be behind a watch that starts ahead of it.
+func (w *watcher) appendEvents(dst, src []*limited.Event) []*limited.Event {
+	for _, event := range appendEvents(src, nil, w.key, w.rangeEnd) {
+		if event.Kv.ModRevision >= w.startRevision {
+			dst = append(dst, event)
+		}
+	}
+	return dst
+}
+
+// Watch adds a watcher and returns its events from startRevision up to
+// revision; updates published later carry only its newer events.
+func (w *WatcherGroup) Watch(watchId int64, key, rangeEnd []byte, startRevision int64) (revision int64, events []*limited.Event, err error) {
 	ctx, span := backendOtelTracer.Start(w.ctx, fmt.Sprintf("%s.Watch", backendOtelName))
 	defer func() {
 		span.RecordError(err)
@@ -101,9 +108,10 @@ func (w *WatcherGroup) Watch(watchId int64, key, rangeEnd []byte, startRevision 
 	)
 
 	watcher := &watcher{
-		watchId:  watchId,
-		key:      key,
-		rangeEnd: rangeEnd,
+		watchId:       watchId,
+		key:           key,
+		rangeEnd:      rangeEnd,
+		startRevision: startRevision,
 	}
 
 	w.mu.Lock()
@@ -112,32 +120,37 @@ func (w *WatcherGroup) Watch(watchId int64, key, rangeEnd []byte, startRevision 
 		currentRevision := w.currentRevision
 		w.mu.Unlock()
 
-		compactRev, rev, err := w.driver.GetCompactRevision(ctx)
+		events, err = w.loadInitialEvents(ctx, key, rangeEnd, startRevision, currentRevision)
 		if err != nil {
-			return fmt.Errorf("failed to get compact revision: %w", err)
-		}
-		if startRevision < compactRev {
-			return &limited.CompactedError{CompactRevision: compactRev, CurrentRevision: rev}
-		}
-
-		initialEvents, err := w.initialEvents(ctx, key, rangeEnd, startRevision-1, currentRevision)
-		if err != nil {
-			w.mu.Lock()
-			delete(w.watchers, watchId)
-			w.mu.Unlock()
-			if !errors.Is(err, context.Canceled) {
-				err = fmt.Errorf("failed to list %s for revision %d: %w", key, startRevision, err)
-			}
-			return err
+			w.Unwatch(watchId)
+			return 0, nil, err
 		}
 
 		w.mu.Lock()
-		watcher.events = append(initialEvents, watcher.events...)
 	}
+	events = append(events, watcher.events...)
+	watcher.events = nil
 	watcher.initialized = true
+	revision = w.currentRevision
 	w.mu.Unlock()
 
-	return nil
+	return revision, events, nil
+}
+
+func (w *WatcherGroup) loadInitialEvents(ctx context.Context, key, rangeEnd []byte, startRevision, toRevision int64) ([]*limited.Event, error) {
+	compactRev, rev, err := w.driver.GetCompactRevision(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get compact revision: %w", err)
+	}
+	if startRevision < compactRev {
+		return nil, &limited.CompactedError{CompactRevision: compactRev, CurrentRevision: rev}
+	}
+
+	events, err := w.initialEvents(ctx, key, rangeEnd, startRevision-1, toRevision)
+	if err != nil && !errors.Is(err, context.Canceled) {
+		err = fmt.Errorf("failed to list %s for revision %d: %w", key, startRevision, err)
+	}
+	return events, err
 }
 
 func (w *WatcherGroup) initialEvents(ctx context.Context, key, rangeEnd []byte, fromRevision, toRevision int64) ([]*limited.Event, error) {
@@ -264,7 +277,6 @@ func (s *Backend) WatcherGroup(ctx context.Context) (limited.WatcherGroup, error
 
 	watcherGroupCnt.Add(ctx, 1)
 	ctx, span := backendOtelTracer.Start(ctx, fmt.Sprintf("%s.WatcherGroup", backendOtelName))
-	span.SetAttributes(attribute.Int64("currentRevision", s.pollRevision))
 	defer func() {
 		span.RecordError(err)
 		span.End()
@@ -272,6 +284,7 @@ func (s *Backend) WatcherGroup(ctx context.Context) (limited.WatcherGroup, error
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	span.SetAttributes(attribute.Int64("currentRevision", s.pollRevision))
 
 	wg := &WatcherGroup{
 		ctx:             ctx,

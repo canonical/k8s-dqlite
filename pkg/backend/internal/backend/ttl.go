@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/canonical/k8s-dqlite/pkg/limited"
 	"github.com/cenkalti/backoff/v4"
 	"github.com/sirupsen/logrus"
 )
@@ -77,22 +78,27 @@ func (s *Backend) ttl(ctx context.Context) {
 			return
 		}
 
+		schedule := func(events []*limited.Event) {
+			for _, event := range events {
+				if event.Kv.Lease > 0 {
+					// add some jitter to avoid ttl expiry and deletion on all nodes at the same time with the goal of
+					// one of them succeeding if the DB is under high load (busy)
+					jitterDelay := time.Duration(rand.Intn(1000)) * time.Millisecond // Jitter up to 1 second as api-server does not expect sub-second precision
+					go run(ctx, []byte(event.Kv.Key), event.Kv.ModRevision, time.Duration(event.Kv.Lease)*time.Second+jitterDelay)
+				}
+			}
+		}
+
 		// TODO needs to be restarted, never cancelled/dropped
-		err = group.Watch(1, []byte{0}, []byte{255}, startRevision)
+		_, initialEvents, err := group.Watch(1, []byte{0}, []byte{255}, startRevision)
 		if err != nil {
 			logrus.WithError(err).Warning("ttl watch failed")
 		}
+		schedule(initialEvents)
 
 		for group := range group.Updates() {
 			for _, watcher := range group.Watchers() {
-				for _, event := range watcher.Events {
-					if event.Kv.Lease > 0 {
-						// add some jitter to avoid ttl expiry and deletion on all nodes at the same time with the goal of
-						// one of them succeeding if the DB is under high load (busy)
-						jitterDelay := time.Duration(rand.Intn(1000)) * time.Millisecond // Jitter up to 1 second as api-server does not expect sub-second precision
-						go run(ctx, []byte(event.Kv.Key), event.Kv.ModRevision, time.Duration(event.Kv.Lease)*time.Second+jitterDelay)
-					}
-				}
+				schedule(watcher.Events)
 			}
 		}
 	}()
