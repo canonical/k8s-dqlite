@@ -25,6 +25,7 @@ type WatcherGroup struct {
 type watcher struct {
 	watchId       int64
 	key, rangeEnd []byte
+	startRevision int64
 	initialized   bool
 	events        []*limited.Event
 }
@@ -73,16 +74,25 @@ func (w *WatcherGroup) publish(currentRevision int64, events []*limited.Event) b
 
 func (w *watcher) update(events []*limited.Event) []*limited.Event {
 	if !w.initialized {
-		w.events = appendEvents(events, w.events, w.key, w.rangeEnd)
+		w.events = w.appendEvents(w.events, events)
 		return nil
 	} else if len(w.events) > 0 {
 		initialEvents := w.events
 		w.events = nil
-		return appendEvents(events, initialEvents, w.key, w.rangeEnd)
+		return w.appendEvents(initialEvents, events)
 	}
+	return w.appendEvents(nil, events)
+}
 
-	filtered := make([]*limited.Event, 0, len(events))
-	return appendEvents(events, filtered, w.key, w.rangeEnd)
+// appendEvents appends the events in the watcher's key range from its start
+// revision on; the poll can be behind a watch that starts ahead of it.
+func (w *watcher) appendEvents(dst, src []*limited.Event) []*limited.Event {
+	for _, event := range appendEvents(src, nil, w.key, w.rangeEnd) {
+		if event.Kv.ModRevision >= w.startRevision {
+			dst = append(dst, event)
+		}
+	}
+	return dst
 }
 
 func (w *WatcherGroup) Watch(watchId int64, key, rangeEnd []byte, startRevision int64) error {
@@ -101,9 +111,10 @@ func (w *WatcherGroup) Watch(watchId int64, key, rangeEnd []byte, startRevision 
 	)
 
 	watcher := &watcher{
-		watchId:  watchId,
-		key:      key,
-		rangeEnd: rangeEnd,
+		watchId:       watchId,
+		key:           key,
+		rangeEnd:      rangeEnd,
+		startRevision: startRevision,
 	}
 
 	w.mu.Lock()

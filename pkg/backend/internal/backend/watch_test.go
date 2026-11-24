@@ -115,6 +115,41 @@ func collect(t *testing.T, ch clientv3.WatchChan, d time.Duration) []clientv3.Wa
 	}
 }
 
+// The poll can be behind the database: writes through another node don't
+// notify it. A watch starting after a list must still get only newer events.
+func TestWatchAheadOfPollSkipsOlderEvents(t *testing.T) {
+	c, fd := newWatchTestServer(t)
+	ctx := context.Background()
+	putKey(t, c, "/a/0")
+	for _, key := range []string{"/a/1", "/a/2"} {
+		if _, _, err := fd.Driver.Create(ctx, []byte(key), []byte("v"), 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	list, err := c.Get(ctx, "/a/", clientv3.WithPrefix())
+	if err != nil {
+		t.Fatal(err)
+	}
+	listRev := list.Header.Revision
+
+	ch := c.Watch(ctx, "/a/", clientv3.WithPrefix(), clientv3.WithRev(listRev+1))
+	time.Sleep(200 * time.Millisecond)
+	putKey(t, c, "/a/3")
+
+	var keys []string
+	for _, resp := range collect(t, ch, time.Second) {
+		for _, ev := range resp.Events {
+			keys = append(keys, string(ev.Kv.Key))
+			if ev.Kv.ModRevision <= listRev {
+				t.Errorf("got %s at revision %d, watch started at %d", ev.Kv.Key, ev.Kv.ModRevision, listRev+1)
+			}
+		}
+	}
+	if len(keys) != 1 || keys[0] != "/a/3" {
+		t.Errorf("got events %v, want [/a/3]", keys)
+	}
+}
+
 // A watch that fails to be created must not block later watches on its stream.
 func TestFailedWatchDoesNotBlockStream(t *testing.T) {
 	c, fd := newWatchTestServer(t)
