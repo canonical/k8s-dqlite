@@ -150,6 +150,43 @@ func TestWatchAheadOfPollSkipsOlderEvents(t *testing.T) {
 	}
 }
 
+// A progress notification must not get ahead of a new watcher's catch-up events.
+func TestProgressAfterCatchUpEvents(t *testing.T) {
+	c, _ := newWatchTestServer(t)
+	ctx := context.Background()
+	putKey(t, c, "/b/1")
+	putKey(t, c, "/b/2")
+	// Opens the stream and moves its revision past /b/.
+	c.Watch(ctx, "/other")
+	time.Sleep(200 * time.Millisecond)
+	putKey(t, c, "/c")
+	time.Sleep(200 * time.Millisecond)
+
+	ch := c.Watch(ctx, "/b/", clientv3.WithPrefix(), clientv3.WithRev(1))
+	time.Sleep(200 * time.Millisecond)
+	if err := c.RequestProgress(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	var events int
+	var progress bool
+	for _, resp := range collect(t, ch, time.Second) {
+		if resp.IsProgressNotify() {
+			progress = true
+			continue
+		}
+		for _, ev := range resp.Events {
+			events++
+			if progress {
+				t.Errorf("got %s at revision %d after a progress notification", ev.Kv.Key, ev.Kv.ModRevision)
+			}
+		}
+	}
+	if events != 2 || !progress {
+		t.Errorf("got %d events and progress=%v, want 2 events and a progress notification", events, progress)
+	}
+}
+
 // A watch that fails to be created must not block later watches on its stream.
 func TestFailedWatchDoesNotBlockStream(t *testing.T) {
 	c, fd := newWatchTestServer(t)
@@ -201,4 +238,32 @@ func watchAsync(t *testing.T, c *clientv3.Client, ctx context.Context, key strin
 		t.Fatalf("Watch(%s) blocked", key)
 		return nil
 	}
+}
+
+// The TTL watch gets its catch-up events from Watch, not from an update.
+func TestLeaseExpires(t *testing.T) {
+	c, _ := newWatchTestServer(t)
+	ctx := context.Background()
+	lease, err := c.Grant(ctx, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Txn(ctx).
+		If(clientv3.Compare(clientv3.ModRevision("/lease"), "=", 0)).
+		Then(clientv3.OpPut("/lease", "v", clientv3.WithLease(lease.ID))).
+		Commit(); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		resp, err := c.Get(ctx, "/lease")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(resp.Kvs) == 0 {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatal("/lease did not expire")
 }

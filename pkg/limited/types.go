@@ -48,10 +48,9 @@ type Config struct {
 }
 
 type WatcherGroup interface {
-	// Watch will add a watcher to the group. If startRevision is not 0, the first notification
-	// containing an update for this watcher will also contain all events from startRevision
-	// up to that notification.
-	Watch(watcherId int64, key, rangeEnd []byte, startRevision int64) error
+	// Watch adds a watcher to the group and returns its events from startRevision
+	// (if not 0) up to revision. Later updates carry only its events after revision.
+	Watch(watcherId int64, key, rangeEnd []byte, startRevision int64) (revision int64, events []*Event, err error)
 	Unwatch(watcherId int64)
 	Updates() <-chan WatcherGroupUpdate
 }

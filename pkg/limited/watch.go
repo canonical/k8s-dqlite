@@ -45,6 +45,12 @@ type watchStream struct {
 	server             etcdserverpb.Watch_WatchServer
 	sendProgressReport map[int64]bool
 	limited            LimitedServer
+
+	// progressFloor is the highest revision of catch-up events sent by Create.
+	// Updates queued before them may hold older events for other watchers, so
+	// progress below it is deferred until ServeUpdates reaches it.
+	progressFloor    int64
+	deferredProgress bool
 }
 
 func (ws *watchStream) ServeRequests() error {
@@ -85,18 +91,18 @@ func (ws *watchStream) ServeRequests() error {
 
 func (ws *watchStream) ServeUpdates() error {
 	for update := range ws.watcherGroup.Updates() {
-		ws.revision = update.Revision()
-		if err := ws.sendUpdates(update.Watchers()); err != nil {
+		if err := ws.sendUpdates(update.Revision(), update.Watchers()); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (ws *watchStream) sendUpdates(updates []WatcherUpdate) error {
+func (ws *watchStream) sendUpdates(revision int64, updates []WatcherUpdate) error {
 	ws.mu.Lock()
 	defer ws.mu.Unlock()
 
+	ws.revision = revision
 	for _, watcherUpdate := range updates {
 		ws.sendProgressReport[watcherUpdate.WatcherId] = false
 		err := ws.server.Send(&etcdserverpb.WatchResponse{
@@ -108,6 +114,10 @@ func (ws *watchStream) sendUpdates(updates []WatcherUpdate) error {
 			logrus.WithError(err).Errorf("couldn't send watch response")
 			return err
 		}
+	}
+	if ws.deferredProgress && ws.canSendProgress() {
+		ws.deferredProgress = false
+		return ws.sendStreamProgress()
 	}
 	return nil
 }
@@ -132,6 +142,9 @@ func (ws *watchStream) sendProgress() error {
 	ws.mu.Lock()
 	defer ws.mu.Unlock()
 
+	if !ws.canSendProgress() {
+		return nil
+	}
 	for id, sendProgressReport := range ws.sendProgressReport {
 		if sendProgressReport {
 			err := ws.server.Send(&etcdserverpb.WatchResponse{
@@ -153,36 +166,49 @@ func (ws *watchStream) Create(id int64, key, rangeEnd []byte, startRevision int6
 	ws.mu.Lock()
 	defer ws.mu.Unlock()
 
-	if err := ws.watcherGroup.Watch(id, key, rangeEnd, startRevision); err != nil {
+	revision, events, err := ws.watcherGroup.Watch(id, key, rangeEnd, startRevision)
+	if err != nil {
+		var reason string
+		header := txnHeader(ws.revision)
 		if compactErr, ok := err.(*CompactedError); ok {
-			return ws.server.Send(&etcdserverpb.WatchResponse{
-				Header:       txnHeader(compactErr.CurrentRevision),
-				WatchId:      clientv3.InvalidWatchID,
-				Canceled:     true,
-				Created:      true,
-				CancelReason: err.Error(),
-			})
+			header = txnHeader(compactErr.CurrentRevision)
+			reason = err.Error()
 		} else {
 			// Return an error message that the api-server understands:
 			logrus.WithError(err).Errorf("WATCH Failed to create watcher: %v", err)
-			err = ErrGRPCUnhealthy
-			// clientv3 matches a create reply only by Created; without it the
-			// create stays pending and blocks every later watch on the stream.
-			return ws.server.Send(&etcdserverpb.WatchResponse{
-				Header:       txnHeader(ws.revision),
-				WatchId:      clientv3.InvalidWatchID,
-				Canceled:     true,
-				Created:      true,
-				CancelReason: err.Error(),
-			})
+			reason = ErrGRPCUnhealthy.Error()
 		}
+		// clientv3 matches a create reply only by Created; without it the
+		// create stays pending and blocks every later watch on the stream.
+		return ws.server.Send(&etcdserverpb.WatchResponse{
+			Header:       header,
+			WatchId:      clientv3.InvalidWatchID,
+			Canceled:     true,
+			Created:      true,
+			CancelReason: reason,
+		})
 	}
 	ws.sendProgressReport[id] = true
 
-	return ws.server.Send(&etcdserverpb.WatchResponse{
+	if err := ws.server.Send(&etcdserverpb.WatchResponse{
 		Header:  &etcdserverpb.ResponseHeader{},
 		WatchId: id,
 		Created: true,
+	}); err != nil {
+		return err
+	}
+	if len(events) == 0 {
+		return nil
+	}
+
+	// Send catch-up events now, so that no progress notification can get
+	// ahead of them.
+	ws.sendProgressReport[id] = false
+	ws.progressFloor = max(ws.progressFloor, revision)
+	return ws.server.Send(&etcdserverpb.WatchResponse{
+		Header:  txnHeader(revision),
+		WatchId: id,
+		Events:  events,
 	})
 }
 
@@ -198,6 +224,20 @@ func (ws *watchStream) RequestProgress() error {
 	ws.mu.Lock()
 	defer ws.mu.Unlock()
 
+	if !ws.canSendProgress() {
+		ws.deferredProgress = true
+		return nil
+	}
+	return ws.sendStreamProgress()
+}
+
+// canSendProgress reports whether all events up to ws.revision were sent to
+// every watcher of the stream.
+func (ws *watchStream) canSendProgress() bool {
+	return ws.revision >= ws.progressFloor
+}
+
+func (ws *watchStream) sendStreamProgress() error {
 	return ws.server.Send(&etcdserverpb.WatchResponse{
 		Header:  txnHeader(ws.revision),
 		WatchId: clientv3.InvalidWatchID,
