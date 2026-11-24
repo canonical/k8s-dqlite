@@ -41,11 +41,11 @@ func (w *WatcherGroup) publish(currentRevision int64, events []*limited.Event) b
 	_, span := backendOtelTracer.Start(w.ctx, fmt.Sprintf("%s.publish", backendOtelName))
 	span.SetAttributes(attribute.Int64("currentRevision", currentRevision))
 	span.SetAttributes(attribute.Int("events", len(events)))
-	span.SetAttributes(attribute.Int("watchers", len(w.watchers)))
 	span.SetAttributes(attribute.Int("updates", len(w.updates)))
 	defer span.End()
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	span.SetAttributes(attribute.Int("watchers", len(w.watchers)))
 
 	w.currentRevision = currentRevision
 	updates := []limited.WatcherUpdate{}
@@ -264,7 +264,6 @@ func (s *Backend) WatcherGroup(ctx context.Context) (limited.WatcherGroup, error
 
 	watcherGroupCnt.Add(ctx, 1)
 	ctx, span := backendOtelTracer.Start(ctx, fmt.Sprintf("%s.WatcherGroup", backendOtelName))
-	span.SetAttributes(attribute.Int64("currentRevision", s.pollRevision))
 	defer func() {
 		span.RecordError(err)
 		span.End()
@@ -272,6 +271,7 @@ func (s *Backend) WatcherGroup(ctx context.Context) (limited.WatcherGroup, error
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	span.SetAttributes(attribute.Int64("currentRevision", s.pollRevision))
 
 	wg := &WatcherGroup{
 		ctx:             ctx,
