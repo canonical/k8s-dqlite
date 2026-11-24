@@ -138,9 +138,11 @@ func (w *WatcherGroup) Watch(watchId int64, key, rangeEnd []byte, startRevision 
 
 		compactRev, rev, err := w.driver.GetCompactRevision(ctx)
 		if err != nil {
+			w.Unwatch(watchId)
 			return fmt.Errorf("failed to get compact revision: %w", err)
 		}
 		if startRevision < compactRev {
+			w.Unwatch(watchId)
 			return &limited.CompactedError{CompactRevision: compactRev, CurrentRevision: rev}
 		}
 
