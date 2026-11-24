@@ -143,7 +143,7 @@ func (ws *watchStream) sendProgress() error {
 				return err
 			}
 		} else {
-			sendProgressReport = true
+			ws.sendProgressReport[id] = true
 		}
 	}
 	return nil
