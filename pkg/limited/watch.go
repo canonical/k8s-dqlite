@@ -166,9 +166,13 @@ func (ws *watchStream) Create(id int64, key, rangeEnd []byte, startRevision int6
 			// Return an error message that the api-server understands:
 			logrus.WithError(err).Errorf("WATCH Failed to create watcher: %v", err)
 			err = ErrGRPCUnhealthy
+			// clientv3 matches a create reply only by Created; without it the
+			// create stays pending and blocks every later watch on the stream.
 			return ws.server.Send(&etcdserverpb.WatchResponse{
 				Header:       txnHeader(ws.revision),
+				WatchId:      clientv3.InvalidWatchID,
 				Canceled:     true,
+				Created:      true,
 				CancelReason: err.Error(),
 			})
 		}
